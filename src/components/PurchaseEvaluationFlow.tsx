@@ -134,10 +134,12 @@ export default function PurchaseEvaluationFlow({
       {
         name: itemName,
         price: itemPrice,
+        cooldownDays: profile.nextPaydayDays,
+        strategy: "wait",
       },
       50
     );
-    const msg = `Decisión recomendada: Esperar ${profile.nextPaydayDays} días a tu nómina · +50 XP`;
+    const msg = `🧊 ¡Guardado en tu Congelador por ${profile.nextPaydayDays} días! Acabas de proteger $${itemPrice.toLocaleString()} MXN de tu quincena`;
     if (onActionCompleted) {
       onActionCompleted(msg);
     }
@@ -154,10 +156,12 @@ export default function PurchaseEvaluationFlow({
         name: itemName,
         price: itemPrice,
         plannedWeeklySave: metrics.suggestedWeeklySave,
+        cooldownDays: profile.nextPaydayDays,
+        strategy: "microsave",
       },
       100
     );
-    const msg = `Plan de Micro-ahorro activado ($${metrics.suggestedWeeklySave}/sem) · +100 XP`;
+    const msg = `🧊 ¡Guardado en tu Congelador por ${profile.nextPaydayDays} días! Acabas de proteger $${itemPrice.toLocaleString()} MXN de tu quincena`;
     if (onActionCompleted) {
       onActionCompleted(msg);
     }

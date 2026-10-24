@@ -298,10 +298,6 @@ export default function LandingPage() {
             < Sprout className="w-4 h-4 text-emerald-700" strokeWidth={1.5} />
             <span>AntesDeGastar · Claridad antes de pagar</span>
           </div>
-          <div className="flex items-center gap-1.5 text-emerald-800">
-            <ShieldCheck className="w-4 h-4" strokeWidth={1.5} />
-            <span>Cero formularios largos · Cero pedir género</span>
-          </div>
         </div>
       </footer>
     </div>

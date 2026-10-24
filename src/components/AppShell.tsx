@@ -224,7 +224,7 @@ export default function AppShell({
         </header>
 
         {/* Central Spacious Container with Generous Whitespace */}
-        <main className="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-8 pt-6 pb-32 md:py-8">
+        <main className="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-28 md:py-4">
           {children}
         </main>
 

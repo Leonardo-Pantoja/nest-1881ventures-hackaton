@@ -32,6 +32,8 @@ export interface WishlistItem {
   price: number;
   savedAt: string;
   plannedWeeklySave?: number;
+  cooldownDays?: number;
+  strategy?: "wait" | "microsave";
 }
 
 export interface PendingPurchaseEvaluation {
@@ -86,7 +88,16 @@ export const PRELOADED_SANDBOX_PROFILES: Record<string, FinancialProfile> = {
       weeklyContribution: 600,
       deadlineLabel: "Diciembre",
     },
-    wishlist: [],
+    wishlist: [
+      {
+        id: "wish-initial-1",
+        name: "Chamarra Impermeable",
+        price: 1450,
+        savedAt: "2026-10-22T10:00:00.000Z",
+        cooldownDays: 6,
+        strategy: "wait",
+      },
+    ],
     wisdomXp: 120,
     streakCount: 3,
     isOnboarded: true,
@@ -115,7 +126,16 @@ export const PRELOADED_SANDBOX_PROFILES: Record<string, FinancialProfile> = {
       weeklyContribution: 500,
       deadlineLabel: "Diciembre",
     },
-    wishlist: [],
+    wishlist: [
+      {
+        id: "wish-initial-1",
+        name: "Chamarra Impermeable",
+        price: 1450,
+        savedAt: "2026-10-22T10:00:00.000Z",
+        cooldownDays: 6,
+        strategy: "wait",
+      },
+    ],
     wisdomXp: 240,
     streakCount: 5,
     isOnboarded: true,
@@ -364,7 +384,16 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         weeklyContribution: suggestedWeekly,
         deadlineLabel: "Meta activa",
       },
-      wishlist: [],
+      wishlist: [
+      {
+        id: "wish-initial-1",
+        name: "Chamarra Impermeable",
+        price: 1450,
+        savedAt: "2026-10-22T10:00:00.000Z",
+        cooldownDays: 6,
+        strategy: "wait",
+      },
+    ],
       isOnboarded: true,
       plaidConnected: false,
     };
@@ -399,7 +428,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
       setStreakCelebration({
         id: celId,
         count: nextStreak,
-        reason: `¡Power-Up activado! +${xpReward} XP`,
+        reason: `¡Enfriamiento activo! +${xpReward} XP`,
       });
       setTimeout(() => {
         setStreakCelebration((cur) => (cur?.id === celId ? null : cur));
