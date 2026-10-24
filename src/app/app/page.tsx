@@ -764,6 +764,7 @@ export default function AppDashboardPage() {
   const [activeBottomTab, setActiveBottomTab] =
     useState<BottomNavTab>("simulate");
   const [showTourModal, setShowTourModal] = useState(false);
+  const [isSavingDecision, setIsSavingDecision] = useState(false);
 
   // Simulator State
   const [queryText, setQueryText] = useState("");
@@ -919,7 +920,7 @@ export default function AppDashboardPage() {
       profile.goal.targetAmount > 0
         ? profile.goal.currentSaved / profile.goal.targetAmount
         : 0;
-    const baseXp = profile.wisdomXp || 120;
+    const baseXp = profile.wisdomXp ?? 0;
     if (safeToSpend <= 0) {
       currentLevel = 1;
     } else if (safeToSpend < profile.safetyBuffer * 1.4 && goalRatio < 0.45) {
@@ -966,7 +967,7 @@ export default function AppDashboardPage() {
 
   // Build Live RPG Speech Message
   const rpgSpeechMessage = useMemo(() => {
-    const firstName = (profile.name || "Carlos").split(" ")[0];
+    const firstName = (profile.name || "Amigo").split(" ")[0];
     const isStormy =
       financialMetrics.isDeficit &&
       selectedDecision !== "wait" &&
@@ -976,8 +977,8 @@ export default function AppDashboardPage() {
 
     if (isCelebrating) {
       return selectedDecision === "wait"
-        ? `¡Gran jugada ${firstName}! Guardado en el congelador por ${profile.nextPaydayDays} días y subimos +50 XP ☀️`
-        : `¡Plan maestro ${firstName}! Con micro-ahorro protegemos tu quincena y ganamos +100 XP ✨`;
+        ? `¡Gran jugada ${firstName}! Guardado en el congelador por ${profile.nextPaydayDays} días y ganamos +${decisionXpBonus} XP ☀️`
+        : `¡Plan maestro ${firstName}! Con micro-ahorro protegemos tu quincena y ganamos +${decisionXpBonus} XP ✨`;
     }
     if (isStormy) {
       return `¡Cuidado ${firstName}! Con "${parsedItemName}" ($${parsedItemPrice.toLocaleString()}) nos quedaríamos sin para la renta 🌧️`;
@@ -992,6 +993,7 @@ export default function AppDashboardPage() {
   }, [
     profile.name,
     profile.nextPaydayDays,
+    decisionXpBonus,
     financialMetrics.isDeficit,
     financialMetrics.safeToSpend,
     selectedDecision,
@@ -1206,73 +1208,107 @@ export default function AppDashboardPage() {
     }
   };
 
-  // Decision 1: "Comprar hoy"
-  const handleDecisionBuyToday = () => {
-    if (mode !== "demo") {
-      triggerToast(
-        "El registro real de compras requiere guardar la transacción en Supabase.",
-      );
+  // Decision 1: selecting a scenario is not the same as confirming a real expense.
+  const handleDecisionBuyToday = async () => {
+    if (isSavingDecision || !parsedItemName.trim() || parsedItemPrice <= 0)
       return;
-    }
-    playDamage();
     setSelectedDecision("bought");
-    registerPurchaseAnyway(parsedItemName, parsedItemPrice);
-    triggerToast(
-      `Compra registrada: −$${parsedItemPrice.toLocaleString()} MXN (${parsedItemName})`,
-    );
+
+    if (mode === "authenticated") {
+      const confirmed = window.confirm(
+        `¿Ya realizaste esta compra por $${parsedItemPrice.toLocaleString()} MXN?\n\n` +
+          "Aceptar la registrará como gasto real y descontará tu saldo. " +
+          "Cancelar solo seleccionará esta alternativa para compararla.",
+      );
+      if (!confirmed) {
+        triggerToast("Solo simulación: no se descontó dinero de tu cuenta.");
+        return;
+      }
+    }
+
+    setIsSavingDecision(true);
+    try {
+      await registerPurchaseAnyway(parsedItemName, parsedItemPrice);
+      playDamage();
+      triggerToast(
+        `Compra registrada: −$${parsedItemPrice.toLocaleString()} MXN (${parsedItemName})`,
+      );
+    } catch (error) {
+      setSelectedDecision("idle");
+      console.error("Purchase save failed:", error);
+      triggerToast(
+        error instanceof Error
+          ? error.message
+          : "No se pudo registrar la compra.",
+      );
+    } finally {
+      setIsSavingDecision(false);
+    }
   };
 
-  // Decision 2: "Esperar a tu nómina (en X días)" -> Saves to "Compras en Enfriamiento 🧊" (+50 XP)
-  const handleDecisionWaitPayroll = () => {
-    if (mode !== "demo") {
-      triggerToast(
-        "La wishlist real se conectará a Supabase en el siguiente paso.",
-      );
+  // Decision 2: persist a waiting item and show it in Goals.
+  const handleDecisionWaitPayroll = async () => {
+    if (isSavingDecision || !parsedItemName.trim() || parsedItemPrice <= 0)
       return;
+    setIsSavingDecision(true);
+    try {
+      const earnedXp = await addToWishlist(
+        {
+          name: parsedItemName,
+          price: parsedItemPrice,
+          cooldownDays: Math.max(1, profile.nextPaydayDays || 7),
+          strategy: "wait",
+        },
+        50,
+      );
+      playCoin();
+      triggerConfettiBurst();
+      setDecisionXpBonus(earnedXp);
+      setSelectedDecision("wait");
+      triggerToast(`🧊 Guardado en Retos y Metas: ${parsedItemName}`);
+    } catch (error) {
+      console.error("Wishlist save failed:", error);
+      triggerToast(
+        error instanceof Error
+          ? error.message
+          : "No se pudo guardar la compra.",
+      );
+    } finally {
+      setIsSavingDecision(false);
     }
-    playCoin();
-    triggerConfettiBurst();
-    setDecisionXpBonus(50);
-    setSelectedDecision("wait");
-    addToWishlist(
-      {
-        name: parsedItemName,
-        price: parsedItemPrice,
-        cooldownDays: profile.nextPaydayDays,
-        strategy: "wait",
-      },
-      50,
-    );
-    triggerToast(
-      `🧊 ¡Guardado en tu Congelador por ${profile.nextPaydayDays} días! Acabas de proteger $${parsedItemPrice.toLocaleString()} MXN de tu quincena`,
-    );
   };
 
-  // Decision 3: "Plan de Micro-ahorro" -> Saves to "Compras en Enfriamiento 🧊" (+100 XP)
-  const handleDecisionMicroSave = () => {
-    if (mode !== "demo") {
-      triggerToast(
-        "La wishlist real se conectará a Supabase en el siguiente paso.",
-      );
+  // Decision 3: switch the same item to a weekly micro-saving plan.
+  const handleDecisionMicroSave = async () => {
+    if (isSavingDecision || !parsedItemName.trim() || parsedItemPrice <= 0)
       return;
+    setIsSavingDecision(true);
+    try {
+      const earnedXp = await addToWishlist(
+        {
+          name: parsedItemName,
+          price: parsedItemPrice,
+          plannedWeeklySave: financialMetrics.suggestedWeeklySave,
+          cooldownDays: Math.max(1, profile.nextPaydayDays || 7),
+          strategy: "microsave",
+        },
+        100,
+      );
+      playCoin();
+      triggerConfettiBurst();
+      setDecisionXpBonus(earnedXp);
+      setSelectedDecision("microsave");
+      triggerToast(
+        `💰 Plan de micro-ahorro guardado en Retos y Metas: ${parsedItemName}`,
+      );
+    } catch (error) {
+      console.error("Micro-saving plan save failed:", error);
+      triggerToast(
+        error instanceof Error ? error.message : "No se pudo guardar el plan.",
+      );
+    } finally {
+      setIsSavingDecision(false);
     }
-    playCoin();
-    triggerConfettiBurst();
-    setDecisionXpBonus(100);
-    setSelectedDecision("microsave");
-    addToWishlist(
-      {
-        name: parsedItemName,
-        price: parsedItemPrice,
-        plannedWeeklySave: financialMetrics.suggestedWeeklySave,
-        cooldownDays: profile.nextPaydayDays,
-        strategy: "microsave",
-      },
-      100,
-    );
-    triggerToast(
-      `🧊 ¡Guardado en tu Congelador por ${profile.nextPaydayDays} días! Acabas de proteger $${parsedItemPrice.toLocaleString()} MXN de tu quincena`,
-    );
   };
 
   const handleQuickExpenseSubmit = (e: React.FormEvent) => {
@@ -1657,6 +1693,7 @@ export default function AppDashboardPage() {
                   {/* CARTA 1: Comprar hoy */}
                   <motion.div
                     onClick={handleDecisionBuyToday}
+                    aria-disabled={isSavingDecision}
                     className={`rounded-3xl bg-white border-2 border-b-4 p-4 sm:p-5 shadow-sm flex flex-col justify-between gap-3.5 transition-all hover:-translate-y-1 active:translate-y-0.5 cursor-pointer ${
                       selectedDecision === "bought"
                         ? "border-amber-400 border-b-amber-600 ring-2 ring-amber-400/20"
@@ -1727,6 +1764,7 @@ export default function AppDashboardPage() {
                   {/* CARTA 2 (Destacada Esmeralda): Esperar a tu nómina */}
                   <motion.div
                     onClick={handleDecisionWaitPayroll}
+                    aria-disabled={isSavingDecision}
                     className={`rounded-3xl bg-white border-2 border-b-4 p-4 sm:p-5 shadow-sm flex flex-col justify-between gap-3.5 transition-all hover:-translate-y-1 active:translate-y-0.5 cursor-pointer ${
                       selectedDecision === "wait"
                         ? "border-[#10B981] border-b-emerald-700 ring-4 ring-emerald-500/15"
@@ -1799,6 +1837,7 @@ export default function AppDashboardPage() {
                   {/* CARTA 3: Plan de Micro-ahorro */}
                   <motion.div
                     onClick={handleDecisionMicroSave}
+                    aria-disabled={isSavingDecision}
                     className={`rounded-3xl bg-white border-2 border-b-4 p-4 sm:p-5 shadow-sm flex flex-col justify-between gap-3.5 transition-all hover:-translate-y-1 active:translate-y-0.5 cursor-pointer ${
                       selectedDecision === "microsave"
                         ? "border-indigo-400 border-b-indigo-600 ring-2 ring-indigo-400/20"
