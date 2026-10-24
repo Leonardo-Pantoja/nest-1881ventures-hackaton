@@ -46,7 +46,8 @@ const fadeUp = {
 
 export default function AuthPage() {
   const router = useRouter();
-  const { loadPreloadedSandboxProfile, startFreshOnboarding } = useFinancial();
+  const { loadPreloadedSandboxProfile, startFreshOnboarding, refreshProfile } =
+    useFinancial();
 
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
@@ -66,6 +67,8 @@ export default function AuthPage() {
     setStatusMessage(null);
 
     const supabase = createClient();
+    // Leave demo mode before authenticating with a real account.
+    sessionStorage.removeItem("antesdegastar_demo_profile_v2");
 
     try {
       if (authMode === "signup") {
@@ -117,6 +120,7 @@ export default function AuthPage() {
       if (profileError) throw profileError;
 
       if (profile?.onboarding_completed_at) {
+        await refreshProfile();
         router.replace("/app");
       } else {
         startFreshOnboarding(cleanEmail);
@@ -136,7 +140,7 @@ export default function AuthPage() {
   };
 
   const handleStartFromScratch = () => {
-    startFreshOnboarding(email.trim() || undefined);
+    startFreshOnboarding(email.trim() || undefined, true);
     router.push("/onboarding?demo=1");
   };
 
