@@ -26,6 +26,20 @@ export interface FinancialGoal {
   deadlineLabel: string;
 }
 
+export interface WishlistItem {
+  id: string;
+  name: string;
+  price: number;
+  savedAt: string;
+  plannedWeeklySave?: number;
+}
+
+export interface PendingPurchaseEvaluation {
+  name: string;
+  price: number;
+  imageName?: string | null;
+}
+
 export interface FinancialProfile {
   id: string;
   name: string;
@@ -40,6 +54,7 @@ export interface FinancialProfile {
   dailyEssentialBurn: number;
   commitments: Commitment[];
   goal: FinancialGoal;
+  wishlist?: WishlistItem[];
   isOnboarded: boolean;
   plaidConnected?: boolean;
   institutionName?: string;
@@ -69,6 +84,7 @@ export const PRELOADED_SANDBOX_PROFILES: Record<string, FinancialProfile> = {
       weeklyContribution: 600,
       deadlineLabel: "Diciembre",
     },
+    wishlist: [],
     isOnboarded: true,
     plaidConnected: true,
     institutionName: "BBVA Sandbox (Plaid)",
@@ -95,6 +111,7 @@ export const PRELOADED_SANDBOX_PROFILES: Record<string, FinancialProfile> = {
       weeklyContribution: 500,
       deadlineLabel: "Diciembre",
     },
+    wishlist: [],
     isOnboarded: true,
     plaidConnected: true,
     institutionName: "Nu México Sandbox (Plaid)",
@@ -121,6 +138,7 @@ export const EMPTY_NEW_USER_PROFILE: FinancialProfile = {
     weeklyContribution: 500,
     deadlineLabel: "Próximos meses",
   },
+  wishlist: [],
   isOnboarded: false,
   plaidConnected: false,
 };
@@ -176,7 +194,6 @@ export function getRealisticEstimateForContext(tags: LifeContextTag[]) {
     };
   }
 
-  // Trabaja o estudia y trabaja
   return {
     currentBalance: 4800,
     nextPaydayAmount: 6500,
@@ -203,14 +220,24 @@ interface FinancialContextType {
     goalTitle: string;
     goalTargetAmount: number;
   }) => void;
+  pendingEvaluation: PendingPurchaseEvaluation;
+  setPendingEvaluation: (item: PendingPurchaseEvaluation) => void;
+  addToWishlist: (item: Omit<WishlistItem, "id" | "savedAt">) => void;
+  registerPurchaseAnyway: (name: string, price: number) => void;
 }
 
 const STORAGE_KEY = "antesdegastar_financial_profile_v1";
+const EVAL_STORAGE_KEY = "antesdegastar_pending_eval_v1";
 
 const FinancialContext = createContext<FinancialContextType | undefined>(undefined);
 
 export function FinancialProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<FinancialProfile>(PRELOADED_SANDBOX_PROFILES.carlos);
+  const [pendingEvaluation, setPendingEvaluationState] = useState<PendingPurchaseEvaluation>({
+    name: "Audífonos Inalámbricos Sony",
+    price: 2300,
+    imageName: null,
+  });
 
   useEffect(() => {
     try {
@@ -223,7 +250,15 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
             ...parsed,
             lifeContext: Array.isArray(parsed.lifeContext) ? parsed.lifeContext : [],
             commitments: Array.isArray(parsed.commitments) ? parsed.commitments : [],
+            wishlist: Array.isArray(parsed.wishlist) ? parsed.wishlist : [],
           });
+        }
+      }
+      const savedEval = localStorage.getItem(EVAL_STORAGE_KEY);
+      if (savedEval) {
+        const parsedEval = JSON.parse(savedEval);
+        if (parsedEval && typeof parsedEval === "object" && "price" in parsedEval) {
+          setPendingEvaluationState(parsedEval);
         }
       }
     } catch {
@@ -237,6 +272,15 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     } catch {
       // Ignore localStorage errors
+    }
+  };
+
+  const setPendingEvaluation = (item: PendingPurchaseEvaluation) => {
+    setPendingEvaluationState(item);
+    try {
+      localStorage.setItem(EVAL_STORAGE_KEY, JSON.stringify(item));
+    } catch {
+      // Ignore
     }
   };
 
@@ -303,11 +347,49 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         weeklyContribution: suggestedWeekly,
         deadlineLabel: "Meta activa",
       },
+      wishlist: [],
       isOnboarded: true,
       plaidConnected: false,
     };
 
     persistProfile(completed);
+  };
+
+  const addToWishlist = (item: Omit<WishlistItem, "id" | "savedAt">) => {
+    setProfile((prev) => {
+      const existing = prev.wishlist || [];
+      const newItem: WishlistItem = {
+        ...item,
+        id: `wish-${Date.now()}`,
+        savedAt: new Date().toISOString(),
+      };
+      const updated = {
+        ...prev,
+        wishlist: [newItem, ...existing.filter((w) => w.name !== item.name)],
+      };
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      } catch {
+        // Ignore
+      }
+      return updated;
+    });
+  };
+
+  const registerPurchaseAnyway = (name: string, price: number) => {
+    setProfile((prev) => {
+      const updated = {
+        ...prev,
+        currentBalance: Math.max(0, prev.currentBalance - price),
+        wishlist: (prev.wishlist || []).filter((w) => w.name !== name),
+      };
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      } catch {
+        // Ignore
+      }
+      return updated;
+    });
   };
 
   return (
@@ -319,6 +401,10 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         loadPreloadedSandboxProfile,
         startFreshOnboarding,
         completeOnboarding,
+        pendingEvaluation,
+        setPendingEvaluation,
+        addToWishlist,
+        registerPurchaseAnyway,
       }}
     >
       {children}

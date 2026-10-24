@@ -12,22 +12,17 @@ import {
   Camera,
   ArrowRight,
   CheckCircle2,
-  AlertTriangle,
-  ShieldAlert,
-  Clock,
-  PiggyBank,
-  Wallet,
-  Target,
   SlidersHorizontal,
   UserCheck,
   X,
   Send,
   Calendar,
-  RefreshCw,
+  BookmarkCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import PurchaseEvaluationFlow from "@/components/PurchaseEvaluationFlow";
 import {
   useFinancial,
   PRELOADED_SANDBOX_PROFILES,
@@ -42,7 +37,12 @@ const QUICK_PURCHASE_EXAMPLES = [
 
 export default function AppDashboardPage() {
   const router = useRouter();
-  const { profile, updateProfile, loadPreloadedSandboxProfile } = useFinancial();
+  const {
+    profile,
+    updateProfile,
+    loadPreloadedSandboxProfile,
+    setPendingEvaluation,
+  } = useFinancial();
 
   // Progressive disclosure states
   const [showWhyBreakdown, setShowWhyBreakdown] = useState(false);
@@ -55,18 +55,24 @@ export default function AppDashboardPage() {
   const [parsedItemPrice, setParsedItemPrice] = useState<number>(2300);
   const [uploadedImageName, setUploadedImageName] = useState<string | null>(null);
   const [showEvaluationView, setShowEvaluationView] = useState(false);
-  const [activeScenarioTab, setActiveScenarioTab] = useState<"now" | "wait" | "save">("now");
 
   // Quick expense bottom bar & toast feedback
   const [isQuickExpenseOpen, setIsQuickExpenseOpen] = useState(false);
   const [quickExpenseInput, setQuickExpenseInput] = useState("");
   const [toastFeedback, setToastFeedback] = useState<{
     id: number;
-    amount: number;
-    label: string;
+    message: string;
   } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const triggerToast = (message: string) => {
+    const id = Date.now();
+    setToastFeedback({ id, message });
+    setTimeout(() => {
+      setToastFeedback((current) => (current?.id === id ? null : current));
+    }, 4200);
+  };
 
   // Deterministic Financial Calculation
   const financialMetrics = useMemo(() => {
@@ -84,35 +90,12 @@ export default function AppDashboardPage() {
         profile.safetyBuffer
     );
 
-    const difference = safeToSpend - parsedItemPrice;
-
-    let status: "VIABLE" | "PRECAUCION" | "COMPROMETE" = "VIABLE";
-    if (difference < 0) {
-      status = "COMPROMETE";
-    } else if (difference < profile.safetyBuffer * 0.5) {
-      status = "PRECAUCION";
-    }
-
-    const weeksDelayed = Number(
-      (parsedItemPrice / Math.max(1, profile.goal.weeklyContribution)).toFixed(1)
-    );
-    const suggestedWeeklySave = Math.max(
-      250,
-      Math.round(profile.goal.weeklyContribution * 0.75)
-    );
-    const weeksToSave = Math.max(1, Math.ceil(parsedItemPrice / suggestedWeeklySave));
-
     return {
       commitmentsTotal,
       essentialLivingCost,
       safeToSpend,
-      difference,
-      status,
-      weeksDelayed,
-      suggestedWeeklySave,
-      weeksToSave,
     };
-  }, [profile, parsedItemPrice]);
+  }, [profile]);
 
   // Parse free-form text like "Audífonos de $2,300" or "Cafetera 1450"
   const handleQueryInputChange = (value: string) => {
@@ -138,6 +121,11 @@ export default function AppDashboardPage() {
     setParsedItemName(example.name);
     setParsedItemPrice(example.price);
     setUploadedImageName(null);
+    setPendingEvaluation({
+      name: example.name,
+      price: example.price,
+      imageName: null,
+    });
     setShowEvaluationView(true);
   };
 
@@ -148,12 +136,22 @@ export default function AppDashboardPage() {
     setQueryText(`Captura: ${file.name.replace(/\.[^/.]+$/, "")} ($1,950)`);
     setParsedItemName("Producto detectado en imagen");
     setParsedItemPrice(1950);
+    setPendingEvaluation({
+      name: "Producto detectado en imagen",
+      price: 1950,
+      imageName: file.name,
+    });
     setShowEvaluationView(true);
   };
 
   const handleAnalyzeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!queryText.trim() && parsedItemPrice <= 0) return;
+    setPendingEvaluation({
+      name: parsedItemName,
+      price: parsedItemPrice,
+      imageName: uploadedImageName,
+    });
     setShowEvaluationView(true);
   };
 
@@ -172,20 +170,11 @@ export default function AppDashboardPage() {
       currentBalance: Math.max(0, profile.currentBalance - amount),
     });
 
-    const feedbackObj = {
-      id: Date.now(),
-      amount,
-      label: quickExpenseInput.trim(),
-    };
-    setToastFeedback(feedbackObj);
+    triggerToast(
+      `Gasto registrado: −$${amount.toLocaleString()} MXN (${quickExpenseInput.trim()}) · Liquidez actualizada`
+    );
     setQuickExpenseInput("");
     setIsQuickExpenseOpen(false);
-
-    setTimeout(() => {
-      setToastFeedback((current) =>
-        current?.id === feedbackObj.id ? null : current
-      );
-    }, 4000);
   };
 
   return (
@@ -565,206 +554,61 @@ export default function AppDashboardPage() {
               </div>
             </CardContent>
           </Card>
-        </motion.section>
 
-        {/* 3. Vista Detallada de Evaluación (Progressive Disclosure: Opens only on "Analizar compra") */}
-        <AnimatePresence>
-          {showEvaluationView && (
-            <motion.section
-              key="detailed-evaluation"
-              initial={{ opacity: 0, y: 18 }}
+          {/* Saved Wishlist Pill (only if user has saved items) */}
+          {profile.wishlist && profile.wishlist.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-              className="space-y-5"
+              className="rounded-2xl border border-[#E6E1DA] bg-white px-4 py-3 flex items-center justify-between gap-3 shadow-2xs"
             >
-              <Card className="bg-white border-[#DCD5CA] shadow-sm rounded-3xl py-6 px-2 sm:px-4">
-                <CardContent className="space-y-6">
-                  {/* Top Bar of Evaluation */}
-                  <div className="flex items-center justify-between border-b border-[#F3EFEA] pb-4">
-                    <div>
-                      <span className="text-xs font-medium uppercase tracking-wider text-slate-400">
-                        Evaluación pre-compra
-                      </span>
-                      <h3 className="text-lg font-semibold text-slate-900 mt-0.5">
-                        {parsedItemName} ·{" "}
-                        <span className="font-mono">
-                          ${parsedItemPrice.toLocaleString()} MXN
-                        </span>
-                      </h3>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setShowEvaluationView(false)}
-                      className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-[#FAF8F5] transition-colors cursor-pointer"
-                      aria-label="Cerrar evaluación"
-                    >
-                      <X className="w-4 h-4" strokeWidth={1.5} />
-                    </button>
-                  </div>
-
-                  {/* Verdict Banner */}
-                  <div
-                    className={`p-4 sm:p-5 rounded-2xl border flex items-start gap-3.5 ${
-                      financialMetrics.status === "COMPROMETE"
-                        ? "bg-rose-50/70 border-rose-200 text-rose-950"
-                        : financialMetrics.status === "PRECAUCION"
-                        ? "bg-amber-50/80 border-amber-200 text-amber-950"
-                        : "bg-emerald-50/80 border-emerald-200 text-emerald-950"
-                    }`}
-                  >
-                    {financialMetrics.status === "COMPROMETE" ? (
-                      <ShieldAlert
-                        className="w-6 h-6 text-rose-700 shrink-0 mt-0.5"
-                        strokeWidth={1.5}
-                      />
-                    ) : financialMetrics.status === "PRECAUCION" ? (
-                      <AlertTriangle
-                        className="w-6 h-6 text-amber-700 shrink-0 mt-0.5"
-                        strokeWidth={1.5}
-                      />
-                    ) : (
-                      <CheckCircle2
-                        className="w-6 h-6 text-emerald-700 shrink-0 mt-0.5"
-                        strokeWidth={1.5}
-                      />
-                    )}
-
-                    <div className="space-y-1">
-                      <span className="text-xs font-semibold uppercase tracking-wider">
-                        {financialMetrics.status === "COMPROMETE"
-                          ? "Hoy compromete tu liquidez"
-                          : financialMetrics.status === "PRECAUCION"
-                          ? "Viable, pero ajusta tu margen"
-                          : "Compra viable con tranquilidad"}
-                      </span>
-
-                      <p className="text-base sm:text-lg font-semibold leading-snug">
-                        {financialMetrics.status === "COMPROMETE"
-                          ? `Te faltarían $${Math.abs(
-                              financialMetrics.difference
-                            ).toLocaleString()} MXN de liquidez libre para no tocar tus pagos próximos.`
-                          : `Si lo compras hoy, aún conservas $${financialMetrics.difference.toLocaleString()} MXN libres hasta tu próximo ingreso.`}
-                      </p>
-
-                      <p className="text-xs sm:text-sm opacity-85 leading-relaxed">
-                        {financialMetrics.status === "COMPROMETE"
-                          ? `Tu disponible real hoy es de $${financialMetrics.safeToSpend.toLocaleString()} MXN tras proteger tus compromisos de los próximos ${profile.nextPaydayDays} días.`
-                          : `Tus pagos fijos ($${financialMetrics.commitmentsTotal.toLocaleString()} MXN) y tu reserva de tranquilidad quedan protegidos.`}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Goal Impact Pill */}
-                  <div className="rounded-2xl bg-[#FAF8F5] border border-[#E6E1DA] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-white border border-[#E6E1DA] text-slate-800 flex items-center justify-center shrink-0">
-                        <Target className="w-4 h-4" strokeWidth={1.5} />
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium text-slate-500">
-                          Impacto en tu meta: “{profile.goal.title}”
-                        </p>
-                        <p className="text-sm font-semibold text-slate-900">
-                          Equivale a {financialMetrics.weeksDelayed} semanas de tu ritmo de ahorro
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-xs font-mono text-slate-600 bg-white border border-[#E6E1DA] px-3 py-1.5 rounded-xl shrink-0">
-                      Meta: ${profile.goal.targetAmount.toLocaleString()} MXN
-                    </span>
-                  </div>
-
-                  {/* 3 Scenarios Comparison (Cuándo y cómo comprar) */}
-                  <div className="space-y-3">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                      Alternativas para decidir sin estrés:
-                    </p>
-
-                    <div className="grid grid-cols-3 gap-2 p-1 rounded-2xl bg-[#FAF8F5] border border-[#E6E1DA]">
-                      <button
-                        type="button"
-                        onClick={() => setActiveScenarioTab("now")}
-                        className={`py-2 px-3 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                          activeScenarioTab === "now"
-                            ? "bg-white text-slate-900 shadow-2xs border border-[#E6E1DA]"
-                            : "text-slate-600 hover:text-slate-900"
-                        }`}
-                      >
-                        <Wallet className="w-3.5 h-3.5" strokeWidth={1.5} />
-                        <span>Comprar hoy</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setActiveScenarioTab("wait")}
-                        className={`py-2 px-3 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                          activeScenarioTab === "wait"
-                            ? "bg-slate-900 text-[#FAF8F5] shadow-2xs"
-                            : "text-slate-600 hover:text-slate-900"
-                        }`}
-                      >
-                        <Clock className="w-3.5 h-3.5" strokeWidth={1.5} />
-                        <span>En {profile.nextPaydayDays} días</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setActiveScenarioTab("save")}
-                        className={`py-2 px-3 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                          activeScenarioTab === "save"
-                            ? "bg-slate-900 text-[#FAF8F5] shadow-2xs"
-                            : "text-slate-600 hover:text-slate-900"
-                        }`}
-                      >
-                        <PiggyBank className="w-3.5 h-3.5" strokeWidth={1.5} />
-                        <span>Micro-ahorro</span>
-                      </button>
-                    </div>
-
-                    <div className="rounded-2xl border border-[#E6E1DA] bg-[#FAF8F5]/70 p-4 text-sm text-slate-700 leading-relaxed">
-                      {activeScenarioTab === "now" && (
-                        <p>
-                          {financialMetrics.status === "COMPROMETE"
-                            ? `Pagar $${parsedItemPrice.toLocaleString()} MXN hoy tomaría dinero destinado a tus compromisos próximos ($${financialMetrics.commitmentsTotal.toLocaleString()} MXN) o a tus gastos básicos de la semana.`
-                            : `Tu liquidez libre pasaría de $${financialMetrics.safeToSpend.toLocaleString()} a $${financialMetrics.difference.toLocaleString()} MXN durante los próximos ${profile.nextPaydayDays} días.`}
-                        </p>
-                      )}
-
-                      {activeScenarioTab === "wait" && (
-                        <p>
-                          Si esperas{" "}
-                          <strong className="text-slate-900">
-                            {profile.nextPaydayDays} días
-                          </strong>{" "}
-                          a tu próximo ingreso (${profile.nextPaydayAmount.toLocaleString()} MXN), ya habrás cubierto tus pagos actuales y podrás comprarlo manteniendo intacta tu reserva de seguridad.
-                        </p>
-                      )}
-
-                      {activeScenarioTab === "save" && (
-                        <p>
-                          Apartando{" "}
-                          <strong className="text-slate-900">
-                            ${financialMetrics.suggestedWeeklySave} MXN por semana
-                          </strong>
-                          , reúnes los ${parsedItemPrice.toLocaleString()} MXN en{" "}
-                          <strong className="text-slate-900">
-                            {financialMetrics.weeksToSave} semanas
-                          </strong>{" "}
-                          sin frenar tu meta “{profile.goal.title}” ni desajustar tu quincena.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.section>
+              <div className="flex items-center gap-2.5 text-xs text-slate-700">
+                <BookmarkCheck className="w-4 h-4 text-emerald-700 shrink-0" strokeWidth={1.5} />
+                <span>
+                  En tu lista de deseos:{" "}
+                  {profile.wishlist.map((w) => `${w.name} ($${w.price.toLocaleString()})`).join(" · ")}
+                </span>
+              </div>
+              <span className="text-[11px] font-medium text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full shrink-0">
+                Liquidez protegida
+              </span>
+            </motion.div>
           )}
-        </AnimatePresence>
+        </motion.section>
       </main>
 
-      {/* Toast Visual Feedback for Quick Expense */}
+      {/* 3. Fullscreen Animated Panel inside /app for Interactive Purchase Evaluation */}
+      <AnimatePresence>
+        {showEvaluationView && (
+          <motion.div
+            key="evaluation-fullscreen-modal"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.22 }}
+            className="fixed inset-0 z-50 bg-slate-900/45 backdrop-blur-xs overflow-y-auto flex items-start sm:items-center justify-center p-3 sm:p-6"
+            onClick={() => setShowEvaluationView(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 24, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 16, scale: 0.98 }}
+              transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-2xl my-auto"
+            >
+              <PurchaseEvaluationFlow
+                itemName={parsedItemName}
+                itemPrice={parsedItemPrice}
+                onClose={() => setShowEvaluationView(false)}
+                onActionCompleted={(msg) => triggerToast(msg)}
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Toast Visual Feedback */}
       <AnimatePresence>
         {toastFeedback && (
           <motion.div
@@ -772,19 +616,13 @@ export default function AppDashboardPage() {
             initial={{ opacity: 0, y: 20, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.96 }}
-            className="fixed bottom-20 left-1/2 -translate-x-1/2 z-40 rounded-2xl bg-slate-900 text-[#FAF8F5] px-4 py-3 shadow-lg border border-slate-800 flex items-center gap-3 text-xs sm:text-sm"
+            className="fixed bottom-20 left-1/2 -translate-x-1/2 z-40 rounded-2xl bg-slate-900 text-[#FAF8F5] px-4 py-3 shadow-lg border border-slate-800 flex items-center gap-3 text-xs sm:text-sm max-w-md w-[92%] sm:w-auto"
           >
             <CheckCircle2
               className="w-4 h-4 text-emerald-400 shrink-0"
               strokeWidth={1.5}
             />
-            <span>
-              Gasto registrado:{" "}
-              <strong className="font-mono">
-                −${toastFeedback.amount.toLocaleString()} MXN
-              </strong>{" "}
-              ({toastFeedback.label}) · Liquidez actualizada
-            </span>
+            <span>{toastFeedback.message}</span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -932,4 +770,3 @@ export default function AppDashboardPage() {
     </div>
   );
 }
-
