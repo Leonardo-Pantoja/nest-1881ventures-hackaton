@@ -7,10 +7,11 @@ import {
   Sparkles,
   X,
   Loader2,
-  ShoppingBag,
   Clock,
-  CalendarCheck,
   ArrowRight,
+  Zap,
+  Shield,
+  PiggyBank,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import FinancialPlantWidget, {
@@ -171,7 +172,7 @@ export default function PurchaseEvaluationFlow({
 
   return (
     <div className="w-full max-w-4xl mx-auto">
-      <Card className="bg-white border border-slate-200 shadow-sm rounded-3xl overflow-hidden py-0 gap-0">
+      <Card className="bg-white border-2 border-b-4 border-slate-200 shadow-sm rounded-3xl overflow-hidden py-0 gap-0">
         {/* Clean Header */}
         <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
@@ -242,143 +243,216 @@ export default function PurchaseEvaluationFlow({
             recoveredXpBonus={decisionXpBonus}
           />
 
-          {/* 2. The 3 Clean & Spacious Decision Cards */}
+          {/* 2. The 3 Collectible 3D Path Cards with 56x56 Animated Medallions */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Tarjeta 1: Comprar hoy */}
-            <div
-              className={`rounded-3xl bg-white border p-6 shadow-sm flex flex-col justify-between gap-5 ${
+            {/* Carta 1: Comprar hoy */}
+            <motion.div
+              onClick={handleDecisionBuyToday}
+              className={`rounded-3xl bg-white border-2 border-b-4 p-6 shadow-sm flex flex-col justify-between gap-5 transition-all hover:-translate-y-1 active:translate-y-0.5 cursor-pointer ${
                 selectedDecision === "bought"
-                  ? "border-amber-400 ring-2 ring-amber-400/20"
-                  : "border-slate-200"
+                  ? "border-amber-400 border-b-amber-600 ring-2 ring-amber-400/20"
+                  : "border-slate-200 border-b-slate-300 hover:border-amber-300"
               }`}
             >
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+              <div className="space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <motion.div
+                    animate={{ y: [0, -4, 0] }}
+                    transition={{
+                      duration: 2.8,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                    }}
+                    className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-100 to-orange-100 border-2 border-amber-300 flex items-center justify-center shrink-0 shadow-xs"
+                  >
+                    <Zap
+                      className="w-7 h-7 text-amber-600 fill-amber-400"
+                      strokeWidth={1.5}
+                    />
+                  </motion.div>
+
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold font-heading bg-amber-50 text-amber-900 border border-amber-200 text-right">
                     {metrics.isDeficit
-                      ? `Te faltan $${metrics.missingLiquidity.toLocaleString()} de liquidez libre`
-                      : `Reduce tu margen a $${Math.max(
+                      ? `Te faltan $${metrics.missingLiquidity.toLocaleString()} libres`
+                      : `Margen: $${Math.max(
                           0,
                           metrics.netAfterPurchase
                         ).toLocaleString()}`}
                   </span>
-                  <ShoppingBag
-                    className="w-4 h-4 text-slate-400 shrink-0"
-                    strokeWidth={1.5}
-                  />
                 </div>
 
-                <h3 className="text-lg font-bold font-heading text-slate-900">
-                  Comprar hoy
-                </h3>
+                <div>
+                  <h3 className="text-lg font-bold font-heading text-slate-900">
+                    Comprar hoy
+                  </h3>
+                  <p className="text-sm text-slate-600 leading-relaxed mt-1">
+                    {metrics.isDeficit
+                      ? `Tomaría $${metrics.missingLiquidity.toLocaleString()} MXN del dinero apartado para tu renta/pagos fijos y retrasaría tu meta ${metrics.weeksGoalDelayed} semanas.`
+                      : `Cubres el gasto con tu dinero libre hoy, pero retrasas tu meta "${profile.goal.title}" ${metrics.weeksGoalDelayed} semanas.`}
+                  </p>
+                </div>
 
-                <p className="text-sm text-slate-600 leading-relaxed">
-                  {metrics.isDeficit
-                    ? `Tomaría $${metrics.missingLiquidity.toLocaleString()} MXN del dinero apartado para tu renta/pagos fijos y retrasaría tu meta "${profile.goal.title}" ${metrics.weeksGoalDelayed} semanas.`
-                    : `Cubres el gasto con tu dinero libre hoy, pero retrasas tu meta "${profile.goal.title}" aproximadamente ${metrics.weeksGoalDelayed} semanas.`}
-                </p>
+                <div className="p-3 rounded-2xl bg-amber-50/70 border border-amber-200/80 space-y-1.5">
+                  <div className="flex justify-between text-[11px] font-bold font-heading text-amber-900">
+                    <span>Impacto en tu quincena</span>
+                    <span>
+                      {metrics.isDeficit
+                        ? "Sobregiro de pagos fijos"
+                        : `−${metrics.weeksGoalDelayed} sem de meta`}
+                    </span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-amber-200/70 overflow-hidden">
+                    <div className="h-full w-full bg-amber-500 rounded-full" />
+                  </div>
+                </div>
               </div>
 
-              <motion.button
+              <button
                 type="button"
-                whileTap={{ scale: 0.98 }}
-                onClick={handleDecisionBuyToday}
-                className="w-full h-11 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                className="w-full h-11 rounded-xl border-2 border-b-4 border-slate-200 border-b-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold font-heading transition-colors cursor-pointer"
               >
                 Registrar compra hoy
-              </motion.button>
-            </div>
+              </button>
+            </motion.div>
 
-            {/* Tarjeta 2 (Destacada con borde esmeralda suave): Esperar a tu nómina */}
-            <div
-              className={`rounded-3xl bg-white border-2 p-6 shadow-sm flex flex-col justify-between gap-5 ${
+            {/* Carta 2 (Destacada Esmeralda): Esperar a tu nómina */}
+            <motion.div
+              onClick={handleDecisionWaitPayroll}
+              className={`rounded-3xl bg-white border-2 border-b-4 p-6 shadow-sm flex flex-col justify-between gap-5 transition-all hover:-translate-y-1 active:translate-y-0.5 cursor-pointer ${
                 selectedDecision === "wait"
-                  ? "border-[#10B981] ring-4 ring-emerald-500/15"
-                  : "border-emerald-400/80"
+                  ? "border-[#10B981] border-b-emerald-700 ring-4 ring-emerald-500/15"
+                  : "border-emerald-400 border-b-emerald-600"
               }`}
             >
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                    <Sparkles
-                      className="w-3 h-3 text-emerald-600"
+              <div className="space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <motion.div
+                    animate={{ y: [0, -5, 0] }}
+                    transition={{
+                      duration: 2.5,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                    }}
+                    className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-100 border-2 border-emerald-400 flex items-center justify-center shrink-0 shadow-xs"
+                  >
+                    <Shield
+                      className="w-7 h-7 text-emerald-600 fill-emerald-400/40"
                       strokeWidth={1.5}
                     />
-                    Decisión recomendada · +50 XP
+                  </motion.div>
+
+                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold font-heading bg-emerald-50 text-emerald-900 border border-emerald-300">
+                    <Sparkles
+                      className="w-3.5 h-3.5 text-emerald-600"
+                      strokeWidth={1.5}
+                    />
+                    Recomendada · +50 XP
                   </span>
-                  <Clock
-                    className="w-4 h-4 text-emerald-600 shrink-0"
-                    strokeWidth={1.5}
-                  />
                 </div>
 
-                <h3 className="text-lg font-bold font-heading text-slate-900">
-                  Esperar a tu nómina (en {profile.nextPaydayDays} días)
-                </h3>
+                <div>
+                  <h3 className="text-lg font-bold font-heading text-slate-900">
+                    Esperar a tu nómina (en {profile.nextPaydayDays} días)
+                  </h3>
+                  <p className="text-sm text-slate-600 leading-relaxed mt-1">
+                    En {profile.nextPaydayDays} días recibes tu ingreso de $
+                    {profile.nextPaydayAmount.toLocaleString()} MXN y lo compras
+                    con tranquilidad sin tocar el dinero de tus pagos fijos.
+                  </p>
+                </div>
 
-                <p className="text-sm text-slate-600 leading-relaxed">
-                  En {profile.nextPaydayDays} días recibes tu ingreso de $
-                  {profile.nextPaydayAmount.toLocaleString()} MXN y lo compras
-                  con tranquilidad sin tocar el dinero de tus pagos fijos.
-                </p>
+                <div className="p-3 rounded-2xl bg-emerald-50/70 border border-emerald-200/80 space-y-1.5">
+                  <div className="flex justify-between text-[11px] font-bold font-heading text-emerald-900">
+                    <span>Pagos fijos protegidos</span>
+                    <span>100% intactos</span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-emerald-200/70 overflow-hidden">
+                    <div className="h-full w-full bg-[#10B981] rounded-full" />
+                  </div>
+                </div>
               </div>
 
-              <motion.button
+              <button
                 type="button"
-                whileTap={{ scale: 0.98 }}
-                onClick={handleDecisionWaitPayroll}
-                className="w-full h-11 rounded-xl bg-[#10B981] hover:bg-emerald-600 text-white text-xs font-semibold shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                className="w-full h-11 rounded-xl bg-[#10B981] hover:bg-emerald-600 border-2 border-emerald-600 border-b-4 border-b-emerald-800 text-white text-xs font-bold font-heading shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
-                <span>Elegir esperar {profile.nextPaydayDays} días</span>
+                <Clock className="w-4 h-4" strokeWidth={1.5} />
+                <span>Esperar {profile.nextPaydayDays} días (+50 XP)</span>
                 <ArrowRight className="w-4 h-4" strokeWidth={1.5} />
-              </motion.button>
-            </div>
+              </button>
+            </motion.div>
 
-            {/* Tarjeta 3: Plan de Micro-ahorro */}
-            <div
-              className={`rounded-3xl bg-white border p-6 shadow-sm flex flex-col justify-between gap-5 ${
+            {/* Carta 3: Plan de Micro-ahorro */}
+            <motion.div
+              onClick={handleDecisionMicroSave}
+              className={`rounded-3xl bg-white border-2 border-b-4 p-6 shadow-sm flex flex-col justify-between gap-5 transition-all hover:-translate-y-1 active:translate-y-0.5 cursor-pointer ${
                 selectedDecision === "microsave"
-                  ? "border-indigo-400 ring-2 ring-indigo-400/20"
-                  : "border-slate-200"
+                  ? "border-indigo-400 border-b-indigo-600 ring-2 ring-indigo-400/20"
+                  : "border-slate-200 border-b-slate-300 hover:border-indigo-300"
               }`}
             >
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200">
+              <div className="space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <motion.div
+                    animate={{ y: [0, -4, 0] }}
+                    transition={{
+                      duration: 2.7,
+                      delay: 0.2,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                    }}
+                    className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-100 to-violet-100 border-2 border-indigo-300 flex items-center justify-center shrink-0 shadow-xs"
+                  >
+                    <PiggyBank
+                      className="w-7 h-7 text-indigo-600 fill-indigo-300/40"
+                      strokeWidth={1.5}
+                    />
+                  </motion.div>
+
+                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold font-heading bg-indigo-50 text-indigo-900 border border-indigo-200">
+                    <Sparkles
+                      className="w-3.5 h-3.5 text-indigo-600"
+                      strokeWidth={1.5}
+                    />
                     Sin estrés · +100 XP
                   </span>
-                  <CalendarCheck
-                    className="w-4 h-4 text-indigo-600 shrink-0"
-                    strokeWidth={1.5}
-                  />
                 </div>
 
-                <h3 className="text-lg font-bold font-heading text-slate-900">
-                  Plan de Micro-ahorro
-                </h3>
+                <div>
+                  <h3 className="text-lg font-bold font-heading text-slate-900">
+                    Plan de Micro-ahorro
+                  </h3>
+                  <p className="text-sm text-slate-600 leading-relaxed mt-1">
+                    Aparta{" "}
+                    <strong className="text-slate-900">
+                      ${metrics.suggestedWeeklySave}/semana
+                    </strong>{" "}
+                    y cómpralo en{" "}
+                    <strong className="text-slate-900">
+                      {metrics.microSaveWeeks} semanas
+                    </strong>{" "}
+                    manteniendo intacto tu colchón y tu meta principal.
+                  </p>
+                </div>
 
-                <p className="text-sm text-slate-600 leading-relaxed">
-                  Aparta{" "}
-                  <strong className="text-slate-900">
-                    ${metrics.suggestedWeeklySave}/semana
-                  </strong>{" "}
-                  y cómpralo en{" "}
-                  <strong className="text-slate-900">
-                    {metrics.microSaveWeeks} semanas
-                  </strong>{" "}
-                  manteniendo intacto tu colchón y tu meta principal.
-                </p>
+                <div className="p-3 rounded-2xl bg-indigo-50/70 border border-indigo-200/80 space-y-1.5">
+                  <div className="flex justify-between text-[11px] font-bold font-heading text-indigo-900">
+                    <span>Meta en {metrics.microSaveWeeks} pasos</span>
+                    <span>${metrics.suggestedWeeklySave}/sem</span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-indigo-200/70 overflow-hidden">
+                    <div className="h-full w-4/5 bg-indigo-500 rounded-full" />
+                  </div>
+                </div>
               </div>
 
-              <motion.button
+              <button
                 type="button"
-                whileTap={{ scale: 0.98 }}
-                onClick={handleDecisionMicroSave}
-                className="w-full h-11 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-xs font-semibold transition-colors cursor-pointer"
+                className="w-full h-11 rounded-xl border-2 border-b-4 border-indigo-200 border-b-indigo-300 bg-indigo-50/60 hover:bg-indigo-100/80 text-indigo-950 text-xs font-bold font-heading transition-colors cursor-pointer"
               >
-                Activar plan de ${metrics.suggestedWeeklySave}/sem
-              </motion.button>
-            </div>
+                Apartar ${metrics.suggestedWeeklySave}/sem (+100 XP)
+              </button>
+            </motion.div>
           </div>
         </CardContent>
       </Card>
