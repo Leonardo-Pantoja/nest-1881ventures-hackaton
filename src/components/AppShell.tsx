@@ -28,10 +28,9 @@ const NAV_ITEMS: {
   id: BottomNavTab;
   label: string;
   icon: React.ElementType;
-  highlight?: boolean;
 }[] = [
   { id: "home", label: "Tu Planta", icon: Sprout },
-  { id: "simulate", label: "Simular Compra", icon: Sparkles, highlight: true },
+  { id: "simulate", label: "Simular Compra", icon: Sparkles },
   { id: "goals", label: "Retos y Metas", icon: Trophy },
   { id: "profile", label: "Cambiar Perfil", icon: UserCheck },
 ];
@@ -49,32 +48,39 @@ export default function AppShell({
     onSelectTab(tab);
   };
 
+  const initials = (profile.name || "CM")
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
   return (
     <div className="min-h-screen bg-[#FAF8F5] text-slate-900 flex flex-col md:flex-row font-sans">
-      {/* Desktop Clean Left Sidebar (Duolingo / Finch style) */}
-      <aside className="hidden md:flex md:w-64 lg:w-72 md:flex-col md:fixed md:inset-y-0 md:left-0 border-r border-[#E6E1DA] bg-white/90 backdrop-blur-md px-5 py-6 justify-between z-30">
-        <div className="space-y-7">
+      {/* Desktop Clean Left Sidebar (Apple / Wise Minimalist Palette + Emerald Primary) */}
+      <aside className="hidden md:flex md:w-64 lg:w-72 md:flex-col md:fixed md:inset-y-0 md:left-0 border-r border-slate-200 bg-white px-5 py-6 justify-between z-30">
+        <div className="space-y-8">
           {/* Logo */}
           <Link
             href="/"
             onClick={() => playTap()}
             className="flex items-center gap-3 px-2 group"
           >
-            <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-500 text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform shrink-0">
               <Compass className="w-5 h-5" strokeWidth={1.5} />
             </div>
-            <div>
+            <div className="min-w-0">
               <span className="text-lg font-bold tracking-tight text-slate-900 font-heading block leading-none">
                 AntesDeGastar
               </span>
-              <span className="text-[11px] font-semibold text-emerald-700">
-                Tu bosque financiero
+              <span className="text-xs font-medium text-slate-500 block mt-0.5">
+                Claridad financiera
               </span>
             </div>
           </Link>
 
-          {/* Navigation Links */}
-          <nav className="space-y-2">
+          {/* Navigation Links (Monochrome + Emerald only for active primary state) */}
+          <nav className="space-y-1.5">
             {NAV_ITEMS.map((item) => {
               const Icon = item.icon;
               const isSelected = activeTab === item.id;
@@ -82,74 +88,43 @@ export default function AppShell({
                 <motion.button
                   key={item.id}
                   type="button"
-                  whileTap={{ scale: 0.96 }}
+                  whileTap={{ scale: 0.98 }}
                   onClick={() => handleNavClick(item.id)}
-                  className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-sm font-bold transition-all cursor-pointer ${
-                    item.highlight
-                      ? "bg-gradient-to-r from-emerald-600 via-teal-500 to-amber-500 text-white shadow-sm"
-                      : isSelected
-                      ? "bg-emerald-50 text-emerald-900 border-2 border-emerald-300"
-                      : "text-slate-600 hover:bg-[#FAF8F5] hover:text-slate-900 border-2 border-transparent"
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                    isSelected
+                      ? "bg-[#10B981] text-white shadow-sm"
+                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                   }`}
                 >
                   <Icon className="w-5 h-5 shrink-0" strokeWidth={1.5} />
-                  <span className="font-heading tracking-wide">{item.label}</span>
+                  <span className="font-heading tracking-wide">
+                    {item.label}
+                  </span>
                 </motion.button>
               );
             })}
           </nav>
         </div>
 
-        {/* Bottom Stats Pill inside Desktop Sidebar */}
-        <div className="space-y-3 pt-6 border-t border-[#E6E1DA]">
-          {/* Streak & XP Pills */}
-          <div className="grid grid-cols-2 gap-2">
-            <motion.button
-              type="button"
-              whileTap={{ scale: 0.96 }}
-              onClick={() => playLevelUp()}
-              className="p-3 rounded-2xl bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-200 flex items-center gap-2 cursor-pointer"
-              title="¡Toca para celebrar tu racha!"
-            >
-              <Flame
-                className="w-5 h-5 text-orange-500 fill-orange-500 shrink-0"
-                strokeWidth={1.5}
-              />
-              <div className="text-left">
-                <span className="text-sm font-bold font-heading text-orange-950 block leading-none">
-                  {profile.streakCount ?? 3}
-                </span>
-                <span className="text-[10px] font-semibold text-orange-700">
-                  Racha 🔥
-                </span>
-              </div>
-            </motion.button>
-
-            <div className="p-3 rounded-2xl bg-emerald-50/70 border border-emerald-200 flex items-center gap-2">
-              <Zap
-                className="w-5 h-5 text-emerald-600 fill-emerald-500 shrink-0"
-                strokeWidth={1.5}
-              />
-              <div className="text-left">
-                <span className="text-sm font-bold font-heading text-emerald-950 block leading-none">
-                  {profile.wisdomXp ?? 120}
-                </span>
-                <span className="text-[10px] font-semibold text-emerald-700">
-                  Puntos XP
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Active User & Help Button */}
-          <div className="flex items-center justify-between gap-2 px-1 pt-1">
+        {/* Clean Sidebar Footer: Fixed Avatar + User Info without duplicate Streak/XP cards */}
+        <div className="pt-5 border-t border-slate-200">
+          <div className="flex items-center justify-between gap-2 p-2.5 rounded-2xl bg-slate-50 border border-slate-200/80">
             <button
               type="button"
               onClick={() => handleNavClick("profile")}
-              className="flex items-center gap-2 text-xs font-bold text-slate-700 hover:text-slate-900 truncate cursor-pointer"
+              className="flex items-center gap-3 min-w-0 text-left cursor-pointer group flex-1"
             >
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
-              <span className="truncate">{profile.name}</span>
+              <div className="w-9 h-9 rounded-full bg-slate-900 text-white text-xs font-bold font-heading flex items-center justify-center shrink-0 shadow-2xs">
+                {initials}
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className="text-sm font-bold text-slate-900 group-hover:text-emerald-600 transition-colors block truncate leading-tight">
+                  {profile.name}
+                </span>
+                <span className="text-[11px] text-slate-500 block truncate">
+                  Cambiar perfil
+                </span>
+              </div>
             </button>
 
             {onOpenGuide && (
@@ -160,7 +135,7 @@ export default function AppShell({
                   playTap();
                   onOpenGuide();
                 }}
-                className="p-2 rounded-xl border border-[#E6E1DA] bg-[#FAF8F5] text-slate-600 hover:text-slate-900 cursor-pointer"
+                className="p-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 shadow-2xs cursor-pointer shrink-0"
                 title="Guía rápida"
               >
                 <HelpCircle className="w-4 h-4" strokeWidth={1.5} />
@@ -172,46 +147,62 @@ export default function AppShell({
 
       {/* Main Content Wrapper */}
       <div className="flex-1 md:pl-64 lg:pl-72 flex flex-col min-h-screen">
-        {/* Mobile Top Gamified Bar */}
-        <header className="md:hidden sticky top-0 z-30 border-b border-[#E6E1DA]/90 bg-[#FAF8F5]/95 backdrop-blur-md">
-          <div className="max-w-lg mx-auto px-4 h-14 flex items-center justify-between gap-2">
-            <Link
-              href="/"
-              onClick={() => playTap()}
-              className="flex items-center gap-2 shrink-0"
-            >
-              <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-2xs">
-                <Compass className="w-4 h-4" strokeWidth={1.5} />
-              </div>
-              <span className="text-base font-bold tracking-tight text-slate-900 font-heading">
-                AntesDeGastar
-              </span>
-            </Link>
+        {/* Top Bar (Visible on Mobile & Desktop Top-Right for non-duplicated Streak & XP) */}
+        <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-[#FAF8F5]/90 backdrop-blur-md">
+          <div className="max-w-5xl mx-auto px-4 sm:px-8 h-16 flex items-center justify-between gap-4">
+            {/* Mobile Brand / Desktop View Title */}
+            <div className="flex items-center gap-2.5">
+              <Link
+                href="/"
+                onClick={() => playTap()}
+                className="md:hidden flex items-center gap-2 shrink-0"
+              >
+                <div className="w-8 h-8 rounded-xl bg-emerald-500 text-white flex items-center justify-center shadow-2xs">
+                  <Compass className="w-4 h-4" strokeWidth={1.5} />
+                </div>
+                <span className="text-base font-bold tracking-tight text-slate-900 font-heading">
+                  AntesDeGastar
+                </span>
+              </Link>
 
-            <div className="flex items-center gap-2">
-              {/* Streak Pill */}
+              <span className="hidden md:inline-block text-sm font-semibold text-slate-500">
+                {activeTab === "home"
+                  ? "Vista de evolución · Tu Planta Financiera"
+                  : activeTab === "simulate"
+                  ? "Copiloto Pre-Compra · Simulador de Decisiones"
+                  : activeTab === "goals"
+                  ? "Retos y Metas de Ahorro"
+                  : "Configuración de Perfil"}
+              </span>
+            </div>
+
+            {/* Top-Right Single Source of Truth for Streak & XP */}
+            <div className="flex items-center gap-2.5">
               <motion.button
                 type="button"
                 whileTap={{ scale: 0.96 }}
                 onClick={() => playLevelUp()}
-                className="h-8 px-3 rounded-full bg-gradient-to-r from-orange-100 to-amber-100 border border-orange-300 text-orange-950 text-xs font-bold font-heading flex items-center gap-1 cursor-pointer"
+                className="h-9 px-3.5 rounded-full bg-white border border-slate-200 shadow-2xs text-slate-800 text-xs font-bold font-heading flex items-center gap-1.5 cursor-pointer hover:border-slate-300 transition-colors"
+                title="Racha de buenas decisiones"
               >
                 <Flame
-                  className="w-3.5 h-3.5 text-orange-600 fill-orange-500"
+                  className="w-4 h-4 text-amber-500 fill-amber-500"
                   strokeWidth={1.5}
                 />
-                <span>{profile.streakCount ?? 3}</span>
+                <span>{profile.streakCount ?? 3} días</span>
               </motion.button>
 
-              {/* XP Pill */}
               <motion.button
                 type="button"
                 whileTap={{ scale: 0.96 }}
                 onClick={() => handleNavClick("goals")}
-                className="h-8 px-2.5 rounded-full bg-emerald-100/80 border border-emerald-300 text-emerald-950 text-xs font-bold font-heading flex items-center gap-1 cursor-pointer"
+                className="h-9 px-3.5 rounded-full bg-white border border-slate-200 shadow-2xs text-slate-800 text-xs font-bold font-heading flex items-center gap-1.5 cursor-pointer hover:border-slate-300 transition-colors"
               >
-                <Zap className="w-3.5 h-3.5 text-emerald-700" strokeWidth={1.5} />
-                <span>{profile.wisdomXp ?? 120}</span>
+                <Zap
+                  className="w-4 h-4 text-emerald-500 fill-emerald-500"
+                  strokeWidth={1.5}
+                />
+                <span>{profile.wisdomXp ?? 120} XP</span>
               </motion.button>
 
               {onOpenGuide && (
@@ -222,7 +213,7 @@ export default function AppShell({
                     playTap();
                     onOpenGuide();
                   }}
-                  className="w-8 h-8 rounded-full border border-[#E6E1DA] bg-white text-slate-600 flex items-center justify-center cursor-pointer"
+                  className="md:hidden w-9 h-9 rounded-full border border-slate-200 bg-white text-slate-600 flex items-center justify-center shadow-2xs cursor-pointer"
                   aria-label="Guía rápida"
                 >
                   <HelpCircle className="w-4 h-4" strokeWidth={1.5} />
@@ -232,12 +223,12 @@ export default function AppShell({
           </div>
         </header>
 
-        {/* Central Spacious Container without Visual Noise */}
-        <main className="flex-1 w-full max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-32 md:py-8">
+        {/* Central Spacious Container with Generous Whitespace */}
+        <main className="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-8 pt-6 pb-32 md:py-8">
           {children}
         </main>
 
-        {/* Mobile Floating Game-Style Bottom Navigation */}
+        {/* Mobile Bottom Navigation */}
         <div className="md:hidden">
           <BottomNav activeTab={activeTab} onSelectTab={handleNavClick} />
         </div>
@@ -245,4 +236,3 @@ export default function AppShell({
     </div>
   );
 }
-

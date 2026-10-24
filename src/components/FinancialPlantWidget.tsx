@@ -107,7 +107,7 @@ export default function FinancialPlantWidget({
   const [previewLevelOverride, setPreviewLevelOverride] =
     useState<PlantLevel | null>(null);
 
-  // Calculate user's financial level & HP bar dynamically from liquidity & goal progress
+  // Calculate user's financial level & 3-segment liquidity breakdown
   const computedMetrics = useMemo(() => {
     const commitmentsTotal = profile.commitments
       .filter((c) => c.dueInDays <= profile.nextPaydayDays)
@@ -116,30 +116,34 @@ export default function FinancialPlantWidget({
     const essentialLivingCost =
       profile.dailyEssentialBurn * profile.nextPaydayDays;
 
+    const fixedAndRentTotal = commitmentsTotal + essentialLivingCost;
+
     const safeToSpend = Math.max(
       0,
-      profile.currentBalance -
-        commitmentsTotal -
-        essentialLivingCost -
-        profile.safetyBuffer
+      profile.currentBalance - fixedAndRentTotal - profile.safetyBuffer
     );
 
-    const maxQuincenaHp = Math.max(5000, profile.currentBalance || 5000);
+    const totalBalance = Math.max(
+      1,
+      profile.currentBalance || fixedAndRentTotal + profile.safetyBuffer + safeToSpend
+    );
+
     const activeDamage =
       simulationState === "recovered" ? 0 : Math.max(0, previewDamagePrice);
-    const netHpAfterPurchase = safeToSpend - activeDamage;
-    const isCriticalHit = activeDamage > 0 && netHpAfterPurchase < 0;
-    const missingAmount = isCriticalHit ? Math.abs(netHpAfterPurchase) : 0;
+    const netAfterPurchase = safeToSpend - activeDamage;
+    const isCriticalHit = activeDamage > 0 && netAfterPurchase < 0;
+    const missingAmount = isCriticalHit ? Math.abs(netAfterPurchase) : 0;
 
-    const baseHpPct = Math.min(
-      100,
-      Math.max(8, Math.round((safeToSpend / maxQuincenaHp) * 100))
+    // 3-Segment Horizontal Bar Percentages (Fixed & Rent | Safety Buffer | Free Today)
+    const fixedPct = Math.min(
+      85,
+      Math.max(15, Math.round((fixedAndRentTotal / totalBalance) * 100))
     );
-    const remainingHpPct = Math.min(
-      100,
-      Math.max(0, Math.round((Math.max(0, netHpAfterPurchase) / maxQuincenaHp) * 100))
+    const bufferPct = Math.min(
+      40,
+      Math.max(10, Math.round((profile.safetyBuffer / totalBalance) * 100))
     );
-    const damageFlashPct = Math.max(0, baseHpPct - remainingHpPct);
+    const freePct = Math.max(8, 100 - fixedPct - bufferPct);
 
     const goalRatio =
       profile.goal.targetAmount > 0
@@ -161,7 +165,6 @@ export default function FinancialPlantWidget({
       derivedLevel = 5;
     }
 
-    // Evolve visual level +1 when recovered / Power-Up is chosen!
     const boostedLevel =
       simulationState === "recovered"
         ? (Math.min(5, derivedLevel + 1) as PlantLevel)
@@ -170,7 +173,6 @@ export default function FinancialPlantWidget({
     const activeLevel = previewLevelOverride ?? boostedLevel;
     const config = LEVELS_CONFIG[activeLevel];
 
-    // Calculate XP progress bar inside current level
     const [minXp, maxXp] = config.xpRange;
     const effectiveXp = previewLevelOverride
       ? Math.round((minXp + maxXp) * 0.65)
@@ -189,14 +191,15 @@ export default function FinancialPlantWidget({
       maxXp,
       progressPct,
       safeToSpend,
-      maxQuincenaHp,
+      totalBalance: profile.currentBalance,
+      fixedAndRentTotal,
+      safetyBuffer: profile.safetyBuffer,
       activeDamage,
-      netHpAfterPurchase,
       isCriticalHit,
       missingAmount,
-      baseHpPct,
-      remainingHpPct,
-      damageFlashPct,
+      fixedPct,
+      bufferPct,
+      freePct,
     };
   }, [
     profile,
@@ -213,12 +216,15 @@ export default function FinancialPlantWidget({
     maxXp,
     progressPct,
     safeToSpend,
-    maxQuincenaHp,
+    totalBalance,
+    fixedAndRentTotal,
+    safetyBuffer,
     activeDamage,
     isCriticalHit,
     missingAmount,
-    remainingHpPct,
-    damageFlashPct,
+    fixedPct,
+    bufferPct,
+    freePct,
   } = computedMetrics;
 
   const isDanger = simulationState === "danger" || isCriticalHit;
@@ -226,204 +232,146 @@ export default function FinancialPlantWidget({
 
   return (
     <div
-      className={`relative rounded-3xl border-2 border-b-4 transition-all duration-300 overflow-hidden ${
+      className={`relative rounded-3xl border transition-all duration-300 overflow-hidden bg-white shadow-sm ${
         isDanger
-          ? "bg-gradient-to-b from-rose-50/95 via-[#FAF8F5] to-rose-100/50 border-rose-300 border-b-rose-500 shadow-md"
+          ? "border-amber-300"
           : isRecovered
-          ? "bg-gradient-to-b from-emerald-50/95 via-[#FAF8F5] to-amber-50/50 border-emerald-300 border-b-emerald-500 shadow-md"
-          : "bg-gradient-to-b from-[#F4F1EA] via-[#FAF8F5] to-white border-[#E2DCD3] border-b-[#CFC7BC] shadow-xs"
-      } ${compact ? "p-4 sm:p-5" : "p-5 sm:p-6"}`}
+          ? "border-emerald-300"
+          : "border-slate-200"
+      } ${compact ? "p-5" : "p-6 sm:p-8"}`}
     >
-      {/* 1. Floating Island Header: Level Badge (Supervivencia -> Abundancia) + Streak 🔥 + XP */}
-      <div className="space-y-3">
+      {/* 1. Header: Level Badge (Supervivencia -> Abundancia) + XP Progress */}
+      <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge
-              variant="outline"
-              className={`px-2.5 py-1 text-xs font-bold font-heading border ${
-                isDanger
-                  ? "bg-rose-100 text-rose-900 border-rose-300"
-                  : config.badgeClasses
-              }`}
-            >
-              <Sprout className="w-3.5 h-3.5" strokeWidth={1.5} />
-              <span>
-                Nivel {activeLevel}: {config.name}
-              </span>
-            </Badge>
-
-            {/* Streak Flame Pill 🔥 */}
-            <div className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-orange-500 to-amber-500 text-white px-2.5 py-0.5 text-xs font-bold font-heading shadow-2xs">
-              <Flame
-                className="w-3.5 h-3.5 fill-white text-white"
-                strokeWidth={1.5}
-              />
-              <span>{profile.streakCount ?? 3} días 🔥</span>
-            </div>
-          </div>
-
-          {/* XP Counter */}
-          <div className="flex items-center gap-1.5 text-xs font-bold font-heading text-slate-800 bg-white/95 border border-[#E6E1DA] px-2.5 py-1 rounded-xl shadow-2xs">
-            <Zap
-              className={`w-3.5 h-3.5 ${
-                isRecovered ? "text-amber-500" : "text-emerald-600"
-              }`}
-              strokeWidth={1.5}
-            />
+          <Badge
+            variant="outline"
+            className="px-3 py-1 text-xs font-bold font-heading border border-emerald-200 bg-emerald-50 text-emerald-900"
+          >
+            <Sprout className="w-3.5 h-3.5 text-emerald-600" strokeWidth={1.5} />
             <span>
-              {totalXp} / {maxXp} XP
+              Nivel {activeLevel}: {config.name}
             </span>
-          </div>
+          </Badge>
+
+          <span className="text-xs font-semibold text-slate-500">
+            Progreso de nivel: {progressPct}%
+          </span>
         </div>
 
-        {/* 2. BARRA DE VIDA VERDE (HP DE TU QUINCENA) */}
-        <div
-          className={`p-3 rounded-2xl border-2 transition-colors ${
-            isDanger
-              ? "bg-rose-50/90 border-rose-300"
-              : "bg-white/95 border-emerald-200/90"
-          }`}
-        >
-          <div className="flex items-center justify-between gap-2 mb-1.5">
-            <div className="flex items-center gap-1.5">
-              <Heart
-                className={`w-4 h-4 ${
-                  isDanger
-                    ? "text-rose-600 fill-rose-500 animate-pulse"
-                    : "text-emerald-600 fill-emerald-500"
-                }`}
-                strokeWidth={1.5}
-              />
-              <span className="text-xs sm:text-sm font-bold font-heading text-slate-900">
-                HP: ${safeToSpend.toLocaleString()} / $
-                {maxQuincenaHp.toLocaleString()} MXN
+        {/* 2. DISPONIBLE PARA GASTAR HOY + BARRA DE 3 SEGMENTOS */}
+        <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/90 space-y-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <div>
+              <span className="text-xs font-semibold text-slate-500 block">
+                Disponible para gastar hoy:
+              </span>
+              <span className="text-2xl sm:text-3xl font-bold font-heading text-slate-900 tracking-tight">
+                ${safeToSpend.toLocaleString()}{" "}
+                <span className="text-xs font-semibold text-slate-400">
+                  MXN
+                </span>
               </span>
             </div>
 
-            {/* Real-Time Damage Hit Indicator (-2,300 HP) */}
-            {activeDamage > 0 && !isRecovered ? (
-              <motion.span
-                key={activeDamage}
-                initial={{ scale: 0.85, opacity: 0 }}
-                animate={{
-                  scale: [1, 1.08, 1],
-                  opacity: [1, 0.7, 1],
-                }}
-                transition={{ duration: 0.9, repeat: Infinity }}
-                className={`text-xs font-bold font-heading px-2 py-0.5 rounded-lg border ${
+            {activeDamage > 0 && !isRecovered && (
+              <span
+                className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
                   isDanger
-                    ? "bg-rose-600 text-white border-rose-700"
-                    : "bg-amber-100 text-amber-900 border-amber-300"
+                    ? "bg-amber-50 text-amber-900 border-amber-200"
+                    : "bg-emerald-50 text-emerald-800 border-emerald-200"
                 }`}
               >
-                −{activeDamage.toLocaleString()} HP
-              </motion.span>
-            ) : (
-              <span className="text-[11px] font-bold font-heading text-emerald-700">
-                Barra de Vida Libre
+                 Evaluando: ${activeDamage.toLocaleString()} MXN
               </span>
             )}
           </div>
 
-          {/* Animated Green/Coral HP Bar with Flashing Damage Segment */}
-          <div className="relative w-full h-4 rounded-full bg-slate-200/80 overflow-hidden p-0.5 border border-slate-300/60">
-            <div className="relative w-full h-full rounded-full overflow-hidden flex">
-              {/* Remaining Safe HP Segment */}
-              <motion.div
-                initial={false}
-                animate={{
-                  width: `${ isDanger && remainingHpPct === 0 ? 100 : remainingHpPct }%`,
-                }}
-                transition={{ type: "spring", stiffness: 260, damping: 24 }}
-                className={`h-full transition-colors ${
-                  isDanger
-                    ? "bg-gradient-to-r from-rose-600 via-red-500 to-orange-500"
-                    : "bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-400"
-                }`}
-              />
-
-              {/* Flashing Damage Segment when previewing a purchase */}
-              {activeDamage > 0 && !isRecovered && damageFlashPct > 0 && (
-                <motion.div
-                  animate={{ opacity: [0.95, 0.25, 0.95] }}
-                  transition={{ duration: 0.65, repeat: Infinity }}
-                  style={{ width: `${damageFlashPct}%` }}
-                  className="h-full bg-rose-500"
-                />
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* XP Animated Progress Bar */}
-        <div className="space-y-1">
-          <div className="w-full h-2 rounded-full bg-[#E6E1DA]/90 overflow-hidden">
-            <motion.div
-              className={`h-full rounded-full ${
-                isDanger
-                  ? "bg-rose-400"
-                  : isRecovered
-                  ? "bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-400"
-                  : "bg-gradient-to-r from-emerald-600 to-teal-500"
+          {/* Clean 3-Segment Horizontal Bar */}
+          <div className="w-full h-3 rounded-full bg-slate-200/80 overflow-hidden flex gap-0.5 p-0.5">
+            <div
+              style={{ width: `${fixedPct}%` }}
+              className="h-full rounded-l-full bg-slate-400 transition-all duration-500"
+              title={`Apartado para renta y pagos fijos: -$${fixedAndRentTotal.toLocaleString()}`}
+            />
+            <div
+              style={{ width: `${bufferPct}%` }}
+              className="h-full bg-slate-300 transition-all duration-500"
+              title={`Colchón de seguridad: -$${safetyBuffer.toLocaleString()}`}
+            />
+            <div
+              style={{ width: `${freePct}%` }}
+              className={`h-full rounded-r-full transition-all duration-500 ${
+                isDanger ? "bg-amber-500" : "bg-[#10B981]"
               }`}
-              initial={{ width: "20%" }}
-              animate={{ width: `${progressPct}%` }}
-              transition={{ duration: 0.5, ease: "easeOut" }}
+              title={`Libre hoy: $${safeToSpend.toLocaleString()}`}
             />
           </div>
-          {!compact && (
-            <p className="text-[11px] font-semibold text-slate-500 flex items-center gap-1 truncate">
-              <Award
-                className="w-3 h-3 text-emerald-700 shrink-0"
-                strokeWidth={1.5}
-              />
-              <span className="truncate">{config.nextMilestoneHint}</span>
-            </p>
-          )}
+
+          {/* 1-Glance Breakdown Legend */}
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px] text-slate-600 pt-0.5">
+            <span>
+              <strong className="text-slate-900">
+                Saldo ${totalBalance.toLocaleString()}
+              </strong>
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-slate-400 inline-block" />
+              Apartado para renta y pagos fijos: −$
+              {fixedAndRentTotal.toLocaleString()}
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-slate-300 inline-block" />
+              Colchón: −${safetyBuffer.toLocaleString()}
+            </span>
+            <span className="flex items-center gap-1 font-semibold text-emerald-700">
+              <span className="w-2 h-2 rounded-full bg-[#10B981] inline-block" />
+              = Libre hoy: ${safeToSpend.toLocaleString()}
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* 3. Dynamic Gamified Plant/Tree SVG Stage (Floating Island) */}
+      {/* 3. Dynamic Gamified Plant/Tree SVG Stage */}
       <div
         className={`relative flex flex-col items-center justify-center ${
-          compact ? "my-2 py-2" : "my-3 py-2"
+          compact ? "my-3 py-2" : "my-5 py-4"
         }`}
       >
-        {/* Floating "+XP de Sabiduría Financiera" Badge when user chooses Green or Gold Card */}
+        {/* Floating "+XP de Sabiduría Financiera" Badge when user chooses a positive decision */}
         <AnimatePresence>
           {isRecovered && (
             <motion.div
               key={`xp-wisdom-badge-${recoveredXpBonus}`}
-              initial={{ opacity: 0, y: 16, scale: 0.85 }}
-              animate={{ opacity: 1, y: -4, scale: 1 }}
-              exit={{ opacity: 0, y: -16, scale: 0.9 }}
-              transition={{
-                type: "spring",
-                stiffness: 340,
-                damping: 22,
-              }}
-              className="absolute top-0 z-20 inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-300 text-slate-950 font-bold font-heading text-xs px-3.5 py-1.5 shadow-md border-2 border-white"
+              initial={{ opacity: 0, y: 12, scale: 0.9 }}
+              animate={{ opacity: 1, y: -2, scale: 1 }}
+              exit={{ opacity: 0, y: -12, scale: 0.9 }}
+              className="absolute top-0 z-20 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-900 font-bold font-heading text-xs px-3.5 py-1.5 shadow-sm border border-emerald-200"
             >
-              <Sparkles className="w-3.5 h-3.5 text-slate-900" strokeWidth={1.5} />
+              <Sparkles
+                className="w-3.5 h-3.5 text-emerald-600"
+                strokeWidth={1.5}
+              />
               <span>+{recoveredXpBonus} XP de Sabiduría Financiera</span>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Short Critical Hit Banner when HP drops below 0 */}
+        {/* Subtle Liquidity Deficit Alert */}
         <AnimatePresence>
           {isDanger && (
             <motion.div
               key="danger-wilting-badge"
-              initial={{ opacity: 0, y: 10, scale: 0.9 }}
+              initial={{ opacity: 0, y: 8, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="absolute top-0 z-20 inline-flex items-center gap-1.5 rounded-2xl bg-rose-600 text-white font-bold font-heading text-xs px-3.5 py-1.5 shadow-md border-2 border-white text-center"
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="absolute top-0 z-20 inline-flex items-center gap-1.5 rounded-full bg-amber-50 text-amber-900 font-semibold text-xs px-3.5 py-1.5 shadow-xs border border-amber-200 text-center"
             >
-              <AlertTriangle className="w-4 h-4 shrink-0" strokeWidth={1.5} />
+              <AlertTriangle
+                className="w-3.5 h-3.5 text-amber-600 shrink-0"
+                strokeWidth={1.5}
+              />
               <span>
-                ¡Golpe crítico a tu quincena! Te faltan $
-                {(missingAmount > 0 ? missingAmount : 1500).toLocaleString()}
+                Te faltan ${(missingAmount > 0 ? missingAmount : 1500).toLocaleString()} MXN de liquidez libre hoy
               </span>
             </motion.div>
           )}
@@ -853,31 +801,31 @@ export default function FinancialPlantWidget({
 
         {/* Subtitle Status Line */}
         <p
-          className={`text-xs font-bold font-heading text-center max-w-md ${
+          className={`text-xs font-medium text-center max-w-md ${
             isDanger
-              ? "text-rose-800"
+              ? "text-amber-800"
               : isRecovered
-              ? "text-emerald-900"
+              ? "text-emerald-800"
               : "text-slate-600"
           }`}
         >
           {isDanger
-            ? "Usa una Carta de Poder abajo para salvar tu planta 👇"
+            ? "Esta compra supera tu disponible libre hoy. Revisa las opciones recomendadas abajo."
             : isRecovered
-            ? `¡Power-Up activado! Tu planta evoluciona y gana +${recoveredXpBonus} XP ✨`
+            ? `¡Excelente decisión! Proteges tus pagos fijos y sumas +${recoveredXpBonus} XP.`
             : config.subtitle}
         </p>
       </div>
 
       {/* 3. Interactive 5-Level Selector Strip (For exploring all 5 evolution stages) */}
       {allowLevelPreview && (
-        <div className="pt-3 border-t border-[#E6E1DA]/80 flex flex-wrap items-center justify-between gap-2">
-          <span className="text-[11px] text-slate-500 flex items-center gap-1">
-            <TreePine className="w-3.5 h-3.5 text-emerald-700" strokeWidth={1.5} />
-            <span>Explorar evolución (5 niveles):</span>
+        <div className="pt-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs text-slate-500 flex items-center gap-1.5">
+            <TreePine className="w-4 h-4 text-emerald-600" strokeWidth={1.5} />
+            <span>Explorar los 5 niveles de evolución:</span>
           </span>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             {([1, 2, 3, 4, 5] as PlantLevel[]).map((lvl) => {
               const isSelected = activeLevel === lvl;
               return (
@@ -894,14 +842,14 @@ export default function FinancialPlantWidget({
                       previewLevelOverride === lvl ? null : lvl
                     );
                   }}
-                  className={`h-6 px-2 rounded-lg text-[11px] font-bold font-heading transition-all cursor-pointer ${
+                  className={`h-7 px-2.5 rounded-lg text-xs font-bold font-heading transition-all cursor-pointer ${
                     isSelected
-                      ? "bg-slate-900 text-[#FAF8F5] shadow-2xs"
-                      : "bg-white/80 text-slate-600 hover:bg-white border border-[#E6E1DA]"
+                      ? "bg-[#10B981] text-white shadow-xs"
+                      : "bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200"
                   }`}
                   title={`Ver Nivel ${lvl}: ${LEVELS_CONFIG[lvl].name}`}
                 >
-                  N{lvl}
+                  Nivel {lvl}
                 </button>
               );
             })}
@@ -912,9 +860,9 @@ export default function FinancialPlantWidget({
                   playTap();
                   setPreviewLevelOverride(null);
                 }}
-                className="text-[10px] text-slate-400 hover:text-slate-700 ml-1 underline cursor-pointer"
+                className="text-xs text-slate-400 hover:text-slate-700 ml-1 underline cursor-pointer"
               >
-                Auto
+                Actual
               </button>
             )}
           </div>

@@ -56,18 +56,18 @@ export default function BottomNav({
             </span>
           </motion.button>
 
-          {/* 2. Simular Compra (Highlighted Central Vibrant Gradient Button) */}
+          {/* 2. Simular Compra */}
           <motion.button
             type="button"
             whileTap={{ scale: 0.96 }}
-            whileHover={{ y: -2 }}
+            whileHover={{ y: -1 }}
             onClick={() => handleSelect("simulate")}
-            className="flex flex-col items-center justify-center -mt-5 cursor-pointer group"
+            className="flex flex-col items-center justify-center -mt-4 cursor-pointer group"
           >
             <div
-              className={`w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 via-teal-500 to-amber-400 text-white shadow-md flex items-center justify-center border-2 border-white transition-transform ${
+              className={`w-11 h-11 rounded-2xl bg-[#10B981] text-white shadow-sm flex items-center justify-center border-2 border-white transition-transform ${
                 activeTab === "simulate"
-                  ? "ring-2 ring-emerald-500/40 scale-105"
+                  ? "ring-2 ring-emerald-500/30 scale-105"
                   : ""
               }`}
             >
@@ -75,7 +75,7 @@ export default function BottomNav({
             </div>
             <span
               className={`text-[11px] font-heading leading-none mt-1 font-bold ${
-                activeTab === "simulate" ? "text-emerald-800" : "text-slate-800"
+                activeTab === "simulate" ? "text-emerald-700" : "text-slate-700"
               }`}
             >
               Simular
