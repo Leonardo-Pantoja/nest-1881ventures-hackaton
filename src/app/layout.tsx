@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { FinancialProvider } from "@/context/FinancialContext";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -25,7 +26,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full scroll-smooth antialiased`}
     >
       <body className="min-h-full flex flex-col bg-[#FAF8F5] text-slate-900 selection:bg-slate-900 selection:text-[#FAF8F5]">
-        {children}
+        <FinancialProvider>{children}</FinancialProvider>
       </body>
     </html>
   );
