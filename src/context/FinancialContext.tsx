@@ -6,7 +6,9 @@ export type LifeContextTag =
   | "estudio"
   | "trabajo"
   | "independiente"
-  | "dependientes";
+  | "dependientes"
+  | "apoyo";
+
 
 export type PayFrequency = "semanal" | "quincenal" | "mensual";
 
@@ -161,7 +163,7 @@ export const EMPTY_NEW_USER_PROFILE: FinancialProfile = {
     title: "Fondo de emergencia",
     targetAmount: 15000,
     currentSaved: 0,
-    weeklyContribution: 500,
+    weeklyContribution: 0,
     deadlineLabel: "Próximos meses",
   },
   wishlist: [],
@@ -169,12 +171,15 @@ export const EMPTY_NEW_USER_PROFILE: FinancialProfile = {
   plaidConnected: false,
 };
 
+
 const LIFE_CONTEXT_LABELS: Record<LifeContextTag, string> = {
   estudio: "Estudio",
   trabajo: "Trabajo",
-  independiente: "Vivo por mi cuenta",
+  independiente: "Pago mi vivienda",
   dependientes: "Mantengo a otras personas",
+  apoyo: "Recibo apoyo económico",
 };
+
 
 export function buildRoleTagFromContext(tags: LifeContextTag[]): string {
   if (!tags || tags.length === 0) return "Perfil Personalizado";
@@ -373,7 +378,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
       payFrequency: data.payFrequency,
       currentBalance: data.currentBalance,
       nextPaydayDays: data.nextPaydayDays,
-      nextPaydayAmount: data.nextPaydayAmount || defaults.nextPaydayAmount,
+      nextPaydayAmount: data.nextPaydayAmount,
       safetyBuffer: defaults.safetyBuffer,
       dailyEssentialBurn: defaults.dailyEssentialBurn,
       commitments: data.commitments,
