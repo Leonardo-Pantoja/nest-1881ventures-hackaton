@@ -228,7 +228,10 @@ interface FinancialContextType {
   }) => void;
   pendingEvaluation: PendingPurchaseEvaluation;
   setPendingEvaluation: (item: PendingPurchaseEvaluation) => void;
-  addToWishlist: (item: Omit<WishlistItem, "id" | "savedAt">) => void;
+  addToWishlist: (
+    item: Omit<WishlistItem, "id" | "savedAt">,
+    xpReward?: number
+  ) => void;
   registerPurchaseAnyway: (name: string, price: number) => void;
   awardWisdomXp: (amount?: number) => void;
   incrementStreak: (reason?: string) => void;
@@ -369,7 +372,10 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
     persistProfile(completed);
   };
 
-  const addToWishlist = (item: Omit<WishlistItem, "id" | "savedAt">) => {
+  const addToWishlist = (
+    item: Omit<WishlistItem, "id" | "savedAt">,
+    xpReward = 50
+  ) => {
     setProfile((prev) => {
       const existing = prev.wishlist || [];
       const newItem: WishlistItem = {
@@ -380,7 +386,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
       const nextStreak = (prev.streakCount ?? 3) + 1;
       const updated = {
         ...prev,
-        wisdomXp: (prev.wisdomXp || 100) + 50,
+        wisdomXp: (prev.wisdomXp || 100) + xpReward,
         streakCount: nextStreak,
         wishlist: [newItem, ...existing.filter((w) => w.name !== item.name)],
       };
@@ -393,7 +399,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
       setStreakCelebration({
         id: celId,
         count: nextStreak,
-        reason: "¡Ahorro inteligente! +50 XP",
+        reason: `¡Power-Up activado! +${xpReward} XP`,
       });
       setTimeout(() => {
         setStreakCelebration((cur) => (cur?.id === celId ? null : cur));

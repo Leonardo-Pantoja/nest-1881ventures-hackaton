@@ -118,11 +118,7 @@ export function playDamage(): void {
   }
 }
 
-/**
- * 4. playLevelUp(): Cheerful major arpeggio chord + canvas-confetti burst!
- */
-export function playLevelUp(): void {
-  // Trigger celebratory confetti burst
+export function triggerConfettiBurst(): void {
   if (typeof window !== "undefined") {
     try {
       void confetti({
@@ -135,6 +131,13 @@ export function playLevelUp(): void {
       // Ignore confetti errors
     }
   }
+}
+
+/**
+ * 4. playLevelUp(): Cheerful major arpeggio chord + canvas-confetti burst!
+ */
+export function playLevelUp(): void {
+  triggerConfettiBurst();
 
   const ctx = getAudioContext();
   if (!ctx) return;

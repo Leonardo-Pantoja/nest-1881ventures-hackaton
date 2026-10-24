@@ -4,32 +4,27 @@ import React, { useState, useMemo, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  ChevronDown,
   Sparkles,
-  ArrowRight,
   CheckCircle2,
   SlidersHorizontal,
   UserCheck,
   X,
   Send,
   BookmarkCheck,
-  Loader2,
   Flame,
   Trophy,
   Target,
   Zap,
-  Headphones,
-  Footprints,
-  Gamepad2,
-  Utensils,
+  Shield,
+  FlaskConical,
+  AlertTriangle,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import AppShell from "@/components/AppShell";
-import PurchaseEvaluationFlow from "@/components/PurchaseEvaluationFlow";
 import QuickGuideModal from "@/components/QuickGuideModal";
-import FinancialPlantWidget from "@/components/FinancialPlantWidget";
-import QuincenaEnergyGauge from "@/components/QuincenaEnergyGauge";
+import FinancialPlantWidget, {
+  type PlantSimulationState,
+} from "@/components/FinancialPlantWidget";
 import QuickSnapScanner, {
   type ScannedProductResult,
 } from "@/components/QuickSnapScanner";
@@ -43,41 +38,45 @@ import {
   playCoin,
   playDamage,
   playLevelUp,
+  triggerConfettiBurst,
 } from "@/lib/soundEffects";
-import type { EvaluateApiResponse } from "@/app/api/evaluate/route";
 
-const QUICK_PURCHASE_EXAMPLES = [
+const GAME_PURCHASE_CHIPS = [
   {
-    label: "Audífonos $2,300",
-    name: "Audífonos Inalámbricos Sony",
+    id: "audifonos",
+    emoji: "🎧",
+    label: "🎧 Audífonos $2,300",
+    name: "Audífonos Sony",
     price: 2300,
-    icon: Headphones,
-    gradient:
-      "from-emerald-50 to-teal-50/70 border-2 border-b-4 border-emerald-300 border-b-emerald-500 active:border-b-2 active:translate-y-0.5",
+    style:
+      "from-emerald-50 to-teal-50 border-emerald-300 border-b-emerald-500 text-slate-900",
   },
   {
-    label: "Tenis $1,800",
+    id: "juego",
+    emoji: "🎮",
+    label: "🎮 Juego $1,200",
+    name: "Videojuego",
+    price: 1200,
+    style:
+      "from-sky-50 to-indigo-50 border-sky-300 border-b-sky-500 text-slate-900",
+  },
+  {
+    id: "tenis",
+    emoji: "👟",
+    label: "👟 Tenis $1,800",
     name: "Tenis Deportivos",
     price: 1800,
-    icon: Footprints,
-    gradient:
-      "from-amber-50 to-orange-50/70 border-2 border-b-4 border-amber-300 border-b-amber-500 active:border-b-2 active:translate-y-0.5",
+    style:
+      "from-amber-50 to-orange-50 border-amber-300 border-b-amber-500 text-slate-900",
   },
   {
-    label: "Videojuego $1,200",
-    name: "Videojuego Edición Estándar",
-    price: 1200,
-    icon: Gamepad2,
-    gradient:
-      "from-sky-50 to-indigo-50/70 border-2 border-b-4 border-sky-300 border-b-sky-500 active:border-b-2 active:translate-y-0.5",
-  },
-  {
-    label: "Cena $550",
-    name: "Cena con amigos",
-    price: 550,
-    icon: Utensils,
-    gradient:
-      "from-rose-50 to-pink-50/70 border-2 border-b-4 border-rose-300 border-b-rose-500 active:border-b-2 active:translate-y-0.5",
+    id: "ubereats",
+    emoji: "🍔",
+    label: "🍔 UberEats $350",
+    name: "UberEats Cena",
+    price: 350,
+    style:
+      "from-rose-50 to-pink-50 border-rose-300 border-b-rose-500 text-slate-900",
   },
 ];
 
@@ -90,35 +89,33 @@ export default function AppDashboardPage() {
     updateProfile,
     loadPreloadedSandboxProfile,
     setPendingEvaluation,
-    incrementStreak,
+    addToWishlist,
+    registerPurchaseAnyway,
     streakCelebration,
   } = useFinancial();
 
-  // Navigation & Progressive Disclosure States
+  // Navigation & Sheets
   const [activeBottomTab, setActiveBottomTab] = useState<BottomNavTab>("home");
-  const [showWhyBreakdown, setShowWhyBreakdown] = useState(false);
   const [showTourModal, setShowTourModal] = useState(false);
   const [showGoalsSheet, setShowGoalsSheet] = useState(false);
   const [showProfileSheet, setShowProfileSheet] = useState(false);
 
-  // Pre-purchase Copilot states
-  const [queryText, setQueryText] = useState("Audífonos de $2,300");
-  const [parsedItemName, setParsedItemName] = useState(
-    "Audífonos Inalámbricos Sony"
-  );
+  // Game Box Purchase State (Default: 🎧 Audífonos $2,300)
+  const [queryText, setQueryText] = useState("🎧 Audífonos $2,300");
+  const [parsedItemName, setParsedItemName] = useState("Audífonos Sony");
   const [parsedItemPrice, setParsedItemPrice] = useState<number>(2300);
   const [scannedThumbnailUrl, setScannedThumbnailUrl] = useState<string | null>(
     null
   );
   const [scannedStoreTag, setScannedStoreTag] = useState<string | null>(null);
-  const [showEvaluationView, setShowEvaluationView] = useState(false);
 
-  // /api/evaluate state
-  const [apiEvaluation, setApiEvaluation] =
-    useState<EvaluateApiResponse | null>(null);
-  const [isEvaluatingApi, setIsEvaluatingApi] = useState(false);
+  // Power-Up Resolution State ("idle" | "shield" | "potion" | "bought")
+  const [activePowerUp, setActivePowerUp] = useState<
+    "idle" | "shield" | "potion" | "bought"
+  >("idle");
+  const [powerUpXpBonus, setPowerUpXpBonus] = useState<number>(50);
 
-  // Quick expense bottom bar & toast feedback
+  // Quick expense pill & toast feedback
   const [isQuickExpenseOpen, setIsQuickExpenseOpen] = useState(false);
   const [quickExpenseInput, setQuickExpenseInput] = useState("");
   const [toastFeedback, setToastFeedback] = useState<{
@@ -128,7 +125,6 @@ export default function AppDashboardPage() {
 
   const simulatorSectionRef = useRef<HTMLElement | null>(null);
 
-  // Auto-open the 3-slide welcome guide the first time the user enters /app
   useEffect(() => {
     try {
       const hasSeen = localStorage.getItem(FIRST_VISIT_GUIDE_KEY);
@@ -146,10 +142,10 @@ export default function AppDashboardPage() {
     setToastFeedback({ id, message });
     setTimeout(() => {
       setToastFeedback((current) => (current?.id === id ? null : current));
-    }, 4000);
+    }, 3600);
   };
 
-  // Deterministic Financial Calculation
+  // Real-Time Financial & HP Metrics
   const financialMetrics = useMemo(() => {
     const commitmentsTotal = profile.commitments
       .filter((c) => c.dueInDays <= profile.nextPaydayDays)
@@ -166,6 +162,25 @@ export default function AppDashboardPage() {
         profile.safetyBuffer
     );
 
+    const netHpAfterPurchase = safeToSpend - parsedItemPrice;
+    const isCriticalHit = parsedItemPrice > 0 && netHpAfterPurchase < 0;
+    const missingAmount = isCriticalHit ? Math.abs(netHpAfterPurchase) : 0;
+
+    const weeklyGoalContribution = Math.max(
+      300,
+      profile.goal.weeklyContribution || 500
+    );
+    const weeksGoalDelayed = Math.max(
+      1,
+      Math.ceil(parsedItemPrice / weeklyGoalContribution)
+    );
+
+    const suggestedPotionSave = 400;
+    const potionWeeks = Math.max(
+      1,
+      Math.ceil(parsedItemPrice / suggestedPotionSave)
+    );
+
     const goalPct =
       profile.goal.targetAmount > 0
         ? Math.min(
@@ -177,61 +192,21 @@ export default function AppDashboardPage() {
         : 0;
 
     return {
-      commitmentsTotal,
-      essentialLivingCost,
       safeToSpend,
+      netHpAfterPurchase,
+      isCriticalHit,
+      missingAmount,
+      weeksGoalDelayed,
+      suggestedPotionSave,
+      potionWeeks,
       goalPct,
     };
-  }, [profile]);
+  }, [profile, parsedItemPrice]);
 
-  // Call /api/evaluate + Increment Streak 🔥 + Sound FX
-  const runEvaluation = async (
-    name: string,
-    price: number,
-    imageName?: string | null
-  ) => {
-    if (price > financialMetrics.safeToSpend) {
-      playDamage();
-    } else {
-      playCoin();
-    }
-
-    setPendingEvaluation({
-      name,
-      price,
-      imageName: imageName ?? null,
-    });
-    incrementStreak("¡Evaluaste antes de gastar! +1 Racha 🔥");
-    setShowEvaluationView(true);
-    setIsEvaluatingApi(true);
-
-    try {
-      const response = await fetch("/api/evaluate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          itemName: name,
-          itemPrice: price,
-          profile,
-        }),
-      });
-
-      if (response.ok) {
-        const data = (await response.json()) as EvaluateApiResponse;
-        setApiEvaluation(data);
-      } else {
-        setApiEvaluation(null);
-      }
-    } catch {
-      setApiEvaluation(null);
-    } finally {
-      setIsEvaluatingApi(false);
-    }
-  };
-
-  // Parse free-form text like "Audífonos de $2,300" or "Cafetera 1450" in real time
+  // Real-Time Input Parser (Zero Paragraphs, Immediate Visual Reaction)
   const handleQueryInputChange = (value: string) => {
     setQueryText(value);
+    setActivePowerUp("idle");
 
     const normalized = value.replace(/,/g, "");
     const priceMatch = normalized.match(/(\d+(?:\.\d+)?)/);
@@ -242,27 +217,44 @@ export default function AppDashboardPage() {
         .replace(/\$?\s*\d[\d,.]*/g, "")
         .replace(/\bde\b|\bpor\b|\bmxn\b|\bpesos\b/gi, "")
         .trim();
-      setParsedItemName(cleanedName || "Artículo consultado");
+      setParsedItemName(cleanedName || "Compra");
+
+      if (price > financialMetrics.safeToSpend) {
+        playDamage();
+      } else {
+        playTap();
+      }
     } else {
       setParsedItemPrice(0);
-      setParsedItemName(value.trim() || "Artículo consultado");
+      setParsedItemName(value.trim() || "Compra");
     }
   };
 
-  const handleSelectExample = (
-    example: (typeof QUICK_PURCHASE_EXAMPLES)[number]
-  ) => {
-    playTap();
-    setQueryText(example.label);
-    setParsedItemName(example.name);
-    setParsedItemPrice(example.price);
+  // Select 1-Tap Visual Chip
+  const handleSelectChip = (chip: (typeof GAME_PURCHASE_CHIPS)[number]) => {
+    setActivePowerUp("idle");
+    setQueryText(chip.label);
+    setParsedItemName(chip.name);
+    setParsedItemPrice(chip.price);
     setScannedThumbnailUrl(null);
     setScannedStoreTag(null);
-    void runEvaluation(example.name, example.price, null);
+    setPendingEvaluation({
+      name: chip.name,
+      price: chip.price,
+      imageName: null,
+    });
+
+    if (chip.price > financialMetrics.safeToSpend) {
+      playDamage();
+    } else {
+      playTap();
+    }
   };
 
+  // Camera / QuickSnap Scanner callback
   const handleScanComplete = (scanned: ScannedProductResult) => {
-    setQueryText(`${scanned.name} de $${scanned.price.toLocaleString()}`);
+    setActivePowerUp("idle");
+    setQueryText(`📸 ${scanned.name} $${scanned.price.toLocaleString()}`);
     setParsedItemName(scanned.name);
     setParsedItemPrice(scanned.price);
     setScannedThumbnailUrl(scanned.thumbnailDataUrl);
@@ -272,21 +264,58 @@ export default function AppDashboardPage() {
       price: scanned.price,
       imageName: scanned.storeTag,
     });
-    if (scanned.apiResponse) {
-      setApiEvaluation(scanned.apiResponse);
+
+    if (scanned.price > financialMetrics.safeToSpend) {
+      playDamage();
+    } else {
+      playCoin();
     }
-    incrementStreak("¡Escaneaste producto con IA! +1 Racha 🔥");
-    setShowEvaluationView(true);
   };
 
-  const handleAnalyzeSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    playTap();
-    if (!queryText.trim() && parsedItemPrice <= 0) return;
-    void runEvaluation(
-      parsedItemName,
-      parsedItemPrice || 1200,
-      scannedStoreTag
+  // POWER-UP 1: Carta Roja "⚡ Comprar ya"
+  const handleRedCardBuyNow = () => {
+    playDamage();
+    setActivePowerUp("bought");
+    registerPurchaseAnyway(parsedItemName, parsedItemPrice);
+    triggerToast(
+      `⚡ Comprado: −$${parsedItemPrice.toLocaleString()} HP (${parsedItemName})`
+    );
+  };
+
+  // POWER-UP 2: Carta Verde "🛡️ Escudo de Nómina (+50 XP)"
+  const handleGreenCardPayrollShield = () => {
+    playCoin();
+    triggerConfettiBurst();
+    setPowerUpXpBonus(50);
+    setActivePowerUp("shield");
+    addToWishlist(
+      {
+        name: parsedItemName,
+        price: parsedItemPrice,
+      },
+      50
+    );
+    triggerToast(
+      `🛡️ ¡Escudo de Nómina activado! +50 XP · Esperando ${profile.nextPaydayDays} días`
+    );
+  };
+
+  // POWER-UP 3: Carta Dorada "🧪 Poción de Ahorro (+100 XP)"
+  const handleGoldCardSavingPotion = () => {
+    playCoin();
+    triggerConfettiBurst();
+    setPowerUpXpBonus(100);
+    setActivePowerUp("potion");
+    addToWishlist(
+      {
+        name: parsedItemName,
+        price: parsedItemPrice,
+        plannedWeeklySave: financialMetrics.suggestedPotionSave,
+      },
+      100
+    );
+    triggerToast(
+      `🧪 ¡Poción de Ahorro! Apartas $${financialMetrics.suggestedPotionSave}/sem y ganas +100 XP`
     );
   };
 
@@ -301,14 +330,12 @@ export default function AppDashboardPage() {
     const amount = Math.round(parseFloat(match[1]));
     if (amount <= 0) return;
 
-    playCoin();
+    playDamage();
     updateProfile({
       currentBalance: Math.max(0, profile.currentBalance - amount),
     });
 
-    triggerToast(
-      `−$${amount.toLocaleString()} MXN (${quickExpenseInput.trim()})`
-    );
+    triggerToast(`−$${amount.toLocaleString()} HP (${quickExpenseInput.trim()})`);
     setQuickExpenseInput("");
     setIsQuickExpenseOpen(false);
   };
@@ -335,6 +362,14 @@ export default function AppDashboardPage() {
     }
   };
 
+  // Determine Real-Time Plant Simulation State
+  const plantSimulationState: PlantSimulationState =
+    activePowerUp === "shield" || activePowerUp === "potion"
+      ? "recovered"
+      : financialMetrics.isCriticalHit
+      ? "danger"
+      : "normal";
+
   return (
     <AppShell
       activeTab={activeBottomTab}
@@ -360,181 +395,108 @@ export default function AppDashboardPage() {
         )}
       </AnimatePresence>
 
-      {/* ADHD-Friendly Gamified Grid (Zero Visual Clutter) */}
-      <div className="space-y-5">
-        {/* Top Row on Desktop: Plant Widget + Hero Liquidity + Quincena Energy */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-          {/* 1. Protagonist Gamified Financial Plant Widget */}
-          <motion.section
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35 }}
-            className="lg:col-span-7 flex flex-col"
-          >
-            <FinancialPlantWidget
-              simulationState={
-                financialMetrics.safeToSpend < parsedItemPrice &&
-                parsedItemPrice > 0
-                  ? "danger"
-                  : "normal"
-              }
-            />
-          </motion.section>
+      {/* ONLY 2 PROTAGONISTS ON SCREEN:
+          1. Arriba/Derecha: Tu Isla Flotante con Planta SVG, Nivel, Racha 🔥 y Barra de Vida Verde (HP)
+          2. Centro/Izquierda: Caja de Juego "¿Qué quieres comprar?" + Simulación en Vivo + 3 Cartas de Poder */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        {/* PROTAGONIST 1 (Top on Mobile, Right Floating Island on Desktop): Isla Flotante + Barra de Vida HP */}
+        <motion.section
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
+          className="lg:col-span-5 lg:order-2 lg:sticky lg:top-6"
+        >
+          <FinancialPlantWidget
+            simulationState={plantSimulationState}
+            previewDamagePrice={parsedItemPrice}
+            recoveredXpBonus={powerUpXpBonus}
+          />
+        </motion.section>
 
-          {/* Right Column: Hero Liquidity + Energy Gauge */}
-          <div className="lg:col-span-5 flex flex-col justify-between gap-4">
-            {/* 2. Hero Liquidity Card (Single Protagonist Number) */}
-            <motion.section
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.04 }}
-            >
-              <Card className="bg-gradient-to-br from-white via-white to-emerald-50/50 border-[#E2DCD3] shadow-xs rounded-3xl py-5 px-1">
-                <CardContent className="px-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-500">
-                      Disponible libre hoy:
-                    </span>
-                    <Badge
-                      variant="outline"
-                      className="border-emerald-300 bg-emerald-50 text-emerald-900 text-[11px] font-bold font-heading"
-                    >
-                      Nómina en {profile.nextPaydayDays}d
-                    </Badge>
-                  </div>
-
-                  <div className="flex items-baseline justify-between gap-2">
-                    <div className="flex items-baseline gap-1.5">
-                      <motion.span
-                        key={financialMetrics.safeToSpend}
-                        initial={{ scale: 0.94 }}
-                        animate={{ scale: 1 }}
-                        className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 font-heading"
-                      >
-                        ${financialMetrics.safeToSpend.toLocaleString()}
-                      </motion.span>
-                      <span className="text-xs font-bold text-slate-400 font-heading">
-                        MXN
-                      </span>
-                    </div>
-
-                    <motion.button
-                      type="button"
-                      whileTap={{ scale: 0.96 }}
-                      onClick={() => {
-                        playTap();
-                        setShowWhyBreakdown((prev) => !prev);
-                      }}
-                      className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 bg-[#FAF8F5] hover:bg-[#F3EFEA] border border-[#E6E1DA] px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
-                    >
-                      <span>¿Por qué?</span>
-                      <ChevronDown
-                        className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                          showWhyBreakdown ? "rotate-180" : ""
-                        }`}
-                        strokeWidth={1.5}
-                      />
-                    </motion.button>
-                  </div>
-
-                  <AnimatePresence initial={false}>
-                    {showWhyBreakdown && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.25 }}
-                        className="overflow-hidden"
-                      >
-                        <div className="pt-3 mt-1 border-t border-[#EFECE6] grid grid-cols-2 gap-2">
-                          <div className="p-2.5 rounded-2xl bg-[#FAF8F5] border border-[#E6E1DA]">
-                            <span className="text-[10px] text-slate-500 block">
-                              Saldo cuenta
-                            </span>
-                            <span className="text-xs font-bold text-slate-900 font-heading">
-                              ${profile.currentBalance.toLocaleString()}
-                            </span>
-                          </div>
-                          <div className="p-2.5 rounded-2xl bg-rose-50/60 border border-rose-200/70">
-                            <span className="text-[10px] text-rose-700 block">
-                              Pagos fijos ({profile.commitments.length})
-                            </span>
-                            <span className="text-xs font-bold text-rose-800 font-heading">
-                              −${financialMetrics.commitmentsTotal.toLocaleString()}
-                            </span>
-                          </div>
-                          <div className="p-2.5 rounded-2xl bg-amber-50/60 border border-amber-200/70">
-                            <span className="text-[10px] text-amber-800 block">
-                              Vital ({profile.nextPaydayDays}d)
-                            </span>
-                            <span className="text-xs font-bold text-amber-900 font-heading">
-                              −${financialMetrics.essentialLivingCost.toLocaleString()}
-                            </span>
-                          </div>
-                          <div className="p-2.5 rounded-2xl bg-emerald-50/60 border border-emerald-200/70">
-                            <span className="text-[10px] text-emerald-800 block">
-                              Colchón paz
-                            </span>
-                            <span className="text-xs font-bold text-emerald-900 font-heading">
-                              −${profile.safetyBuffer.toLocaleString()}
-                            </span>
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </CardContent>
-              </Card>
-            </motion.section>
-
-            {/* 3. Real-Time Spring Speedometer / Thermometer of Quincena Energy */}
-            <motion.section
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.08 }}
-            >
-              <QuincenaEnergyGauge
-                safeToSpend={financialMetrics.safeToSpend}
-                previewPrice={parsedItemPrice}
-                nextPaydayDays={profile.nextPaydayDays}
-              />
-            </motion.section>
-          </div>
-        </div>
-
-        {/* 4. El Copiloto Pre-Compra (Scanner + Quick Chips) */}
+        {/* PROTAGONIST 2 (Center / Main Arena): Caja de Juego "¿Qué quieres comprar?" + 3 Cartas de Poder */}
         <motion.section
           ref={simulatorSectionRef}
-          initial={{ opacity: 0, y: 14 }}
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.12 }}
-          className="space-y-3"
+          transition={{ duration: 0.38, delay: 0.05 }}
+          className="lg:col-span-7 lg:order-1 space-y-4"
         >
-          <Card className="bg-white border-[#E2DCD3] shadow-xs rounded-3xl py-5 px-1">
-            <CardContent className="px-4 sm:px-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
+          {/* Vibrant Game Box: "¿Qué quieres comprar?" */}
+          <Card className="bg-white border-2 border-b-4 border-[#DCD5CA] rounded-3xl py-4 px-1 shadow-xs">
+            <CardContent className="px-4 sm:px-5 space-y-3.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-2xs">
                     <Sparkles className="w-4 h-4" strokeWidth={1.5} />
                   </div>
-                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 font-heading">
-                    ¿Qué quieres comprar hoy?
-                  </h2>
+                  <h1 className="text-xl sm:text-2xl font-bold font-heading tracking-tight text-slate-900">
+                    ¿Qué quieres comprar?
+                  </h1>
                 </div>
-                <span className="text-[11px] font-bold font-heading text-orange-800 bg-orange-100/90 border border-orange-200 px-2.5 py-0.5 rounded-full">
-                  +1 🔥 Racha
-                </span>
+
+                {parsedItemPrice > 0 && (
+                  <span
+                    className={`text-xs font-bold font-heading px-3 py-1 rounded-full border-2 ${
+                      financialMetrics.isCriticalHit
+                        ? "bg-rose-100 text-rose-900 border-rose-300 animate-pulse"
+                        : "bg-emerald-100 text-emerald-900 border-emerald-300"
+                    }`}
+                  >
+                    −{parsedItemPrice.toLocaleString()} HP
+                  </span>
+                )}
               </div>
 
-              {/* QuickSnapScanner: 📸 Escanear producto o captura de tienda */}
+              {/* Instant Live Input Box */}
+              <div className="relative">
+                <input
+                  type="text"
+                  value={queryText}
+                  onChange={(e) => handleQueryInputChange(e.target.value)}
+                  placeholder="Escribe ej. Audífonos 2300 o toca un chip 👇"
+                  className="w-full h-13 px-4 rounded-2xl border-2 border-[#DCD5CA] bg-[#FAF8F5] text-base sm:text-lg font-bold font-heading text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-emerald-600 focus:outline-none transition-all"
+                />
+              </div>
+
+              {/* 4 Visual Emoji Chips (🎧 Audífonos $2,300, 🎮 Juego $1,200, 👟 Tenis $1,800, 🍔 UberEats $350) */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                {GAME_PURCHASE_CHIPS.map((chip) => {
+                  const isSelected = parsedItemPrice === chip.price;
+                  return (
+                    <motion.button
+                      key={chip.id}
+                      type="button"
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => handleSelectChip(chip)}
+                      className={`p-3 rounded-2xl border-2 border-b-4 active:border-b-2 active:translate-y-0.5 transition-all flex flex-col items-start gap-1 cursor-pointer bg-gradient-to-b ${
+                        chip.style
+                      } ${
+                        isSelected
+                          ? "ring-2 ring-slate-900 shadow-xs"
+                          : "hover:opacity-95"
+                      }`}
+                    >
+                      <span className="text-2xl leading-none">{chip.emoji}</span>
+                      <span className="text-xs font-bold font-heading text-slate-900 truncate w-full text-left">
+                        {chip.name}
+                      </span>
+                      <span className="text-xs font-bold font-heading text-emerald-800">
+                        ${chip.price.toLocaleString()}
+                      </span>
+                    </motion.button>
+                  );
+                })}
+              </div>
+
+              {/* Camera Button / QuickSnapScanner */}
               <QuickSnapScanner onScanComplete={handleScanComplete} />
 
-              {/* Scanned Thumbnail Pill if available */}
+              {/* Scanned Capture Thumbnail Preview */}
               {scannedThumbnailUrl && (
                 <motion.div
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-2.5 flex items-center justify-between gap-3"
+                  initial={{ opacity: 0, scale: 0.96 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="rounded-2xl border-2 border-emerald-300 bg-emerald-50/70 p-2.5 flex items-center justify-between gap-3"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     <img
@@ -543,14 +505,12 @@ export default function AppDashboardPage() {
                       className="w-11 h-11 rounded-xl object-cover border border-white shadow-2xs shrink-0"
                     />
                     <div className="min-w-0">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 block">
-                        ✓ Captura lista · {scannedStoreTag}
+                      <span className="text-[10px] font-bold uppercase text-emerald-800 block">
+                        📸 {scannedStoreTag}
                       </span>
-                      <p className="text-xs font-bold text-slate-900 truncate font-heading">
-                        {parsedItemName} ·{" "}
-                        <span className="text-emerald-800">
-                          ${parsedItemPrice.toLocaleString()} MXN
-                        </span>
+                      <p className="text-xs font-bold font-heading text-slate-900 truncate">
+                        {parsedItemName} · −${parsedItemPrice.toLocaleString()}{" "}
+                        HP
                       </p>
                     </div>
                   </div>
@@ -563,104 +523,179 @@ export default function AppDashboardPage() {
                     }}
                     className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 cursor-pointer"
                   >
-                    <X className="w-3.5 h-3.5" strokeWidth={1.5} />
+                    <X className="w-4 h-4" strokeWidth={1.5} />
                   </button>
                 </motion.div>
               )}
-
-              <form
-                onSubmit={handleAnalyzeSubmit}
-                className="flex flex-col sm:flex-row gap-2.5"
-              >
-                <input
-                  type="text"
-                  value={queryText}
-                  onChange={(e) => handleQueryInputChange(e.target.value)}
-                  placeholder='Ej. "Tenis 1800" o "Cena 450"'
-                  className="flex-1 h-12 px-4 rounded-2xl border border-[#DCD5CA] bg-[#FAF8F5] text-sm sm:text-base font-semibold text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-emerald-600 focus:outline-none transition-all"
-                />
-
-                <motion.button
-                  type="submit"
-                  whileTap={{ scale: 0.96 }}
-                  disabled={isEvaluatingApi}
-                  className="h-12 px-6 rounded-2xl bg-slate-900 hover:bg-slate-800 text-[#FAF8F5] font-bold font-heading text-sm border-2 border-slate-950 border-b-4 border-b-black active:border-b-2 active:translate-y-0.5 flex items-center justify-center gap-2 shadow-sm cursor-pointer shrink-0"
-                >
-                  {isEvaluatingApi ? (
-                    <>
-                      <Loader2
-                        className="w-4 h-4 animate-spin"
-                        strokeWidth={1.5}
-                      />
-                      <span>Evaluando...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>Simular impacto</span>
-                      <ArrowRight className="w-4 h-4" strokeWidth={1.5} />
-                    </>
-                  )}
-                </motion.button>
-              </form>
-
-              {/* Interactive Gradient Quick Purchase Chips */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
-                {QUICK_PURCHASE_EXAMPLES.map((example) => {
-                  const Icon = example.icon;
-                  const isSelected = parsedItemPrice === example.price;
-                  return (
-                    <motion.button
-                      key={example.label}
-                      type="button"
-                      whileTap={{ scale: 0.96 }}
-                      onClick={() => handleSelectExample(example)}
-                      className={`p-3 rounded-2xl text-left transition-all flex items-center gap-2.5 cursor-pointer bg-gradient-to-br ${
-                        example.gradient
-                      } ${
-                        isSelected
-                          ? "ring-2 ring-slate-900 shadow-xs"
-                          : "hover:opacity-95"
-                      }`}
-                    >
-                      <div className="w-8 h-8 rounded-xl bg-white/90 border border-white text-slate-800 flex items-center justify-center shrink-0 shadow-2xs">
-                        <Icon className="w-4 h-4" strokeWidth={1.5} />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold font-heading text-slate-900 truncate">
-                          {example.name.split(" ")[0]}
-                        </p>
-                        <p className="text-[11px] font-bold font-heading text-slate-600">
-                          ${example.price.toLocaleString()}
-                        </p>
-                      </div>
-                    </motion.button>
-                  );
-                })}
-              </div>
             </CardContent>
           </Card>
 
-          {/* Saved Wishlist Pill */}
+          {/* REAL-TIME VISUAL DAMAGE BANNER & 3 POWER-UP CARDS (1-Tap Resolution) */}
+          <AnimatePresence mode="wait">
+            {parsedItemPrice > 0 && (
+              <motion.div
+                key={`powerups-${parsedItemPrice}`}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                className="space-y-3"
+              >
+                {/* Critical Hit Alert or Safe Hit Banner */}
+                <div
+                  className={`rounded-2xl border-2 border-b-4 px-4 py-3 flex items-center justify-between gap-3 ${
+                    activePowerUp === "shield" || activePowerUp === "potion"
+                      ? "bg-emerald-600 border-emerald-700 border-b-emerald-900 text-white"
+                      : financialMetrics.isCriticalHit
+                      ? "bg-rose-600 border-rose-700 border-b-rose-900 text-white"
+                      : "bg-amber-100 border-amber-300 border-b-amber-500 text-amber-950"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    {activePowerUp === "shield" ||
+                    activePowerUp === "potion" ? (
+                      <Sparkles
+                        className="w-5 h-5 text-amber-300 shrink-0"
+                        strokeWidth={1.5}
+                      />
+                    ) : (
+                      <AlertTriangle
+                        className="w-5 h-5 shrink-0"
+                        strokeWidth={1.5}
+                      />
+                    )}
+                    <span className="text-sm sm:text-base font-bold font-heading leading-tight">
+                      {activePowerUp === "shield"
+                        ? `¡Escudo activado! Protegiste tu quincena y ganaste +50 XP`
+                        : activePowerUp === "potion"
+                        ? `¡Poción activa! Apartas $${financialMetrics.suggestedPotionSave}/sem y ganaste +100 XP`
+                        : financialMetrics.isCriticalHit
+                        ? `¡Golpe crítico a tu quincena! Te faltan $${financialMetrics.missingAmount.toLocaleString()}`
+                        : `Impacto directo: −$${parsedItemPrice.toLocaleString()} HP a tu quincena`}
+                    </span>
+                  </div>
+                  <span className="text-xs font-bold font-heading px-2.5 py-1 rounded-xl bg-black/15 shrink-0">
+                    Elige 1 Carta 👇
+                  </span>
+                </div>
+
+                {/* 3 CARTAS DE PODER (POWER-UPS) ESTILO VIDEOJUEGO */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* CARTA ROJA: ⚡ Comprar ya */}
+                  <motion.button
+                    type="button"
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleRedCardBuyNow}
+                    className={`p-4 rounded-3xl border-2 border-b-4 active:border-b-2 active:translate-y-0.5 text-left transition-all flex flex-col justify-between gap-3 cursor-pointer bg-gradient-to-b from-rose-50 via-white to-rose-100/80 border-rose-400 border-b-rose-600 shadow-xs hover:shadow-md ${
+                      activePowerUp === "bought" ? "ring-2 ring-rose-600" : ""
+                    }`}
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <span className="px-2.5 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-bold font-heading uppercase">
+                        Carta Roja · −HP
+                      </span>
+                      <Zap
+                        className="w-4 h-4 text-rose-600"
+                        strokeWidth={1.5}
+                      />
+                    </div>
+                    <div>
+                      <p className="text-base font-bold font-heading text-rose-950 leading-snug">
+                        ⚡ Comprar ya
+                      </p>
+                      <p className="text-xs font-bold font-heading text-rose-700 mt-1 leading-snug">
+                        (Pierdes escudo y retrasas tu meta{" "}
+                        {financialMetrics.weeksGoalDelayed} sem)
+                      </p>
+                    </div>
+                  </motion.button>
+
+                  {/* CARTA VERDE: 🛡️ Escudo de Nómina */}
+                  <motion.button
+                    type="button"
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleGreenCardPayrollShield}
+                    className={`p-4 rounded-3xl border-2 border-b-4 active:border-b-2 active:translate-y-0.5 text-left transition-all flex flex-col justify-between gap-3 cursor-pointer bg-gradient-to-b from-emerald-50 via-white to-emerald-100/80 border-emerald-400 border-b-emerald-600 shadow-xs hover:shadow-md ${
+                      activePowerUp === "shield"
+                        ? "ring-2 ring-emerald-700 scale-[1.02]"
+                        : ""
+                    }`}
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold font-heading uppercase">
+                        Carta Verde · +50 XP
+                      </span>
+                      <Shield
+                        className="w-4 h-4 text-emerald-600"
+                        strokeWidth={1.5}
+                      />
+                    </div>
+                    <div>
+                      <p className="text-base font-bold font-heading text-emerald-950 leading-snug">
+                        🛡️ Escudo de Nómina
+                      </p>
+                      <p className="text-xs font-bold font-heading text-emerald-800 mt-1 leading-snug">
+                        (Espera {profile.nextPaydayDays} días y gana +50 XP)
+                      </p>
+                    </div>
+                  </motion.button>
+
+                  {/* CARTA DORADA: 🧪 Poción de Ahorro */}
+                  <motion.button
+                    type="button"
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleGoldCardSavingPotion}
+                    className={`p-4 rounded-3xl border-2 border-b-4 active:border-b-2 active:translate-y-0.5 text-left transition-all flex flex-col justify-between gap-3 cursor-pointer bg-gradient-to-b from-amber-50 via-white to-yellow-100/90 border-amber-400 border-b-amber-600 shadow-xs hover:shadow-md ${
+                      activePowerUp === "potion"
+                        ? "ring-2 ring-amber-600 scale-[1.02]"
+                        : ""
+                    }`}
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <span className="px-2.5 py-0.5 rounded-full bg-amber-500 text-slate-950 text-[10px] font-bold font-heading uppercase">
+                        Carta Dorada · +100 XP
+                      </span>
+                      <FlaskConical
+                        className="w-4 h-4 text-amber-600"
+                        strokeWidth={1.5}
+                      />
+                    </div>
+                    <div>
+                      <p className="text-base font-bold font-heading text-amber-950 leading-snug">
+                        🧪 Poción de Ahorro
+                      </p>
+                      <p className="text-xs font-bold font-heading text-amber-900 mt-1 leading-snug">
+                        (Aparta ${financialMetrics.suggestedPotionSave}/sem y
+                        gana +100 XP)
+                      </p>
+                    </div>
+                  </motion.button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Active Power-Up / Wishlist Pill */}
           {profile.wishlist && profile.wishlist.length > 0 && (
             <motion.div
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              className="rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50/80 to-white px-4 py-3 flex items-center justify-between gap-2"
+              className="rounded-2xl border-2 border-emerald-200 bg-white px-4 py-2.5 flex items-center justify-between gap-2"
             >
-              <div className="flex items-center gap-2 text-xs font-semibold text-emerald-950 truncate">
+              <div className="flex items-center gap-2 text-xs font-bold font-heading text-emerald-950 truncate">
                 <BookmarkCheck
-                  className="w-4 h-4 text-emerald-700 shrink-0"
+                  className="w-4 h-4 text-emerald-600 shrink-0"
                   strokeWidth={1.5}
                 />
                 <span className="truncate">
-                  En deseos:{" "}
+                  Escudos activos:{" "}
                   {profile.wishlist
+                    .slice(0, 2)
                     .map((w) => `${w.name} ($${w.price.toLocaleString()})`)
                     .join(" · ")}
                 </span>
               </div>
-              <span className="text-[10px] font-bold font-heading text-emerald-800 bg-white px-2.5 py-0.5 rounded-full border border-emerald-200 shrink-0">
-                +50 XP
+              <span className="text-[10px] font-bold font-heading text-amber-950 bg-amber-200 px-2.5 py-0.5 rounded-full shrink-0">
+                +XP Activo
               </span>
             </motion.div>
           )}
@@ -679,7 +714,7 @@ export default function AppDashboardPage() {
                 playTap();
                 setIsQuickExpenseOpen(true);
               }}
-              className="h-10 px-4 rounded-full bg-slate-900 text-[#FAF8F5] shadow-md text-xs font-bold font-heading flex items-center gap-2 cursor-pointer border border-slate-700"
+              className="h-10 px-4 rounded-full bg-slate-900 text-[#FAF8F5] shadow-md text-xs font-bold font-heading flex items-center gap-2 cursor-pointer border-2 border-slate-700"
             >
               <Zap className="w-3.5 h-3.5 text-amber-400" strokeWidth={1.5} />
               <span>Gasto rápido (“Gasté 150”)</span>
@@ -699,7 +734,7 @@ export default function AppDashboardPage() {
                 value={quickExpenseInput}
                 onChange={(e) => setQuickExpenseInput(e.target.value)}
                 placeholder='Ej. "Gasté 150 en comida"'
-                className="flex-1 h-9 px-3 text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-400 bg-transparent focus:outline-none"
+                className="flex-1 h-9 px-3 text-xs sm:text-sm font-bold font-heading text-slate-900 placeholder:text-slate-400 bg-transparent focus:outline-none"
               />
               <motion.button
                 type="submit"
@@ -707,7 +742,7 @@ export default function AppDashboardPage() {
                 className="h-9 px-3.5 rounded-xl bg-slate-900 text-white text-xs font-bold font-heading flex items-center gap-1 cursor-pointer"
               >
                 <Send className="w-3.5 h-3.5" strokeWidth={1.5} />
-                <span>Restar</span>
+                <span>−HP</span>
               </motion.button>
               <button
                 type="button"
@@ -742,7 +777,7 @@ export default function AppDashboardPage() {
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 30, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-md rounded-3xl bg-[#FAF8F5] border border-[#E6E1DA] shadow-xl p-5 space-y-4"
+              className="w-full max-w-md rounded-3xl bg-[#FAF8F5] border-2 border-[#E6E1DA] shadow-xl p-5 space-y-4"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -764,17 +799,16 @@ export default function AppDashboardPage() {
                 </button>
               </div>
 
-              {/* Active Streak Card */}
               <div
                 onClick={() => playLevelUp()}
-                className="p-4 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 text-white flex items-center justify-between cursor-pointer"
+                className="p-4 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 text-white flex items-center justify-between cursor-pointer border-2 border-b-4 border-orange-700"
               >
                 <div className="space-y-0.5">
                   <span className="text-[11px] uppercase tracking-wider opacity-90 font-bold">
                     Racha de Buenas Decisiones
                   </span>
                   <p className="text-2xl font-bold font-heading">
-                    {profile.streakCount ?? 3} seguidas 🔥
+                    {profile.streakCount ?? 3} días 🔥
                   </p>
                   <p className="text-xs opacity-90">
                     Toca para celebrar con confeti 🎉
@@ -786,8 +820,7 @@ export default function AppDashboardPage() {
                 />
               </div>
 
-              {/* Active Savings Goal Progress */}
-              <div className="p-4 rounded-2xl bg-white border border-[#E6E1DA] space-y-2.5">
+              <div className="p-4 rounded-2xl bg-white border-2 border-[#E6E1DA] space-y-2.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Target
@@ -811,7 +844,7 @@ export default function AppDashboardPage() {
                   />
                 </div>
 
-                <div className="flex justify-between text-[11px] text-slate-500 font-semibold">
+                <div className="flex justify-between text-[11px] text-slate-500 font-bold font-heading">
                   <span>
                     Ahorrado: ${profile.goal.currentSaved.toLocaleString()}
                   </span>
@@ -843,7 +876,7 @@ export default function AppDashboardPage() {
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 30, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-md rounded-3xl bg-[#FAF8F5] border border-[#E6E1DA] shadow-xl p-5 space-y-4"
+              className="w-full max-w-md rounded-3xl bg-[#FAF8F5] border-2 border-[#E6E1DA] shadow-xl p-5 space-y-4"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -884,9 +917,9 @@ export default function AppDashboardPage() {
                         setActiveBottomTab("home");
                         triggerToast(`Perfil activo: ${item.name}`);
                       }}
-                      className={`w-full text-left p-3.5 rounded-2xl border transition-all flex items-center justify-between cursor-pointer ${
+                      className={`w-full text-left p-3.5 rounded-2xl border-2 border-b-4 transition-all flex items-center justify-between cursor-pointer ${
                         isCurrent
-                          ? "bg-slate-900 text-white border-slate-900"
+                          ? "bg-slate-900 text-white border-slate-950"
                           : "bg-white text-slate-900 border-[#E6E1DA]"
                       }`}
                     >
@@ -900,7 +933,7 @@ export default function AppDashboardPage() {
                           }`}
                         >
                           Saldo ${item.currentBalance.toLocaleString()} ·{" "}
-                          {item.commitments.length} compromisos fijos
+                          {item.commitments.length} compromisos
                         </p>
                       </div>
                       {isCurrent && (
@@ -921,46 +954,11 @@ export default function AppDashboardPage() {
                   playTap();
                   router.push("/onboarding");
                 }}
-                className="w-full h-11 rounded-2xl border border-[#DCD5CA] bg-white text-xs font-bold font-heading text-slate-800 flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full h-11 rounded-2xl border-2 border-b-4 border-[#DCD5CA] bg-white text-xs font-bold font-heading text-slate-800 flex items-center justify-center gap-2 cursor-pointer"
               >
                 <SlidersHorizontal className="w-4 h-4" strokeWidth={1.5} />
                 <span>Personalizar desde cero (Onboarding)</span>
               </motion.button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Fullscreen Animated Panel inside /app for Interactive Purchase Evaluation */}
-      <AnimatePresence>
-        {showEvaluationView && (
-          <motion.div
-            key="evaluation-fullscreen-modal"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.22 }}
-            className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs overflow-y-auto flex items-start sm:items-center justify-center p-2.5 sm:p-6 pb-20"
-            onClick={() => setShowEvaluationView(false)}
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 24, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 16, scale: 0.98 }}
-              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-xl my-auto"
-            >
-              <PurchaseEvaluationFlow
-                itemName={parsedItemName}
-                itemPrice={parsedItemPrice}
-                thumbnailDataUrl={scannedThumbnailUrl}
-                storeTag={scannedStoreTag}
-                apiEvaluation={apiEvaluation}
-                isLoadingApi={isEvaluatingApi}
-                onClose={() => setShowEvaluationView(false)}
-                onActionCompleted={(msg) => triggerToast(msg)}
-              />
             </motion.div>
           </motion.div>
         )}
