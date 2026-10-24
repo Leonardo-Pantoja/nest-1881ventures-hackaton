@@ -25,6 +25,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import PurchaseEvaluationFlow from "@/components/PurchaseEvaluationFlow";
 import QuickGuideModal from "@/components/QuickGuideModal";
+import FinancialPlantWidget from "@/components/FinancialPlantWidget";
 import {
   useFinancial,
   PRELOADED_SANDBOX_PROFILES,
@@ -354,6 +355,21 @@ export default function AppDashboardPage() {
 
       {/* Main Content with Progressive Disclosure */}
       <main className="flex-1 max-w-3xl w-full mx-auto px-4 sm:px-6 pt-8 sm:pt-12 space-y-8">
+        {/* Protagonist Gamified Financial Plant Widget */}
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45 }}
+        >
+          <FinancialPlantWidget
+            simulationState={
+              financialMetrics.safeToSpend < parsedItemPrice && showEvaluationView
+                ? "danger"
+                : "normal"
+            }
+          />
+        </motion.section>
+
         {/* 1. Tarjeta Hero de Liquidez (Single Protagonist Number + Progressive Breakdown) */}
         <motion.section
           initial={{ opacity: 0, y: 14 }}

@@ -55,6 +55,7 @@ export interface FinancialProfile {
   commitments: Commitment[];
   goal: FinancialGoal;
   wishlist?: WishlistItem[];
+  wisdomXp?: number;
   isOnboarded: boolean;
   plaidConnected?: boolean;
   institutionName?: string;
@@ -85,6 +86,7 @@ export const PRELOADED_SANDBOX_PROFILES: Record<string, FinancialProfile> = {
       deadlineLabel: "Diciembre",
     },
     wishlist: [],
+    wisdomXp: 120,
     isOnboarded: true,
     plaidConnected: true,
     institutionName: "BBVA Sandbox (Plaid)",
@@ -112,6 +114,7 @@ export const PRELOADED_SANDBOX_PROFILES: Record<string, FinancialProfile> = {
       deadlineLabel: "Diciembre",
     },
     wishlist: [],
+    wisdomXp: 240,
     isOnboarded: true,
     plaidConnected: true,
     institutionName: "Nu México Sandbox (Plaid)",
@@ -224,6 +227,7 @@ interface FinancialContextType {
   setPendingEvaluation: (item: PendingPurchaseEvaluation) => void;
   addToWishlist: (item: Omit<WishlistItem, "id" | "savedAt">) => void;
   registerPurchaseAnyway: (name: string, price: number) => void;
+  awardWisdomXp: (amount?: number) => void;
 }
 
 const STORAGE_KEY = "antesdegastar_financial_profile_v1";
@@ -365,7 +369,23 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
       };
       const updated = {
         ...prev,
+        wisdomXp: (prev.wisdomXp || 100) + 50,
         wishlist: [newItem, ...existing.filter((w) => w.name !== item.name)],
+      };
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      } catch {
+        // Ignore
+      }
+      return updated;
+    });
+  };
+
+  const awardWisdomXp = (amount = 50) => {
+    setProfile((prev) => {
+      const updated = {
+        ...prev,
+        wisdomXp: (prev.wisdomXp || 100) + amount,
       };
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
@@ -405,6 +425,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         setPendingEvaluation,
         addToWishlist,
         registerPurchaseAnyway,
+        awardWisdomXp,
       }}
     >
       {children}

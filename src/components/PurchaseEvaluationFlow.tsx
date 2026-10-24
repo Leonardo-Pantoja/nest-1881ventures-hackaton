@@ -21,6 +21,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import FinancialPlantWidget, {
+  type PlantSimulationState,
+} from "@/components/FinancialPlantWidget";
 import { useFinancial } from "@/context/FinancialContext";
 import type { EvaluateApiResponse } from "@/app/api/evaluate/route";
 
@@ -195,6 +198,14 @@ export default function PurchaseEvaluationFlow({
     }
   };
 
+  // Real-time plant state linked to active tab and deficit status
+  const plantSimulationState: PlantSimulationState =
+    activeTab === "wait" || activeTab === "microsave"
+      ? "recovered"
+      : metrics.verdict === "COMPROMETE"
+      ? "danger"
+      : "normal";
+
   return (
     <div className="w-full max-w-2xl mx-auto">
       <Card className="bg-[#FAF8F5] border-[#DCD5CA] shadow-xl rounded-3xl overflow-hidden py-0 gap-0">
@@ -301,6 +312,13 @@ export default function PurchaseEvaluationFlow({
               </p>
             </div>
           </div>
+
+          {/* Gamified Financial Plant Widget connected in real-time to simulator tabs */}
+          <FinancialPlantWidget
+            simulationState={plantSimulationState}
+            compact
+            allowLevelPreview={false}
+          />
 
           {/* 2. Comparador Interactivo de 3 Caminos (Tabs animados con framer-motion) */}
           <div className="space-y-4">
