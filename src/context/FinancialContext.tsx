@@ -2,6 +2,14 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 
+export type LifeContextTag =
+  | "estudio"
+  | "trabajo"
+  | "independiente"
+  | "dependientes";
+
+export type PayFrequency = "semanal" | "quincenal" | "mensual";
+
 export interface Commitment {
   id: string;
   title: string;
@@ -23,6 +31,8 @@ export interface FinancialProfile {
   name: string;
   email?: string;
   roleTag: string;
+  lifeContext: LifeContextTag[];
+  payFrequency: PayFrequency;
   currentBalance: number;
   nextPaydayDays: number;
   nextPaydayAmount: number;
@@ -40,7 +50,9 @@ export const PRELOADED_SANDBOX_PROFILES: Record<string, FinancialProfile> = {
     id: "carlos",
     name: "Carlos Mendoza",
     email: "carlos.demo@plaid-sandbox.dev",
-    roleTag: "Plaid Sandbox · Nómina Quincenal · 2 compromisos próximos",
+    roleTag: "Trabajo · Vivo por mi cuenta · Mantengo a otras personas",
+    lifeContext: ["trabajo", "independiente", "dependientes"],
+    payFrequency: "quincenal",
     currentBalance: 5000,
     nextPaydayDays: 6,
     nextPaydayAmount: 9500,
@@ -51,7 +63,7 @@ export const PRELOADED_SANDBOX_PROFILES: Record<string, FinancialProfile> = {
       { id: "c2", title: "Tarjeta de Crédito", amount: 500, dueInDays: 4, category: "Deuda" },
     ],
     goal: {
-      title: "Fondo de Emergencia",
+      title: "Fondo de emergencia",
       targetAmount: 20000,
       currentSaved: 8000,
       weeklyContribution: 600,
@@ -65,7 +77,9 @@ export const PRELOADED_SANDBOX_PROFILES: Record<string, FinancialProfile> = {
     id: "mateo",
     name: "Mateo Rivera",
     email: "mateo.demo@plaid-sandbox.dev",
-    roleTag: "Plaid Sandbox · Becario · Sin dependientes",
+    roleTag: "Estudio · Trabajo · Sin dependientes",
+    lifeContext: ["estudio", "trabajo"],
+    payFrequency: "quincenal",
     currentBalance: 5000,
     nextPaydayDays: 6,
     nextPaydayAmount: 3500,
@@ -75,7 +89,7 @@ export const PRELOADED_SANDBOX_PROFILES: Record<string, FinancialProfile> = {
       { id: "c3", title: "Plan Celular", amount: 399, dueInDays: 3, category: "Servicios" },
     ],
     goal: {
-      title: "Laptop de Trabajo",
+      title: "Laptop",
       targetAmount: 15000,
       currentSaved: 10500,
       weeklyContribution: 500,
@@ -89,9 +103,11 @@ export const PRELOADED_SANDBOX_PROFILES: Record<string, FinancialProfile> = {
 
 export const EMPTY_NEW_USER_PROFILE: FinancialProfile = {
   id: "new-user",
-  name: "Nuevo Usuario",
+  name: "Tu Perfil",
   email: "",
-  roleTag: "Configuración en progreso",
+  roleTag: "Configuración personalizada",
+  lifeContext: [],
+  payFrequency: "quincenal",
   currentBalance: 0,
   nextPaydayDays: 7,
   nextPaydayAmount: 0,
@@ -99,15 +115,77 @@ export const EMPTY_NEW_USER_PROFILE: FinancialProfile = {
   dailyEssentialBurn: 150,
   commitments: [],
   goal: {
-    title: "Mi primera meta",
-    targetAmount: 10000,
+    title: "Fondo de emergencia",
+    targetAmount: 15000,
     currentSaved: 0,
-    weeklyContribution: 400,
+    weeklyContribution: 500,
     deadlineLabel: "Próximos meses",
   },
   isOnboarded: false,
   plaidConnected: false,
 };
+
+const LIFE_CONTEXT_LABELS: Record<LifeContextTag, string> = {
+  estudio: "Estudio",
+  trabajo: "Trabajo",
+  independiente: "Vivo por mi cuenta",
+  dependientes: "Mantengo a otras personas",
+};
+
+export function buildRoleTagFromContext(tags: LifeContextTag[]): string {
+  if (!tags || tags.length === 0) return "Perfil Personalizado";
+  return tags.map((t) => LIFE_CONTEXT_LABELS[t]).join(" · ");
+}
+
+export function getRealisticEstimateForContext(tags: LifeContextTag[]) {
+  const hasDependents = tags.includes("dependientes");
+  const livesAlone = tags.includes("independiente");
+  const works = tags.includes("trabajo");
+  const studiesOnly = tags.includes("estudio") && !works;
+
+  if (hasDependents) {
+    return {
+      currentBalance: 6400,
+      nextPaydayAmount: 9800,
+      nextPaydayDays: 6,
+      payFrequency: "quincenal" as PayFrequency,
+      dailyEssentialBurn: 260,
+      safetyBuffer: 900,
+    };
+  }
+
+  if (livesAlone) {
+    return {
+      currentBalance: 5200,
+      nextPaydayAmount: 8200,
+      nextPaydayDays: 6,
+      payFrequency: "quincenal" as PayFrequency,
+      dailyEssentialBurn: 210,
+      safetyBuffer: 650,
+    };
+  }
+
+  if (studiesOnly) {
+    return {
+      currentBalance: 2400,
+      nextPaydayAmount: 1800,
+      nextPaydayDays: 5,
+      payFrequency: "semanal" as PayFrequency,
+      dailyEssentialBurn: 95,
+      safetyBuffer: 300,
+    };
+  }
+
+  // Trabaja o estudia y trabaja
+  return {
+    currentBalance: 4800,
+    nextPaydayAmount: 6500,
+    nextPaydayDays: 6,
+    payFrequency: "quincenal" as PayFrequency,
+    dailyEssentialBurn: 150,
+    safetyBuffer: 500,
+  };
+}
 
 interface FinancialContextType {
   profile: FinancialProfile;
@@ -115,6 +193,16 @@ interface FinancialContextType {
   updateProfile: (partial: Partial<FinancialProfile>) => void;
   loadPreloadedSandboxProfile: (presetKey?: "carlos" | "mateo") => void;
   startFreshOnboarding: (email?: string) => void;
+  completeOnboarding: (data: {
+    lifeContext: LifeContextTag[];
+    currentBalance: number;
+    payFrequency: PayFrequency;
+    nextPaydayDays: number;
+    nextPaydayAmount: number;
+    commitments: Commitment[];
+    goalTitle: string;
+    goalTargetAmount: number;
+  }) => void;
 }
 
 const STORAGE_KEY = "antesdegastar_financial_profile_v1";
@@ -130,11 +218,16 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed === "object" && "currentBalance" in parsed) {
-          setProfile(parsed);
+          setProfile({
+            ...PRELOADED_SANDBOX_PROFILES.carlos,
+            ...parsed,
+            lifeContext: Array.isArray(parsed.lifeContext) ? parsed.lifeContext : [],
+            commitments: Array.isArray(parsed.commitments) ? parsed.commitments : [],
+          });
         }
       }
     } catch {
-      // Ignore storage errors
+      // Ignore localStorage errors
     }
   }, []);
 
@@ -143,7 +236,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     } catch {
-      // Ignore storage errors
+      // Ignore localStorage errors
     }
   };
 
@@ -172,6 +265,51 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
     persistProfile(fresh);
   };
 
+  const completeOnboarding = (data: {
+    lifeContext: LifeContextTag[];
+    currentBalance: number;
+    payFrequency: PayFrequency;
+    nextPaydayDays: number;
+    nextPaydayAmount: number;
+    commitments: Commitment[];
+    goalTitle: string;
+    goalTargetAmount: number;
+  }) => {
+    const defaults = getRealisticEstimateForContext(data.lifeContext);
+    const roleTag = buildRoleTagFromContext(data.lifeContext);
+    const target = Math.max(500, data.goalTargetAmount || 10000);
+    const suggestedWeekly = Math.max(
+      200,
+      Math.round((data.nextPaydayAmount || defaults.nextPaydayAmount) * 0.08)
+    );
+
+    const completed: FinancialProfile = {
+      id: "custom-user",
+      name: profile.email ? profile.email.split("@")[0] : "Tu Perfil",
+      email: profile.email,
+      roleTag,
+      lifeContext: data.lifeContext,
+      payFrequency: data.payFrequency,
+      currentBalance: data.currentBalance,
+      nextPaydayDays: data.nextPaydayDays,
+      nextPaydayAmount: data.nextPaydayAmount || defaults.nextPaydayAmount,
+      safetyBuffer: defaults.safetyBuffer,
+      dailyEssentialBurn: defaults.dailyEssentialBurn,
+      commitments: data.commitments,
+      goal: {
+        title: data.goalTitle.trim() || "Fondo de emergencia",
+        targetAmount: target,
+        currentSaved: Math.round(target * 0.2),
+        weeklyContribution: suggestedWeekly,
+        deadlineLabel: "Meta activa",
+      },
+      isOnboarded: true,
+      plaidConnected: false,
+    };
+
+    persistProfile(completed);
+  };
+
   return (
     <FinancialContext.Provider
       value={{
@@ -180,6 +318,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         updateProfile,
         loadPreloadedSandboxProfile,
         startFreshOnboarding,
+        completeOnboarding,
       }}
     >
       {children}
@@ -194,4 +333,3 @@ export function useFinancial() {
   }
   return context;
 }
-
