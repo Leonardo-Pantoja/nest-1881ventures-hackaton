@@ -877,47 +877,27 @@ export default function OnboardingWizardPage() {
                     <h1 className="text-2xl sm:text-3xl font-bold font-heading text-center text-slate-900 tracking-tight">
                       ¿Cuál es tu meta principal?
                     </h1>
-
                     <div className="grid grid-cols-2 gap-3">
                       {GOAL_CARDS.map((goal) => {
-                        {
-                          isSaving && (
-                            <p className="text-center text-sm text-emerald-700">
-                              Guardando tu perfil financiero...
-                            </p>
-                          );
-                        }
-
-                        {
-                          saveError && (
-                            <p
-                              role="alert"
-                              className="text-center text-sm text-red-600"
-                            >
-                              {saveError}
-                            </p>
-                          );
-                        }
                         const Icon = goal.icon;
+
                         return (
                           <motion.button
                             key={goal.id}
                             type="button"
+                            disabled={isSaving}
                             whileTap={{ scale: 0.95 }}
                             onClick={() => handleSelectGoalAndFinish(goal)}
                             className={`p-4 rounded-3xl border-2 border-b-4 active:border-b-2 active:translate-y-0.5 transition-all text-left flex flex-col justify-between gap-3 cursor-pointer shadow-2xs hover:shadow-md ${goal.cardStyle}`}
                           >
                             <div className="flex items-center justify-between">
                               <span className="text-2xl">{goal.emoji}</span>
-                              <div className="w-8 h-8 rounded-xl bg-white/90 border border-slate-200/80 flex items-center justify-center text-slate-800">
-                                <Icon className="w-4 h-4" strokeWidth={1.5} />
-                              </div>
+                              <Icon className="w-4 h-4" />
                             </div>
+
                             <div>
-                              <p className="text-base font-bold font-heading text-slate-900 leading-tight">
-                                {goal.title}
-                              </p>
-                              <span className="text-xs font-bold font-heading text-emerald-800">
+                              <p className="font-bold">{goal.title}</p>
+                              <span className="text-xs">
                                 Meta: ${goal.amount.toLocaleString()}
                               </span>
                             </div>
@@ -925,6 +905,20 @@ export default function OnboardingWizardPage() {
                         );
                       })}
                     </div>
+                    {isSaving && (
+                      <p className="text-center text-sm text-emerald-700">
+                        Guardando tu perfil financiero...
+                      </p>
+                    )}
+                    {saveError && (
+                      <p
+                        role="alert"
+                        className="text-center text-sm text-red-600"
+                      >
+                        {saveError}
+                      </p>
+                    )}
+                    
                   </div>
                 )}
               </motion.div>
