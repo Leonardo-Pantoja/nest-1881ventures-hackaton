@@ -16,15 +16,19 @@ import {
   Target,
   Sparkles,
   X,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useFinancial } from "@/context/FinancialContext";
+import type { EvaluateApiResponse } from "@/app/api/evaluate/route";
 
 interface PurchaseEvaluationFlowProps {
   itemName: string;
   itemPrice: number;
+  apiEvaluation?: EvaluateApiResponse | null;
+  isLoadingApi?: boolean;
   onClose?: () => void;
   onActionCompleted?: (message: string) => void;
   isStandalonePage?: boolean;
@@ -33,6 +37,8 @@ interface PurchaseEvaluationFlowProps {
 export default function PurchaseEvaluationFlow({
   itemName,
   itemPrice,
+  apiEvaluation = null,
+  isLoadingApi = false,
   onClose,
   onActionCompleted,
   isStandalonePage = false,
@@ -45,9 +51,12 @@ export default function PurchaseEvaluationFlow({
 
   // Interactive micro-saving slider state
   const defaultSuggestedWeekly = useMemo(() => {
+    if (apiEvaluation?.suggestedWeeklySave) {
+      return apiEvaluation.suggestedWeeklySave;
+    }
     const base = Math.round(itemPrice / 6);
     return Math.min(2000, Math.max(100, Math.round(base / 50) * 50));
-  }, [itemPrice]);
+  }, [itemPrice, apiEvaluation]);
 
   const [weeklySaveAmount, setWeeklySaveAmount] = useState<number>(
     defaultSuggestedWeekly
@@ -57,7 +66,7 @@ export default function PurchaseEvaluationFlow({
     setWeeklySaveAmount(defaultSuggestedWeekly);
   }, [defaultSuggestedWeekly]);
 
-  // Core Deterministic Financial Engine
+  // Core Deterministic Financial Engine (with seamless sync from /api/evaluate)
   const metrics = useMemo(() => {
     const commitmentsTotal = profile.commitments
       .filter((c) => c.dueInDays <= profile.nextPaydayDays)
@@ -66,18 +75,19 @@ export default function PurchaseEvaluationFlow({
     const essentialLivingCost =
       profile.dailyEssentialBurn * profile.nextPaydayDays;
 
-    const safeToSpend = Math.max(
-      0,
-      profile.currentBalance -
-        commitmentsTotal -
-        essentialLivingCost -
-        profile.safetyBuffer
-    );
+    const safeToSpend =
+      apiEvaluation?.safeToSpend ??
+      Math.max(
+        0,
+        profile.currentBalance -
+          commitmentsTotal -
+          essentialLivingCost -
+          profile.safetyBuffer
+      );
 
     const remainingAfterBuyToday = safeToSpend - itemPrice;
     const remainingFreeSafe = Math.max(0, remainingAfterBuyToday);
 
-    // Percentage of free money left for the week
     const freeMoneyRemainingPct =
       safeToSpend > 0
         ? Math.max(
@@ -88,18 +98,21 @@ export default function PurchaseEvaluationFlow({
 
     const usedByPurchasePct = 100 - freeMoneyRemainingPct;
 
-    let verdict: "VIABLE" | "PRECAUCION" | "COMPROMETE" = "VIABLE";
-    if (remainingAfterBuyToday < 0) {
-      verdict = "COMPROMETE";
-    } else if (remainingAfterBuyToday < profile.safetyBuffer * 0.5) {
-      verdict = "PRECAUCION";
+    let verdict: "VIABLE" | "PRECAUCION" | "COMPROMETE" =
+      apiEvaluation?.verdict ?? "VIABLE";
+    if (!apiEvaluation) {
+      if (remainingAfterBuyToday < 0) {
+        verdict = "COMPROMETE";
+      } else if (remainingAfterBuyToday < profile.safetyBuffer * 0.5) {
+        verdict = "PRECAUCION";
+      }
     }
 
-    // Days delayed on savings goal
     const dailyGoalRate = Math.max(1, profile.goal.weeklyContribution / 7);
-    const daysGoalDelayed = Math.max(1, Math.round(itemPrice / dailyGoalRate));
+    const daysGoalDelayed =
+      apiEvaluation?.daysGoalDelayed ??
+      Math.max(1, Math.round(itemPrice / dailyGoalRate));
 
-    // After payday projection (Tab 2)
     const liquidityAfterPayday = Math.max(
       0,
       safeToSpend + profile.nextPaydayAmount
@@ -116,11 +129,26 @@ export default function PurchaseEvaluationFlow({
           )
         : 100;
 
-    // Micro-savings weeks (Tab 3)
     const weeksNeeded = Math.max(
       1,
       Math.ceil(itemPrice / Math.max(50, weeklySaveAmount))
     );
+
+    const headlineLine1 =
+      apiEvaluation?.headlineLine1 ||
+      (verdict === "COMPROMETE"
+        ? `Pagarlo hoy rebasa tu dinero libre por $${Math.abs(
+            remainingAfterBuyToday
+          ).toLocaleString()} MXN y tocaría lo que ya apartaste para tus pagos fijos.`
+        : verdict === "PRECAUCION"
+        ? `Puedes pagarlo hoy sin tocar tus pagos fijos, pero te dejaría con solo $${remainingFreeSafe.toLocaleString()} MXN libres para imprevistos.`
+        : `Cabe cómodamente en tu dinero libre de hoy y aún te deja $${remainingFreeSafe.toLocaleString()} MXN tranquilos para el resto de la semana.`);
+
+    const headlineLine2 =
+      apiEvaluation?.headlineLine2 ||
+      (verdict === "COMPROMETE"
+        ? `Compara abajo cómo cambia tu tranquilidad si esperas ${profile.nextPaydayDays} días a cobrar o si lo planeas por semana.`
+        : `Tus compromisos próximos ($${commitmentsTotal.toLocaleString()} MXN) y tu reserva de paz siguen protegidos.`);
 
     return {
       commitmentsTotal,
@@ -136,8 +164,10 @@ export default function PurchaseEvaluationFlow({
       remainingIfWaitPayday,
       waitRemainingPct,
       weeksNeeded,
+      headlineLine1,
+      headlineLine2,
     };
-  }, [profile, itemPrice, weeklySaveAmount]);
+  }, [profile, itemPrice, weeklySaveAmount, apiEvaluation]);
 
   const handleSaveToWishlist = () => {
     addToWishlist({
@@ -182,9 +212,21 @@ export default function PurchaseEvaluationFlow({
               </button>
             )}
             <div>
-              <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 block">
-                Análisis paso a paso antes de gastar
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400">
+                  Análisis paso a paso antes de gastar
+                </span>
+                {isLoadingApi ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                    <Loader2 className="w-3 h-3 animate-spin" strokeWidth={1.5} />
+                    /api/evaluate
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-mono text-slate-400">
+                    · {apiEvaluation?.source === "ai" ? "IA + Motor" : "Motor determinista"}
+                  </span>
+                )}
+              </div>
               <h2 className="text-base sm:text-lg font-semibold text-slate-900">
                 {itemName}{" "}
                 <span className="font-mono text-slate-600 font-normal">
@@ -252,18 +294,10 @@ export default function PurchaseEvaluationFlow({
             {/* Human explanation in 2 clear lines */}
             <div className="space-y-1">
               <p className="text-base sm:text-lg font-semibold leading-snug">
-                {metrics.verdict === "COMPROMETE"
-                  ? `Pagarlo hoy rebasa tu dinero libre por $${Math.abs(
-                      metrics.remainingAfterBuyToday
-                    ).toLocaleString()} MXN y tocaría lo que ya apartaste para tus pagos fijos.`
-                  : metrics.verdict === "PRECAUCION"
-                  ? `Puedes pagarlo hoy sin tocar tus pagos fijos, pero te dejaría con solo $${metrics.remainingFreeSafe.toLocaleString()} MXN libres para imprevistos.`
-                  : `Cabe cómodamente en tu dinero libre de hoy y aún te deja $${metrics.remainingFreeSafe.toLocaleString()} MXN tranquilos para el resto de la semana.`}
+                {metrics.headlineLine1}
               </p>
               <p className="text-xs sm:text-sm opacity-85 leading-relaxed">
-                {metrics.verdict === "COMPROMETE"
-                  ? `Compara abajo cómo cambia tu tranquilidad si esperas ${profile.nextPaydayDays} días a cobrar o si lo planeas por semana.`
-                  : `Tus compromisos próximos ($${metrics.commitmentsTotal.toLocaleString()} MXN) y tu reserva de paz siguen protegidos.`}
+                {metrics.headlineLine2}
               </p>
             </div>
           </div>
@@ -608,4 +642,3 @@ export default function PurchaseEvaluationFlow({
     </div>
   );
 }
-

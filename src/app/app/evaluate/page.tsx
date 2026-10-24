@@ -1,19 +1,22 @@
 "use client";
 
-import React, { useState, Suspense } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Compass, ArrowLeft, CheckCircle2 } from "lucide-react";
 import PurchaseEvaluationFlow from "@/components/PurchaseEvaluationFlow";
 import { useFinancial } from "@/context/FinancialContext";
+import type { EvaluateApiResponse } from "@/app/api/evaluate/route";
 
 function EvaluateContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { pendingEvaluation } = useFinancial();
+  const { profile, pendingEvaluation } = useFinancial();
 
   const [actionToast, setActionToast] = useState<string | null>(null);
+  const [apiEvaluation, setApiEvaluation] = useState<EvaluateApiResponse | null>(null);
+  const [isLoadingApi, setIsLoadingApi] = useState(false);
 
   const itemName =
     searchParams.get("name") ||
@@ -21,6 +24,36 @@ function EvaluateContent() {
     "Audífonos Inalámbricos Sony";
   const itemPrice =
     Number(searchParams.get("price")) || pendingEvaluation.price || 2300;
+
+  useEffect(() => {
+    let active = true;
+    const fetchEvaluation = async () => {
+      setIsLoadingApi(true);
+      try {
+        const res = await fetch("/api/evaluate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            itemName,
+            itemPrice,
+            profile,
+          }),
+        });
+        if (res.ok && active) {
+          const data = (await res.json()) as EvaluateApiResponse;
+          setApiEvaluation(data);
+        }
+      } catch {
+        // Automatic deterministic fallback inside PurchaseEvaluationFlow
+      } finally {
+        if (active) setIsLoadingApi(false);
+      }
+    };
+    void fetchEvaluation();
+    return () => {
+      active = false;
+    };
+  }, [itemName, itemPrice, profile]);
 
   const handleActionCompleted = (message: string) => {
     setActionToast(message);
@@ -62,6 +95,8 @@ function EvaluateContent() {
           <PurchaseEvaluationFlow
             itemName={itemName}
             itemPrice={itemPrice}
+            apiEvaluation={apiEvaluation}
+            isLoadingApi={isLoadingApi}
             isStandalonePage
             onClose={() => router.push("/app")}
             onActionCompleted={handleActionCompleted}
@@ -96,4 +131,3 @@ export default function EvaluatePage() {
     </Suspense>
   );
 }
-

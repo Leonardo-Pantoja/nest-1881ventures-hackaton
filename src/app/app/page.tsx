@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -18,15 +18,18 @@ import {
   Send,
   Calendar,
   BookmarkCheck,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import PurchaseEvaluationFlow from "@/components/PurchaseEvaluationFlow";
+import QuickGuideModal from "@/components/QuickGuideModal";
 import {
   useFinancial,
   PRELOADED_SANDBOX_PROFILES,
 } from "@/context/FinancialContext";
+import type { EvaluateApiResponse } from "@/app/api/evaluate/route";
 
 const QUICK_PURCHASE_EXAMPLES = [
   { label: "Audífonos de $2,300", name: "Audífonos Inalámbricos Sony", price: 2300 },
@@ -34,6 +37,8 @@ const QUICK_PURCHASE_EXAMPLES = [
   { label: "Videojuego de $1,200", name: "Videojuego Edición Estándar", price: 1200 },
   { label: "Cena con amigos de $550", name: "Cena con amigos", price: 550 },
 ];
+
+const FIRST_VISIT_GUIDE_KEY = "antesdegastar_seen_quick_guide_v1";
 
 export default function AppDashboardPage() {
   const router = useRouter();
@@ -56,6 +61,10 @@ export default function AppDashboardPage() {
   const [uploadedImageName, setUploadedImageName] = useState<string | null>(null);
   const [showEvaluationView, setShowEvaluationView] = useState(false);
 
+  // /api/evaluate state
+  const [apiEvaluation, setApiEvaluation] = useState<EvaluateApiResponse | null>(null);
+  const [isEvaluatingApi, setIsEvaluatingApi] = useState(false);
+
   // Quick expense bottom bar & toast feedback
   const [isQuickExpenseOpen, setIsQuickExpenseOpen] = useState(false);
   const [quickExpenseInput, setQuickExpenseInput] = useState("");
@@ -65,6 +74,19 @@ export default function AppDashboardPage() {
   } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Auto-open the 3-slide welcome guide the first time the user enters /app
+  useEffect(() => {
+    try {
+      const hasSeen = localStorage.getItem(FIRST_VISIT_GUIDE_KEY);
+      if (!hasSeen) {
+        setShowTourModal(true);
+        localStorage.setItem(FIRST_VISIT_GUIDE_KEY, "true");
+      }
+    } catch {
+      // Ignore storage access errors
+    }
+  }, []);
 
   const triggerToast = (message: string) => {
     const id = Date.now();
@@ -97,6 +119,41 @@ export default function AppDashboardPage() {
     };
   }, [profile]);
 
+  // Call /api/evaluate with automatic local fallback if offline or error
+  const runEvaluation = async (name: string, price: number, imageName?: string | null) => {
+    setPendingEvaluation({
+      name,
+      price,
+      imageName: imageName ?? null,
+    });
+    setShowEvaluationView(true);
+    setIsEvaluatingApi(true);
+
+    try {
+      const response = await fetch("/api/evaluate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itemName: name,
+          itemPrice: price,
+          profile,
+        }),
+      });
+
+      if (response.ok) {
+        const data = (await response.json()) as EvaluateApiResponse;
+        setApiEvaluation(data);
+      } else {
+        setApiEvaluation(null);
+      }
+    } catch {
+      // Local deterministic fallback inside PurchaseEvaluationFlow handles offline seamlessly
+      setApiEvaluation(null);
+    } finally {
+      setIsEvaluatingApi(false);
+    }
+  };
+
   // Parse free-form text like "Audífonos de $2,300" or "Cafetera 1450"
   const handleQueryInputChange = (value: string) => {
     setQueryText(value);
@@ -121,12 +178,7 @@ export default function AppDashboardPage() {
     setParsedItemName(example.name);
     setParsedItemPrice(example.price);
     setUploadedImageName(null);
-    setPendingEvaluation({
-      name: example.name,
-      price: example.price,
-      imageName: null,
-    });
-    setShowEvaluationView(true);
+    void runEvaluation(example.name, example.price, null);
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -136,23 +188,13 @@ export default function AppDashboardPage() {
     setQueryText(`Captura: ${file.name.replace(/\.[^/.]+$/, "")} ($1,950)`);
     setParsedItemName("Producto detectado en imagen");
     setParsedItemPrice(1950);
-    setPendingEvaluation({
-      name: "Producto detectado en imagen",
-      price: 1950,
-      imageName: file.name,
-    });
-    setShowEvaluationView(true);
+    void runEvaluation("Producto detectado en imagen", 1950, file.name);
   };
 
   const handleAnalyzeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!queryText.trim() && parsedItemPrice <= 0) return;
-    setPendingEvaluation({
-      name: parsedItemName,
-      price: parsedItemPrice,
-      imageName: uploadedImageName,
-    });
-    setShowEvaluationView(true);
+    void runEvaluation(parsedItemName, parsedItemPrice, uploadedImageName);
   };
 
   const handleQuickExpenseSubmit = (e: React.FormEvent) => {
@@ -499,11 +541,21 @@ export default function AppDashboardPage() {
 
                   <Button
                     type="submit"
+                    disabled={isEvaluatingApi}
                     size="lg"
                     className="h-12 px-6 rounded-2xl bg-slate-900 text-[#FAF8F5] hover:bg-slate-800 text-sm font-medium gap-2 shrink-0 cursor-pointer shadow-xs"
                   >
-                    <span>Analizar compra</span>
-                    <ArrowRight className="w-4 h-4" strokeWidth={1.5} />
+                    {isEvaluatingApi ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" strokeWidth={1.5} />
+                        <span>Evaluando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Analizar compra</span>
+                        <ArrowRight className="w-4 h-4" strokeWidth={1.5} />
+                      </>
+                    )}
                   </Button>
                 </div>
 
@@ -600,6 +652,8 @@ export default function AppDashboardPage() {
               <PurchaseEvaluationFlow
                 itemName={parsedItemName}
                 itemPrice={parsedItemPrice}
+                apiEvaluation={apiEvaluation}
+                isLoadingApi={isEvaluatingApi}
                 onClose={() => setShowEvaluationView(false)}
                 onActionCompleted={(msg) => triggerToast(msg)}
               />
@@ -687,86 +741,11 @@ export default function AppDashboardPage() {
         </div>
       </div>
 
-      {/* Onboarding Tour / Quick Guide Modal */}
-      <AnimatePresence>
-        {showTourModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4"
-            onClick={() => setShowTourModal(false)}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 10 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-md rounded-3xl bg-[#FAF8F5] border border-[#E6E1DA] shadow-xl p-6 space-y-5"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <Badge
-                    variant="outline"
-                    className="border-[#DCD5CA] bg-white text-slate-700 text-[11px] mb-2"
-                  >
-                    Guía rápida · 30 segundos
-                  </Badge>
-                  <h3 className="text-lg font-semibold text-slate-900">
-                    Cómo usar tu Copiloto Pre-Compra
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowTourModal(false)}
-                  className="p-1.5 rounded-xl text-slate-400 hover:text-slate-800 cursor-pointer"
-                >
-                  <X className="w-4 h-4" strokeWidth={1.5} />
-                </button>
-              </div>
-
-              <div className="space-y-3 text-xs sm:text-sm text-slate-700">
-                <div className="p-3.5 rounded-2xl bg-white border border-[#E6E1DA] space-y-1">
-                  <p className="font-semibold text-slate-900">
-                    1. Tu número protagonista
-                  </p>
-                  <p className="text-slate-600 text-xs leading-relaxed">
-                    El monto superior ya descuenta tus pagos fijos próximos y tu reserva vital. Haz clic en <strong>“¿Por qué este monto?”</strong> cuando quieras ver la resta completa.
-                  </p>
-                </div>
-
-                <div className="p-3.5 rounded-2xl bg-white border border-[#E6E1DA] space-y-1">
-                  <p className="font-semibold text-slate-900">
-                    2. Consulta antes de pagar
-                  </p>
-                  <p className="text-xs text-slate-600 leading-relaxed">
-                    Escribe cualquier antojo o compra planeada y presiona <strong>“Analizar compra”</strong> para comparar si conviene pagar hoy, esperar a tu nómina o usar micro-ahorro.
-                  </p>
-                </div>
-
-                <div className="p-3.5 rounded-2xl bg-white border border-[#E6E1DA] space-y-1">
-                  <p className="font-semibold text-slate-900">
-                    3. Registro rápido por texto
-                  </p>
-                  <p className="text-xs text-slate-600 leading-relaxed">
-                    Usa la barra inferior para anotar gastos cotidianos como <em>“Gasté 150 en comida”</em> y mantener tu liquidez al día en un segundo.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex justify-end pt-1">
-                <Button
-                  type="button"
-                  onClick={() => setShowTourModal(false)}
-                  className="h-10 px-5 rounded-xl bg-slate-900 text-[#FAF8F5] hover:bg-slate-800 text-xs font-medium cursor-pointer"
-                >
-                  Entendido
-                </Button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* 3-Slide Interactive Quick Guide Modal (Auto-opens on first visit to /app) */}
+      <QuickGuideModal
+        isOpen={showTourModal}
+        onClose={() => setShowTourModal(false)}
+      />
     </div>
   );
 }
