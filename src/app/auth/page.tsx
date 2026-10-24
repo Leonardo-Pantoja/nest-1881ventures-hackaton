@@ -137,7 +137,7 @@ export default function AuthPage() {
 
   const handleStartFromScratch = () => {
     startFreshOnboarding(email.trim() || undefined);
-    router.push("/onboarding");
+    router.push("/onboarding?demo=1");
   };
 
   const handleLoadPreloadedProfile = () => {

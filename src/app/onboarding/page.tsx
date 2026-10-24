@@ -32,6 +32,10 @@ import FinancialPlantWidget, {
   type PlantLevel,
 } from "@/components/FinancialPlantWidget";
 import { playTap, playCoin, playLevelUp } from "@/lib/soundEffects";
+import {
+  saveOnboardingToSupabase,
+  type OnboardingInput,
+} from "@/lib/onboarding/saveOnboarding";
 
 const TOTAL_STEPS = 4;
 
@@ -236,23 +240,23 @@ function OnboardingReactivePlant({
     step === 1
       ? "🌱"
       : step === 2
-      ? balancePreview >= 4500
-        ? "💎"
-        : balancePreview >= 2500
-        ? "💰"
-        : "🪙"
-      : step === 3
-      ? "🛡️"
-      : "🌳";
+        ? balancePreview >= 4500
+          ? "💎"
+          : balancePreview >= 2500
+            ? "💰"
+            : "🪙"
+        : step === 3
+          ? "🛡️"
+          : "🌳";
 
   const stepBadgeText =
     step === 1
       ? "Semilla lista"
       : step === 2
-      ? `Nutriendo +$${balancePreview.toLocaleString()}`
-      : step === 3
-      ? "Escudo activo"
-      : "¡Casi florece!";
+        ? `Nutriendo +$${balancePreview.toLocaleString()}`
+        : step === 3
+          ? "Escudo activo"
+          : "¡Casi florece!";
 
   return (
     <motion.div
@@ -295,8 +299,8 @@ function OnboardingReactivePlant({
                 step === 1
                   ? "M70 75 Q70 60 70 54"
                   : step === 2
-                  ? "M70 75 Q70 52 70 42"
-                  : "M70 75 Q70 44 70 30"
+                    ? "M70 75 Q70 52 70 42"
+                    : "M70 75 Q70 44 70 30"
               }
               stroke="#059669"
               strokeWidth="4.5"
@@ -329,9 +333,7 @@ function OnboardingReactivePlant({
             )}
 
             {/* Crown & Blossom unlocked on Step >= 3 */}
-            {step >= 3 && (
-              <circle cx="70" cy="22" r="11" fill="#34D399" />
-            )}
+            {step >= 3 && <circle cx="70" cy="22" r="11" fill="#34D399" />}
             {step >= 4 && (
               <>
                 <circle cx="62" cy="18" r="4.5" fill="#FBBF24" />
@@ -367,6 +369,9 @@ export default function OnboardingWizardPage() {
   const [step, setStep] = useState<number>(1);
   const [isUnlockedScreen, setIsUnlockedScreen] = useState(false);
 
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   // Step 1: Contexto de vida (sin pedir género)
   const [selectedLifeContext, setSelectedLifeContext] = useState<
     LifeContextTag[]
@@ -382,9 +387,8 @@ export default function OnboardingWizardPage() {
   const [commitments, setCommitments] = useState<Commitment[]>([]);
 
   // Step 4: Meta principal (1 toque)
-  const [selectedGoalTitle, setSelectedGoalTitle] = useState<string>(
-    "Fondo de paz"
-  );
+  const [selectedGoalTitle, setSelectedGoalTitle] =
+    useState<string>("Fondo de paz");
   const [selectedGoalAmount, setSelectedGoalAmount] = useState<number>(15000);
 
   const progressPercentage = (step / TOTAL_STEPS) * 100;
@@ -413,7 +417,7 @@ export default function OnboardingWizardPage() {
 
   // Step 2 tap: 1-tap Tier button auto-advances immediately
   const handleSelectQuincenaTier = (
-    tier: (typeof QUINCENA_LEVEL_TIERS)[number]
+    tier: (typeof QUINCENA_LEVEL_TIERS)[number],
   ) => {
     playTap();
     setSelectedQuincenaAllowance(tier.currentBalance);
@@ -426,7 +430,7 @@ export default function OnboardingWizardPage() {
 
   // Step 3 tap: 1-tap Commitment card auto-advances immediately
   const handleSelectCommitmentCard = (
-    card: (typeof QUICK_COMMITMENT_CARDS)[number]
+    card: (typeof QUICK_COMMITMENT_CARDS)[number],
   ) => {
     playTap();
     if (card.amount <= 0) {
@@ -449,23 +453,33 @@ export default function OnboardingWizardPage() {
   };
 
   // Step 4 tap: Final tap -> completeOnboarding + playLevelUp() + Confetti + Unlocked Financial Plant Card
-  const handleSelectGoalAndFinish = (goal: (typeof GOAL_CARDS)[number]) => {
-    playTap();
-    setSelectedGoalTitle(goal.title);
-    setSelectedGoalAmount(goal.amount);
 
-    const commitmentSum = commitments.reduce((acc, c) => acc + c.amount, 0);
-    // Ensure their currentBalance reflects their chosen free quincena + essentials so their plant level matches cleanly
-    const computedCurrentBalance =
-      selectedQuincenaAllowance + commitmentSum + 1400;
-    const computedNextPaydayAmount = Math.max(
-      3200,
-      Math.round(selectedQuincenaAllowance * 1.9)
+  const handleSelectGoalAndFinish = async (
+    goal: (typeof GOAL_CARDS)[number],
+  ) => {
+    if (isSaving) return;
+
+    playTap();
+    setIsSaving(true);
+    setSaveError(null);
+
+    const commitmentSum = commitments.reduce(
+      (acc, commitment) => acc + commitment.amount,
+      0,
     );
 
-    completeOnboarding({
+    const computedCurrentBalance =
+      selectedQuincenaAllowance + commitmentSum + 1400;
+
+    const computedNextPaydayAmount = Math.max(
+      3200,
+      Math.round(selectedQuincenaAllowance * 1.9),
+    );
+
+    const onboardingData: OnboardingInput = {
       lifeContext:
         selectedLifeContext.length > 0 ? selectedLifeContext : ["trabajo"],
+
       currentBalance: computedCurrentBalance,
       payFrequency,
       nextPaydayDays,
@@ -473,12 +487,39 @@ export default function OnboardingWizardPage() {
       commitments,
       goalTitle: goal.title,
       goalTargetAmount: goal.amount,
-    });
+    };
 
-    setTimeout(() => {
+    try {
+      // Demo onboarding does not write to Supabase.
+      const isDemo =
+        new URLSearchParams(window.location.search).get("demo") === "1";
+
+      if (isDemo) {
+        completeOnboarding(onboardingData);
+      } else {
+        // Persist the financial information first.
+        const userId = await saveOnboardingToSupabase(onboardingData);
+
+        // Update frontend state only after saving.
+        completeOnboarding(onboardingData, userId);
+      }
+
+      setSelectedGoalTitle(goal.title);
+      setSelectedGoalAmount(goal.amount);
+
       setIsUnlockedScreen(true);
       playLevelUp();
-    }, 180);
+    } catch (error) {
+      console.error("Onboarding error:", error);
+
+      setSaveError(
+        error instanceof Error
+          ? error.message
+          : "No se pudo guardar tu perfil.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Calculate unlocked level for the celebration screen
@@ -486,8 +527,8 @@ export default function OnboardingWizardPage() {
     selectedQuincenaAllowance >= 5000
       ? 4
       : selectedQuincenaAllowance >= 3000
-      ? 3
-      : 2;
+        ? 3
+        : 2;
 
   const unlockedMeta =
     UNLOCKED_LEVEL_BADGES.find((b) => b.level === unlockedLevel) ??
@@ -620,7 +661,8 @@ export default function OnboardingWizardPage() {
                       Tu Meta
                     </span>
                     <span className="text-sm font-bold font-heading text-slate-900 truncate block">
-                      {selectedGoalTitle} (${selectedGoalAmount.toLocaleString()})
+                      {selectedGoalTitle} ($
+                      {selectedGoalAmount.toLocaleString()})
                     </span>
                   </div>
                 </div>
@@ -707,7 +749,7 @@ export default function OnboardingWizardPage() {
                       {QUINCENA_LEVEL_TIERS.map((tier) => {
                         const isSelected =
                           Math.abs(
-                            selectedQuincenaAllowance - tier.currentBalance
+                            selectedQuincenaAllowance - tier.currentBalance,
                           ) < 400;
                         return (
                           <motion.button
@@ -717,9 +759,7 @@ export default function OnboardingWizardPage() {
                             onClick={() => handleSelectQuincenaTier(tier)}
                             className={`p-3.5 rounded-3xl border-2 border-b-4 active:border-b-2 active:translate-y-0.5 transition-all flex flex-col items-center text-center gap-1.5 cursor-pointer shadow-2xs ${
                               tier.cardStyle
-                            } ${
-                              isSelected ? "ring-2 ring-slate-900" : ""
-                            }`}
+                            } ${isSelected ? "ring-2 ring-slate-900" : ""}`}
                           >
                             <span className="text-2xl">{tier.emoji}</span>
                             <span className="text-base sm:text-lg font-bold font-heading text-slate-900">
@@ -747,8 +787,8 @@ export default function OnboardingWizardPage() {
                           {selectedQuincenaAllowance < 2200
                             ? "🪙"
                             : selectedQuincenaAllowance < 4200
-                            ? "💰"
-                            : "💎"}{" "}
+                              ? "💰"
+                              : "💎"}{" "}
                           ${selectedQuincenaAllowance.toLocaleString()} MXN
                         </span>
                       </div>
@@ -782,7 +822,8 @@ export default function OnboardingWizardPage() {
                         className="w-full h-11 rounded-2xl bg-slate-900 text-white font-bold font-heading text-xs border-2 border-slate-950 border-b-4 active:border-b-2 active:translate-y-0.5 flex items-center justify-center gap-1.5 cursor-pointer"
                       >
                         <span>
-                          Confirmar ${selectedQuincenaAllowance.toLocaleString()}
+                          Confirmar $
+                          {selectedQuincenaAllowance.toLocaleString()}
                         </span>
                         <ArrowRight className="w-4 h-4" strokeWidth={1.5} />
                       </motion.button>
@@ -839,6 +880,24 @@ export default function OnboardingWizardPage() {
 
                     <div className="grid grid-cols-2 gap-3">
                       {GOAL_CARDS.map((goal) => {
+                        {
+                          isSaving && (
+                            <p className="text-center text-sm text-emerald-700">
+                              Guardando tu perfil financiero...
+                            </p>
+                          );
+                        }
+
+                        {
+                          saveError && (
+                            <p
+                              role="alert"
+                              className="text-center text-sm text-red-600"
+                            >
+                              {saveError}
+                            </p>
+                          );
+                        }
                         const Icon = goal.icon;
                         return (
                           <motion.button
