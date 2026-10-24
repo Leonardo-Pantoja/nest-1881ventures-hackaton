@@ -293,8 +293,8 @@ interface FinancialContextType {
   addToWishlist: (
     item: Omit<WishlistItem, "id" | "savedAt">,
     xpReward?: number,
-  ) => void;
-  registerPurchaseAnyway: (name: string, price: number) => void;
+  ) => Promise<number>;
+  registerPurchaseAnyway: (name: string, price: number) => Promise<void>;
   awardWisdomXp: (amount?: number) => void;
   incrementStreak: (reason?: string) => void;
   streakCelebration: { id: number; count: number; reason: string } | null;
@@ -368,8 +368,8 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      const [profileRes, incomeRes, commitmentRes, goalRes] = await Promise.all(
-        [
+      const [profileRes, incomeRes, commitmentRes, goalRes, wishlistRes] =
+        await Promise.all([
           supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
           supabase
             .from("income_sources")
@@ -390,10 +390,20 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
             .eq("is_active", true)
             .order("created_at", { ascending: true })
             .limit(1),
-        ],
-      );
+          supabase
+            .from("wishlist_items")
+            .select("*")
+            .eq("user_id", user.id)
+            .order("updated_at", { ascending: false }),
+        ]);
       if (ticket !== requestVersion.current) return;
-      for (const result of [profileRes, incomeRes, commitmentRes, goalRes]) {
+      for (const result of [
+        profileRes,
+        incomeRes,
+        commitmentRes,
+        goalRes,
+        wishlistRes,
+      ]) {
         if (result.error) throw result.error;
       }
 
@@ -443,9 +453,20 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
               currentSaved: 0,
               weeklyContribution: 0,
             },
-        wishlist: [], // Real wishlist requires a dedicated table.
-        wisdomXp: 0,
-        streakCount: 0,
+        wishlist: (wishlistRes.data ?? []).map((item) => ({
+          id: item.id,
+          name: item.name,
+          price: Number(item.price),
+          savedAt: item.saved_at,
+          plannedWeeklySave:
+            item.planned_weekly_save == null
+              ? undefined
+              : Number(item.planned_weekly_save),
+          cooldownDays: daysUntil(item.hold_until),
+          strategy: item.strategy as "wait" | "microsave",
+        })),
+        wisdomXp: Number(p?.wisdom_xp ?? 0),
+        streakCount: Number(p?.streak_count ?? 0),
         isOnboarded: Boolean(p?.onboarding_completed_at),
         plaidConnected: false,
       });
@@ -610,35 +631,116 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
-  const addToWishlist = (
+  const addToWishlist = async (
     item: Omit<WishlistItem, "id" | "savedAt">,
     xpReward = 50,
-  ) => {
-    if (mode !== "demo") return;
-    const next = {
-      ...profile,
-      wisdomXp: (profile.wisdomXp ?? 0) + xpReward,
-      streakCount: (profile.streakCount ?? 0) + 1,
+  ): Promise<number> => {
+    if (mode === "demo") {
+      const next = {
+        ...profile,
+        wisdomXp: (profile.wisdomXp ?? 0) + xpReward,
+        streakCount: (profile.streakCount ?? 0) + 1,
+        wishlist: [
+          {
+            ...item,
+            id: `wish-${Date.now()}`,
+            savedAt: new Date().toISOString(),
+          },
+          ...(profile.wishlist || []).filter((w) => w.name !== item.name),
+        ],
+      };
+      persistDemo(next);
+      announceStreak(next.streakCount, `¡Enfriamiento activo! +${xpReward} XP`);
+      return xpReward;
+    }
+
+    if (mode !== "authenticated") {
+      throw new Error("Debes iniciar sesión para guardar compras.");
+    }
+    if (!item.name.trim() || !Number.isFinite(item.price) || item.price <= 0) {
+      throw new Error("Selecciona un producto con precio válido.");
+    }
+
+    const { data, error } = await supabase.rpc("save_wishlist_item", {
+      p_name: item.name.trim(),
+      p_price: item.price,
+      p_strategy: item.strategy ?? "wait",
+      p_cooldown_days: Math.min(365, Math.max(1, item.cooldownDays ?? 7)),
+      p_planned_weekly_save:
+        item.strategy === "microsave" ? (item.plannedWeeklySave ?? 400) : null,
+    });
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error("Supabase no devolvió la compra guardada.");
+
+    const saved = data as {
+      id: string;
+      name: string;
+      price: number;
+      saved_at: string;
+      hold_until: string;
+      planned_weekly_save: number | null;
+      strategy: "wait" | "microsave";
+      wisdom_xp: number;
+      streak_count: number;
+      xp_awarded: number;
+    };
+    setProfile((prev) => ({
+      ...prev,
       wishlist: [
         {
-          ...item,
-          id: `wish-${Date.now()}`,
-          savedAt: new Date().toISOString(),
+          id: saved.id,
+          name: saved.name,
+          price: Number(saved.price),
+          savedAt: saved.saved_at,
+          cooldownDays: daysUntil(saved.hold_until),
+          plannedWeeklySave:
+            saved.planned_weekly_save == null
+              ? undefined
+              : Number(saved.planned_weekly_save),
+          strategy: saved.strategy,
         },
-        ...(profile.wishlist || []).filter((w) => w.name !== item.name),
+        ...(prev.wishlist || []).filter(
+          (w) => w.id !== saved.id && w.name !== saved.name,
+        ),
       ],
-    };
-    persistDemo(next);
-    announceStreak(next.streakCount, `¡Enfriamiento activo! +${xpReward} XP`);
+      wisdomXp: Number(saved.wisdom_xp),
+      streakCount: Number(saved.streak_count),
+    }));
+    return Number(saved.xp_awarded);
   };
 
-  const registerPurchaseAnyway = (name: string, price: number) => {
-    if (mode !== "demo") return;
-    persistDemo({
-      ...profile,
-      currentBalance: Math.max(0, profile.currentBalance - price),
-      wishlist: (profile.wishlist || []).filter((w) => w.name !== name),
+  const registerPurchaseAnyway = async (
+    name: string,
+    price: number,
+  ): Promise<void> => {
+    if (mode === "demo") {
+      persistDemo({
+        ...profile,
+        currentBalance: Math.max(0, profile.currentBalance - price),
+        wishlist: (profile.wishlist || []).filter((w) => w.name !== name),
+      });
+      return;
+    }
+    if (mode !== "authenticated") {
+      throw new Error("Debes iniciar sesión para registrar una compra.");
+    }
+    if (!name.trim() || !Number.isFinite(price) || price <= 0) {
+      throw new Error("Selecciona un producto con precio válido.");
+    }
+
+    const { data, error } = await supabase.rpc("record_purchase", {
+      p_name: name.trim(),
+      p_price: price,
     });
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error("Supabase no confirmó la compra.");
+    const result = data as { current_balance: number };
+
+    setProfile((prev) => ({
+      ...prev,
+      currentBalance: Number(result.current_balance),
+      wishlist: (prev.wishlist || []).filter((w) => w.name !== name),
+    }));
   };
 
   const awardWisdomXp = (amount = 50) => {
