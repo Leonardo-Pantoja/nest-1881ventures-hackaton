@@ -6,957 +6,865 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Compass,
+  ArrowLeft,
+  ArrowRight,
   GraduationCap,
   Briefcase,
   Home,
   Users,
-  Wallet,
+  CheckCircle2,
   Sparkles,
-  Calendar,
-  CreditCard,
-  Zap,
-  ShoppingBag,
-  Plus,
-  Trash2,
-  Target,
   Laptop,
   Plane,
   ShieldCheck,
-  ArrowRight,
-  ArrowLeft,
-  Check,
-  CheckCircle2,
-  Loader2,
+  Car,
+  SlidersHorizontal,
+  Zap,
+  Award,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
   useFinancial,
   type LifeContextTag,
   type PayFrequency,
   type Commitment,
-  getRealisticEstimateForContext,
-  buildRoleTagFromContext,
 } from "@/context/FinancialContext";
+import FinancialPlantWidget, {
+  type PlantLevel,
+} from "@/components/FinancialPlantWidget";
+import { playTap, playCoin, playLevelUp } from "@/lib/soundEffects";
 
 const TOTAL_STEPS = 4;
 
-const LIFE_OPTIONS: {
+const LIFE_CONTEXT_CARDS: {
   id: LifeContextTag;
+  emoji: string;
   title: string;
-  description: string;
-  icon: React.ElementType;
+  tag: string;
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  cardStyle: string;
 }[] = [
   {
     id: "estudio",
+    emoji: "🎒",
     title: "Estudio",
-    description: "Universidad, posgrado o formación continua",
+    tag: "Uni / Beca",
     icon: GraduationCap,
+    cardStyle:
+      "border-sky-300 border-b-sky-500 bg-gradient-to-b from-white to-sky-50/60 text-slate-900",
   },
   {
     id: "trabajo",
+    emoji: "💼",
     title: "Trabajo",
-    description: "Recibo ingresos por empleo, beca o actividad profesional",
+    tag: "Nómina / Freelance",
     icon: Briefcase,
+    cardStyle:
+      "border-emerald-300 border-b-emerald-500 bg-gradient-to-b from-white to-emerald-50/60 text-slate-900",
   },
   {
     id: "independiente",
+    emoji: "🏠",
     title: "Vivo por mi cuenta",
-    description: "Cubro renta, hipoteca o gastos de mi hogar",
+    tag: "Renta / Roomies",
     icon: Home,
+    cardStyle:
+      "border-amber-300 border-b-amber-500 bg-gradient-to-b from-white to-amber-50/60 text-slate-900",
   },
   {
     id: "dependientes",
-    title: "Mantengo a otras personas",
-    description: "Familia, hijos o personas que dependen de mi ingreso",
+    emoji: "🤝",
+    title: "Apoyo a familia",
+    tag: "Hogar / Dependientes",
     icon: Users,
+    cardStyle:
+      "border-purple-300 border-b-purple-500 bg-gradient-to-b from-white to-purple-50/60 text-slate-900",
   },
 ];
 
-const QUICK_COMMITMENT_CHIPS: {
+const QUINCENA_LEVEL_TIERS = [
+  {
+    id: "tier-1500",
+    emoji: "🪙",
+    label: "$1,500",
+    tag: "Modo Estudiante",
+    currentBalance: 1500,
+    nextPaydayAmount: 2600,
+    nextPaydayDays: 6,
+    payFrequency: "quincenal" as PayFrequency,
+    cardStyle:
+      "border-amber-300 border-b-amber-500 bg-gradient-to-b from-white to-amber-50/70",
+  },
+  {
+    id: "tier-3000",
+    emoji: "💰",
+    label: "$3,000",
+    tag: "Equilibrio Quincenal",
+    currentBalance: 3000,
+    nextPaydayAmount: 6500,
+    nextPaydayDays: 6,
+    payFrequency: "quincenal" as PayFrequency,
+    cardStyle:
+      "border-emerald-300 border-b-emerald-600 bg-gradient-to-b from-white to-emerald-50/70",
+  },
+  {
+    id: "tier-5000",
+    emoji: "💎",
+    label: "$5,000+",
+    tag: "Colchón Sólido",
+    currentBalance: 5500,
+    nextPaydayAmount: 9800,
+    nextPaydayDays: 6,
+    payFrequency: "quincenal" as PayFrequency,
+    cardStyle:
+      "border-teal-300 border-b-teal-600 bg-gradient-to-b from-white to-teal-50/70",
+  },
+];
+
+const QUICK_COMMITMENT_CARDS: {
   id: string;
+  emoji: string;
   title: string;
   amount: number;
   dueInDays: number;
   category: string;
-  icon: React.ElementType;
+  cardStyle: string;
 }[] = [
   {
-    id: "chip-renta",
-    title: "Renta / Vivienda",
-    amount: 2500,
-    dueInDays: 3,
-    category: "Vivienda",
-    icon: Home,
-  },
-  {
-    id: "chip-tarjeta",
-    title: "Pago de Tarjeta",
-    amount: 850,
-    dueInDays: 4,
-    category: "Deuda",
-    icon: CreditCard,
+    id: "chip-none",
+    emoji: "✨",
+    title: "Libre esta semana",
+    amount: 0,
+    dueInDays: 0,
+    category: "Libre",
+    cardStyle:
+      "border-emerald-300 border-b-emerald-600 bg-gradient-to-b from-white to-emerald-50/80",
   },
   {
     id: "chip-servicios",
-    title: "Luz / Internet / Celular",
-    amount: 499,
-    dueInDays: 2,
+    emoji: "📱",
+    title: "Celular / Internet",
+    amount: 550,
+    dueInDays: 3,
     category: "Servicios",
-    icon: Zap,
+    cardStyle:
+      "border-sky-300 border-b-sky-500 bg-gradient-to-b from-white to-sky-50/70",
   },
   {
-    id: "chip-super",
-    title: "Súper de la semana",
-    amount: 900,
-    dueInDays: 5,
-    category: "Esenciales",
-    icon: ShoppingBag,
+    id: "chip-tdc",
+    emoji: "💳",
+    title: "Tarjeta de crédito",
+    amount: 1200,
+    dueInDays: 4,
+    category: "Deuda",
+    cardStyle:
+      "border-amber-300 border-b-amber-500 bg-gradient-to-b from-white to-amber-50/70",
+  },
+  {
+    id: "chip-renta",
+    emoji: "🏡",
+    title: "Renta o Depa",
+    amount: 2200,
+    dueInDays: 2,
+    category: "Vivienda",
+    cardStyle:
+      "border-rose-300 border-b-rose-500 bg-gradient-to-b from-white to-rose-50/70",
   },
 ];
 
-const GOAL_PRESETS = [
-  { title: "Fondo de emergencia", amount: 15000, icon: ShieldCheck },
-  { title: "Laptop", amount: 18000, icon: Laptop },
-  { title: "Viaje", amount: 12000, icon: Plane },
+const GOAL_CARDS = [
+  {
+    id: "emergencia",
+    emoji: "🛡️",
+    title: "Fondo de paz",
+    amount: 15000,
+    icon: ShieldCheck,
+    cardStyle:
+      "border-emerald-300 border-b-emerald-600 bg-gradient-to-b from-white to-emerald-50/80",
+  },
+  {
+    id: "laptop",
+    emoji: "💻",
+    title: "Laptop nueva",
+    amount: 18000,
+    icon: Laptop,
+    cardStyle:
+      "border-sky-300 border-b-sky-500 bg-gradient-to-b from-white to-sky-50/70",
+  },
+  {
+    id: "viaje",
+    emoji: "✈️",
+    title: "Viaje con amigos",
+    amount: 12000,
+    icon: Plane,
+    cardStyle:
+      "border-amber-300 border-b-amber-500 bg-gradient-to-b from-white to-amber-50/70",
+  },
+  {
+    id: "auto",
+    emoji: "🚗",
+    title: "Moto o Auto",
+    amount: 35000,
+    icon: Car,
+    cardStyle:
+      "border-purple-300 border-b-purple-500 bg-gradient-to-b from-white to-purple-50/70",
+  },
 ];
 
-const stepVariants = {
-  enter: (direction: number) => ({
-    x: direction > 0 ? 28 : -28,
-    opacity: 0,
-  }),
-  center: {
-    x: 0,
-    opacity: 1,
-    transition: {
-      duration: 0.38,
-      ease: [0.22, 1, 0.36, 1] as const,
-    },
-  },
-  exit: (direction: number) => ({
-    x: direction < 0 ? 28 : -28,
-    opacity: 0,
-    transition: {
-      duration: 0.25,
-      ease: [0.22, 1, 0.36, 1] as const,
-    },
-  }),
-};
+const UNLOCKED_LEVEL_BADGES: {
+  level: PlantLevel;
+  emoji: string;
+  name: string;
+}[] = [
+  { level: 1, emoji: "🌱", name: "1. Supervivencia 🌱" },
+  { level: 2, emoji: "🌿", name: "2. Estabilidad 🌿" },
+  { level: 3, emoji: "🪴", name: "3. Seguridad 🪴" },
+  { level: 4, emoji: "🌳", name: "4. Libertad 🌳" },
+  { level: 5, emoji: "✨", name: "5. Abundancia ✨" },
+];
 
-export default function OnboardingPage() {
+/**
+ * Reactive Animated Plant Header that reacts and grows from Step 1 to Step 4
+ */
+function OnboardingReactivePlant({
+  step,
+  balancePreview,
+}: {
+  step: number;
+  balancePreview: number;
+}) {
+  const moodEmoji =
+    step === 1
+      ? "🌱"
+      : step === 2
+      ? balancePreview >= 4500
+        ? "💎"
+        : balancePreview >= 2500
+        ? "💰"
+        : "🪙"
+      : step === 3
+      ? "🛡️"
+      : "🌳";
+
+  const stepBadgeText =
+    step === 1
+      ? "Semilla lista"
+      : step === 2
+      ? `Nutriendo +$${balancePreview.toLocaleString()}`
+      : step === 3
+      ? "Escudo activo"
+      : "¡Casi florece!";
+
+  return (
+    <motion.div
+      key={`plant-stage-${step}-${balancePreview}`}
+      initial={{ scale: 0.92, opacity: 0.85 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={{ type: "spring", stiffness: 320, damping: 20 }}
+      className="relative mx-auto flex flex-col items-center justify-center pt-1 pb-2"
+    >
+      <div className="relative w-28 h-24 flex items-center justify-center">
+        <motion.div
+          animate={{ scale: [1, 1.1, 1], opacity: [0.35, 0.65, 0.35] }}
+          transition={{ duration: 2.6, repeat: Infinity }}
+          className="absolute w-24 h-24 rounded-full bg-gradient-to-tr from-emerald-300/50 via-teal-200/40 to-amber-200/40 blur-lg"
+        />
+
+        <svg
+          viewBox="0 0 140 120"
+          className="w-full h-full overflow-visible drop-shadow-xs"
+          aria-label="Tu planta financiera reaccionando"
+        >
+          {/* Shadow & Terracotta Pot */}
+          <ellipse cx="70" cy="110" rx="34" ry="6" fill="#E2DCD3" />
+          <path
+            d="M46 80 L94 80 L87 107 C86 109 84 110 81 110 L59 110 C56 110 54 109 53 107 Z"
+            fill="#D97757"
+          />
+          <rect x="42" y="74" width="56" height="8" rx="4" fill="#C86849" />
+          <ellipse cx="70" cy="75" rx="24" ry="4" fill="#78350F" />
+
+          {/* Animated Stem & Leaves growing with step */}
+          <motion.g
+            style={{ originX: "70px", originY: "75px" }}
+            animate={{ rotate: [-2.5, 2.5, -2.5], y: [0, -2, 0] }}
+            transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
+          >
+            {/* Base Sprout (Always visible) */}
+            <path
+              d={
+                step === 1
+                  ? "M70 75 Q70 60 70 54"
+                  : step === 2
+                  ? "M70 75 Q70 52 70 42"
+                  : "M70 75 Q70 44 70 30"
+              }
+              stroke="#059669"
+              strokeWidth="4.5"
+              strokeLinecap="round"
+              fill="none"
+            />
+
+            {/* Left & Right Sprout Leaves */}
+            <path
+              d="M70 60 C56 56 48 46 58 38 C65 34 70 48 70 60 Z"
+              fill="#10B981"
+            />
+            <path
+              d="M70 54 C84 50 92 40 82 32 C75 28 70 42 70 54 Z"
+              fill="#34D399"
+            />
+
+            {/* Upper Leaves unlocked on Step >= 2 */}
+            {step >= 2 && (
+              <>
+                <path
+                  d="M70 44 C54 38 50 26 60 20 C68 16 70 32 70 44 Z"
+                  fill="#059669"
+                />
+                <path
+                  d="M70 42 C86 36 90 24 80 18 C72 14 70 30 70 42 Z"
+                  fill="#10B981"
+                />
+              </>
+            )}
+
+            {/* Crown & Blossom unlocked on Step >= 3 */}
+            {step >= 3 && (
+              <circle cx="70" cy="22" r="11" fill="#34D399" />
+            )}
+            {step >= 4 && (
+              <>
+                <circle cx="62" cy="18" r="4.5" fill="#FBBF24" />
+                <circle cx="78" cy="20" r="4.5" fill="#F472B6" />
+              </>
+            )}
+          </motion.g>
+        </svg>
+
+        {/* Floating Reaction Pill */}
+        <motion.span
+          key={moodEmoji}
+          initial={{ scale: 0.5, y: 6 }}
+          animate={{ scale: 1, y: 0 }}
+          className="absolute -top-1 right-1 w-7 h-7 rounded-full bg-white border-2 border-[#E6E1DA] shadow-xs flex items-center justify-center text-sm"
+        >
+          {moodEmoji}
+        </motion.span>
+      </div>
+
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100/90 border border-emerald-300 px-3 py-0.5 text-[11px] font-bold font-heading text-emerald-950">
+        <Sparkles className="w-3 h-3 text-emerald-700" strokeWidth={1.5} />
+        {stepBadgeText}
+      </span>
+    </motion.div>
+  );
+}
+
+export default function OnboardingWizardPage() {
   const router = useRouter();
   const { completeOnboarding } = useFinancial();
 
-  const [step, setStep] = useState(1);
-  const [direction, setDirection] = useState(1);
-  const [isCalculating, setIsCalculating] = useState(false);
+  const [step, setStep] = useState<number>(1);
+  const [isUnlockedScreen, setIsUnlockedScreen] = useState(false);
 
-  // Paso 1: Contexto de vida
-  const [selectedContext, setSelectedContext] = useState<LifeContextTag[]>([
-    "trabajo",
-  ]);
+  // Step 1: Contexto de vida (sin pedir género)
+  const [selectedLifeContext, setSelectedLifeContext] = useState<
+    LifeContextTag[]
+  >(["trabajo"]);
 
-  // Paso 2: Ingresos y liquidez actual
-  const [currentBalance, setCurrentBalance] = useState<string>("5000");
+  // Step 2: Sliders con Emojis y Niveles Visuales + Botones 1-toque
+  const [selectedQuincenaAllowance, setSelectedQuincenaAllowance] =
+    useState<number>(3000);
   const [payFrequency, setPayFrequency] = useState<PayFrequency>("quincenal");
-  const [nextPaydayDays, setNextPaydayDays] = useState<number>(6);
-  const [nextPaydayAmount, setNextPaydayAmount] = useState<string>("7500");
-  const [usedEstimateBadge, setUsedEstimateBadge] = useState(false);
+  const [nextPaydayDays] = useState<number>(6);
 
-  // Paso 3: Compromisos próximos (7 días)
+  // Step 3: Compromisos próximos (1 toque)
   const [commitments, setCommitments] = useState<Commitment[]>([]);
-  const [customCommitmentTitle, setCustomCommitmentTitle] = useState("");
-  const [customCommitmentAmount, setCustomCommitmentAmount] = useState("");
 
-  // Paso 4: Meta principal
-  const [goalTitle, setGoalTitle] = useState("Fondo de emergencia");
-  const [goalTargetAmount, setGoalTargetAmount] = useState<string>("15000");
+  // Step 4: Meta principal (1 toque)
+  const [selectedGoalTitle, setSelectedGoalTitle] = useState<string>(
+    "Fondo de paz"
+  );
+  const [selectedGoalAmount, setSelectedGoalAmount] = useState<number>(15000);
 
   const progressPercentage = (step / TOTAL_STEPS) * 100;
 
-  const toggleLifeContext = (tag: LifeContextTag) => {
-    setSelectedContext((prev) =>
-      prev.includes(tag) ? prev.filter((item) => item !== tag) : [...prev, tag]
-    );
-  };
+  // Step 1 tap: Auto-advance on tap with playTap()
+  const handleSelectLifeCard = (tag: LifeContextTag) => {
+    playTap();
+    const updated = selectedLifeContext.includes(tag)
+      ? selectedLifeContext
+      : [tag, ...selectedLifeContext.slice(0, 1)];
+    setSelectedLifeContext(updated);
 
-  const handleApplyRealisticEstimate = () => {
-    const estimate = getRealisticEstimateForContext(selectedContext);
-    setCurrentBalance(String(estimate.currentBalance));
-    setPayFrequency(estimate.payFrequency);
-    setNextPaydayDays(estimate.nextPaydayDays);
-    setNextPaydayAmount(String(estimate.nextPaydayAmount));
-    setUsedEstimateBadge(true);
-  };
-
-  const toggleCommitmentChip = (chip: (typeof QUICK_COMMITMENT_CHIPS)[number]) => {
-    setCommitments((prev) => {
-      const exists = prev.some((c) => c.id === chip.id);
-      if (exists) {
-        return prev.filter((c) => c.id !== chip.id);
-      }
-      return [
-        ...prev,
-        {
-          id: chip.id,
-          title: chip.title,
-          amount: chip.amount,
-          dueInDays: chip.dueInDays,
-          category: chip.category,
-        },
-      ];
-    });
-  };
-
-  const handleAddCustomCommitment = (e: React.FormEvent) => {
-    e.preventDefault();
-    const amountNum = Number(customCommitmentAmount);
-    if (!customCommitmentTitle.trim() || !amountNum || amountNum <= 0) return;
-
-    setCommitments((prev) => [
-      ...prev,
-      {
-        id: `custom-${Date.now()}`,
-        title: customCommitmentTitle.trim(),
-        amount: amountNum,
-        dueInDays: 4,
-        category: "Otro",
-      },
-    ]);
-    setCustomCommitmentTitle("");
-    setCustomCommitmentAmount("");
-  };
-
-  const handleRemoveCommitment = (id: string) => {
-    setCommitments((prev) => prev.filter((c) => c.id !== id));
-  };
-
-  const goNext = () => {
-    if (step < TOTAL_STEPS) {
-      setDirection(1);
-      setStep((s) => s + 1);
+    // Pre-tune slider default based on context
+    if (tag === "estudio") {
+      setSelectedQuincenaAllowance(1500);
+    } else if (tag === "dependientes" || tag === "independiente") {
+      setSelectedQuincenaAllowance(5000);
     } else {
-      handleFinishOnboarding();
+      setSelectedQuincenaAllowance(3000);
     }
+
+    setTimeout(() => {
+      setStep(2);
+    }, 160);
   };
 
-  const goBack = () => {
-    if (step > 1) {
-      setDirection(-1);
-      setStep((s) => s - 1);
-    }
+  // Step 2 tap: 1-tap Tier button auto-advances immediately
+  const handleSelectQuincenaTier = (
+    tier: (typeof QUINCENA_LEVEL_TIERS)[number]
+  ) => {
+    playTap();
+    setSelectedQuincenaAllowance(tier.currentBalance);
+    setPayFrequency(tier.payFrequency);
+
+    setTimeout(() => {
+      setStep(3);
+    }, 160);
   };
 
-  const handleFinishOnboarding = () => {
-    setIsCalculating(true);
+  // Step 3 tap: 1-tap Commitment card auto-advances immediately
+  const handleSelectCommitmentCard = (
+    card: (typeof QUICK_COMMITMENT_CARDS)[number]
+  ) => {
+    playTap();
+    if (card.amount <= 0) {
+      setCommitments([]);
+    } else {
+      setCommitments([
+        {
+          id: card.id,
+          title: card.title,
+          amount: card.amount,
+          dueInDays: card.dueInDays,
+          category: card.category,
+        },
+      ]);
+    }
+
+    setTimeout(() => {
+      setStep(4);
+    }, 160);
+  };
+
+  // Step 4 tap: Final tap -> completeOnboarding + playLevelUp() + Confetti + Unlocked Financial Plant Card
+  const handleSelectGoalAndFinish = (goal: (typeof GOAL_CARDS)[number]) => {
+    playTap();
+    setSelectedGoalTitle(goal.title);
+    setSelectedGoalAmount(goal.amount);
+
+    const commitmentSum = commitments.reduce((acc, c) => acc + c.amount, 0);
+    // Ensure their currentBalance reflects their chosen free quincena + essentials so their plant level matches cleanly
+    const computedCurrentBalance =
+      selectedQuincenaAllowance + commitmentSum + 1400;
+    const computedNextPaydayAmount = Math.max(
+      3200,
+      Math.round(selectedQuincenaAllowance * 1.9)
+    );
 
     completeOnboarding({
-      lifeContext: selectedContext.length > 0 ? selectedContext : ["trabajo"],
-      currentBalance: Math.max(0, Number(currentBalance) || 0),
+      lifeContext:
+        selectedLifeContext.length > 0 ? selectedLifeContext : ["trabajo"],
+      currentBalance: computedCurrentBalance,
       payFrequency,
-      nextPaydayDays: Math.max(1, nextPaydayDays),
-      nextPaydayAmount: Math.max(0, Number(nextPaydayAmount) || 0),
+      nextPaydayDays,
+      nextPaydayAmount: computedNextPaydayAmount,
       commitments,
-      goalTitle: goalTitle.trim() || "Fondo de emergencia",
-      goalTargetAmount: Math.max(500, Number(goalTargetAmount) || 10000),
+      goalTitle: goal.title,
+      goalTargetAmount: goal.amount,
     });
 
     setTimeout(() => {
-      router.push("/app");
-    }, 1750);
+      setIsUnlockedScreen(true);
+      playLevelUp();
+    }, 180);
   };
 
+  // Calculate unlocked level for the celebration screen
+  const unlockedLevel: PlantLevel =
+    selectedQuincenaAllowance >= 5000
+      ? 4
+      : selectedQuincenaAllowance >= 3000
+      ? 3
+      : 2;
+
+  const unlockedMeta =
+    UNLOCKED_LEVEL_BADGES.find((b) => b.level === unlockedLevel) ??
+    UNLOCKED_LEVEL_BADGES[1];
+
   return (
-    <div className="min-h-screen bg-[#FAF8F5] text-slate-900 flex flex-col justify-between font-sans relative overflow-hidden">
-      {/* Top Navbar + Animated Progress Bar */}
+    <div className="min-h-screen bg-[#FAF8F5] text-slate-900 flex flex-col justify-between relative overflow-hidden">
+      {/* Warm Ambient Glow */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 -z-10 overflow-hidden flex justify-center"
+      >
+        <div className="w-[620px] h-[360px] rounded-full bg-gradient-to-b from-emerald-100/60 via-[#EDE6DA]/40 to-transparent blur-3xl -top-16 absolute" />
+      </div>
+
+      {/* Minimalist Top Bar + Duolingo Animated Progress Bar */}
       <header className="sticky top-0 z-30 bg-[#FAF8F5]/90 backdrop-blur-md border-b border-[#E6E1DA]/80">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="w-8 h-8 rounded-xl bg-slate-900 text-[#FAF8F5] flex items-center justify-center shadow-2xs">
-              <Compass className="w-4 h-4" strokeWidth={1.5} />
-            </div>
-            <span className="text-sm font-semibold tracking-tight text-slate-900">
-              AntesDeGastar
-            </span>
-          </Link>
-
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-medium text-slate-500">
-              Paso <strong className="text-slate-900">{step}</strong> de{" "}
-              {TOTAL_STEPS}
-            </span>
-            <Badge
-              variant="outline"
-              className="border-[#DCD5CA] bg-white text-slate-700 text-[11px] font-medium hidden sm:inline-flex"
+        <div className="max-w-lg mx-auto px-4 h-14 flex items-center justify-between gap-3">
+          {step > 1 && !isUnlockedScreen ? (
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.94 }}
+              onClick={() => {
+                playTap();
+                setStep((s) => Math.max(1, s - 1));
+              }}
+              className="h-9 px-3 rounded-xl border-2 border-b-4 border-[#DCD5CA] bg-white text-slate-800 text-xs font-bold font-heading flex items-center gap-1 cursor-pointer active:border-b-2 active:translate-y-0.5"
             >
-              ~60 segundos
-            </Badge>
-          </div>
-        </div>
+              <ArrowLeft className="w-3.5 h-3.5" strokeWidth={1.5} />
+              <span>Atrás</span>
+            </motion.button>
+          ) : (
+            <Link
+              href="/auth"
+              onClick={() => playTap()}
+              className="flex items-center gap-2 group"
+            >
+              <div className="w-8 h-8 rounded-xl bg-slate-900 text-[#FAF8F5] flex items-center justify-center shadow-2xs">
+                <Compass className="w-4 h-4" strokeWidth={1.5} />
+              </div>
+              <span className="text-sm font-bold font-heading text-slate-900">
+                AntesDeGastar
+              </span>
+            </Link>
+          )}
 
-        {/* Framer Motion Top Progress Bar */}
-        <div className="w-full h-1 bg-[#EAE5DC] overflow-hidden">
-          <motion.div
-            className="h-full bg-slate-900"
-            initial={{ width: "25%" }}
-            animate={{ width: `${progressPercentage}%` }}
-            transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-          />
+          {/* Duolingo-style Chunky Progress Bar */}
+          {!isUnlockedScreen && (
+            <div className="flex-1 max-w-[200px] h-3.5 bg-[#E6E1DA] rounded-full overflow-hidden p-0.5">
+              <motion.div
+                className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400"
+                initial={{ width: "25%" }}
+                animate={{ width: `${progressPercentage}%` }}
+                transition={{ type: "spring", stiffness: 260, damping: 24 }}
+              />
+            </div>
+          )}
+
+          <span className="text-xs font-bold font-heading text-slate-600 bg-white border border-[#E6E1DA] px-2.5 py-1 rounded-full">
+            {isUnlockedScreen ? "🎉 Listo" : `${step}/${TOTAL_STEPS}`}
+          </span>
         </div>
       </header>
 
-      {/* Main Wizard Area */}
-      <main className="flex-1 flex items-center justify-center px-4 sm:px-6 py-10">
-        <div className="w-full max-w-xl">
-          <AnimatePresence mode="wait" custom={direction}>
-            {isCalculating ? (
+      {/* Main Tactile Wizard Stage */}
+      <main className="flex-1 flex flex-col items-center justify-center px-4 py-4 sm:py-6">
+        <div className="w-full max-w-md mx-auto">
+          <AnimatePresence mode="wait">
+            {isUnlockedScreen ? (
+              /* FINAL CELEBRATION: Unlocked Financial Plant Card + Confetti */
               <motion.div
-                key="calculating-screen"
-                initial={{ opacity: 0, scale: 0.96 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.4 }}
-                className="text-center py-12 px-6 rounded-3xl border border-[#E6E1DA] bg-white shadow-sm space-y-6"
+                key="unlocked-plant-celebration"
+                initial={{ opacity: 0, scale: 0.92, y: 16 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ type: "spring", stiffness: 280, damping: 22 }}
+                className="space-y-4 text-center"
               >
-                <div className="w-14 h-14 rounded-2xl bg-slate-900 text-[#FAF8F5] flex items-center justify-center mx-auto shadow-xs">
-                  <Loader2 className="w-7 h-7 animate-spin" strokeWidth={1.5} />
+                <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 border-2 border-amber-300 px-3.5 py-1 text-xs font-bold font-heading text-amber-950 shadow-2xs">
+                  <Award className="w-4 h-4 text-amber-700" strokeWidth={1.5} />
+                  <span>¡Planta Financiera Desbloqueada!</span>
                 </div>
 
-                <div className="space-y-2">
-                  <Badge
-                    variant="outline"
-                    className="border-emerald-300 bg-emerald-50 text-emerald-900 text-xs font-medium px-3 py-0.5"
-                  >
-                    Motor financiero listo
-                  </Badge>
-                  <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-slate-900">
-                    Calculando tu liquidez real...
-                  </h2>
-                  <p className="text-sm text-slate-600 max-w-md mx-auto leading-relaxed">
-                    Separando tus compromisos de los próximos días y protegiendo tu meta{" "}
-                    <span className="font-medium text-slate-900">
-                      “{goalTitle || "Fondo de emergencia"}”
-                    </span>{" "}
-                    para mostrarte cuánto puedes gastar con tranquilidad.
-                  </p>
+                {/* Maximum 6 words title */}
+                <h1 className="text-2xl sm:text-3xl font-bold font-heading text-slate-900 tracking-tight">
+                  ¡Desbloqueaste tu Planta Financiera! 🌱
+                </h1>
+
+                {/* Unlocked Level Pills (1 to 5 visual progression) */}
+                <div className="flex flex-wrap items-center justify-center gap-1.5">
+                  {UNLOCKED_LEVEL_BADGES.map((item) => {
+                    const isCurrent = item.level === unlockedLevel;
+                    return (
+                      <button
+                        key={item.level}
+                        type="button"
+                        onClick={() => playLevelUp()}
+                        className={`px-2.5 py-1 rounded-xl text-[11px] font-bold font-heading border transition-all cursor-pointer ${
+                          isCurrent
+                            ? "bg-slate-900 text-white border-slate-900 shadow-xs scale-105"
+                            : "bg-white/80 text-slate-500 border-[#E6E1DA]"
+                        }`}
+                      >
+                        {item.name}
+                      </button>
+                    );
+                  })}
                 </div>
 
-                <div className="max-w-xs mx-auto space-y-2 pt-2 text-left text-xs text-slate-600">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2
-                      className="w-4 h-4 text-emerald-700 shrink-0"
-                      strokeWidth={1.5}
-                    />
-                    <span>Contexto: {buildRoleTagFromContext(selectedContext)}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2
-                      className="w-4 h-4 text-emerald-700 shrink-0"
-                      strokeWidth={1.5}
-                    />
-                    <span>
-                      Saldo base: ${Number(currentBalance || 0).toLocaleString()} MXN
+                {/* Protagonist Financial Plant Widget */}
+                <div className="text-left">
+                  <FinancialPlantWidget
+                    simulationState="recovered"
+                    compact
+                    allowLevelPreview
+                  />
+                </div>
+
+                {/* Quick Summary Chips */}
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="p-3 rounded-2xl bg-white border-2 border-b-4 border-[#E6E1DA] text-left">
+                    <span className="text-[10px] font-bold uppercase text-slate-400 block">
+                      Quincena libre
+                    </span>
+                    <span className="text-lg font-bold font-heading text-emerald-700">
+                      ${selectedQuincenaAllowance.toLocaleString()} MXN
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2
-                      className="w-4 h-4 text-emerald-700 shrink-0"
-                      strokeWidth={1.5}
-                    />
-                    <span>
-                      Compromisos próximos: {commitments.length} registrados
+                  <div className="p-3 rounded-2xl bg-white border-2 border-b-4 border-[#E6E1DA] text-left">
+                    <span className="text-[10px] font-bold uppercase text-slate-400 block">
+                      Tu Meta
+                    </span>
+                    <span className="text-sm font-bold font-heading text-slate-900 truncate block">
+                      {selectedGoalTitle} (${selectedGoalAmount.toLocaleString()})
                     </span>
                   </div>
                 </div>
+
+                {/* 3D Primary Action Button to enter /app */}
+                <motion.button
+                  type="button"
+                  whileTap={{ scale: 0.96 }}
+                  onClick={() => {
+                    playCoin();
+                    router.push("/app");
+                  }}
+                  className="w-full h-14 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold font-heading text-base border-2 border-emerald-700 border-b-4 border-b-emerald-800 active:border-b-2 active:translate-y-0.5 shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>Entrar a mi Copiloto</span>
+                  <ArrowRight className="w-5 h-5" strokeWidth={1.5} />
+                </motion.button>
               </motion.div>
             ) : (
+              /* STEPS 1 TO 4: Zero Visual Noise + Reactive Plant + 3D Auto-Advance Cards */
               <motion.div
                 key={`step-${step}`}
-                custom={direction}
-                variants={stepVariants}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                className="space-y-6"
+                initial={{ opacity: 0, x: 24 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -24 }}
+                transition={{ duration: 0.22, ease: "easeOut" }}
+                className="space-y-4"
               >
-                {/* PASO 1: Contexto de vida */}
+                {/* Reactive Plant at the top */}
+                <OnboardingReactivePlant
+                  step={step}
+                  balancePreview={selectedQuincenaAllowance}
+                />
+
+                {/* STEP 1: Contexto de vida (Max 6 words title, 3D tactile cards, auto-advance, NO gender) */}
                 {step === 1 && (
-                  <div className="space-y-6">
-                    <div className="space-y-2">
-                      <span className="text-xs font-medium uppercase tracking-wider text-slate-500">
-                        1 · Tu contexto actual
-                      </span>
-                      <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-slate-900">
-                        ¿Cómo describirías tu momento de vida hoy?
-                      </h1>
-                      <p className="text-sm text-slate-600">
-                        Selecciona todas las opciones que apliquen. Esto nos ayuda a calibrar tu colchón de seguridad sin pedir datos sensibles.
-                      </p>
-                    </div>
+                  <div className="space-y-4">
+                    <h1 className="text-2xl sm:text-3xl font-bold font-heading text-center text-slate-900 tracking-tight">
+                      ¿Cuál es tu ritmo hoy?
+                    </h1>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                      {LIFE_OPTIONS.map((option) => {
-                        const Icon = option.icon;
-                        const isSelected = selectedContext.includes(option.id);
+                    <div className="grid grid-cols-2 gap-3">
+                      {LIFE_CONTEXT_CARDS.map((item) => {
+                        const Icon = item.icon;
                         return (
                           <motion.button
-                            key={option.id}
+                            key={item.id}
                             type="button"
-                            whileHover={{ y: -2 }}
-                            whileTap={{ scale: 0.99 }}
-                            onClick={() => toggleLifeContext(option.id)}
-                            className={`text-left p-4 rounded-2xl border transition-all flex flex-col justify-between gap-4 cursor-pointer ${
-                              isSelected
-                                ? "bg-slate-900 text-[#FAF8F5] border-slate-900 shadow-sm"
-                                : "bg-white text-slate-900 border-[#E6E1DA] hover:border-slate-400"
-                            }`}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => handleSelectLifeCard(item.id)}
+                            className={`p-4 rounded-3xl border-2 border-b-4 active:border-b-2 active:translate-y-0.5 transition-all text-left flex flex-col justify-between gap-3 cursor-pointer shadow-2xs hover:shadow-md ${item.cardStyle}`}
                           >
-                            <div className="flex items-center justify-between w-full">
-                              <div
-                                className={`w-10 h-10 rounded-xl flex items-center justify-center border ${
-                                  isSelected
-                                    ? "bg-white/10 border-white/20 text-[#FAF8F5]"
-                                    : "bg-[#FAF8F5] border-[#E6E1DA] text-slate-900"
-                                }`}
-                              >
-                                <Icon className="w-5 h-5" strokeWidth={1.5} />
-                              </div>
-                              <div
-                                className={`w-5 h-5 rounded-full border flex items-center justify-center ${
-                                  isSelected
-                                    ? "bg-emerald-400 border-emerald-400 text-slate-950"
-                                    : "border-slate-300"
-                                }`}
-                              >
-                                {isSelected && (
-                                  <Check className="w-3.5 h-3.5" strokeWidth={2} />
-                                )}
-                              </div>
-                            </div>
-
-                            <div>
-                              <p
-                                className={`text-base font-semibold ${
-                                  isSelected ? "text-white" : "text-slate-900"
-                                }`}
-                              >
-                                {option.title}
-                              </p>
-                              <p
-                                className={`text-xs mt-1 leading-relaxed ${
-                                  isSelected ? "text-slate-300" : "text-slate-500"
-                                }`}
-                              >
-                                {option.description}
-                              </p>
-                            </div>
-                          </motion.button>
-                        );
-                      })}
-                    </div>
-
-                    <div className="flex items-center justify-between pt-4">
-                      <Link
-                        href="/auth"
-                        className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-900 transition-colors"
-                      >
-                        <ArrowLeft className="w-3.5 h-3.5" strokeWidth={1.5} />
-                        Volver a acceso
-                      </Link>
-
-                      <Button
-                        type="button"
-                        onClick={goNext}
-                        disabled={selectedContext.length === 0}
-                        size="lg"
-                        className="h-11 px-6 rounded-xl bg-slate-900 text-[#FAF8F5] hover:bg-slate-800 text-sm font-medium gap-2 cursor-pointer"
-                      >
-                        Continuar
-                        <ArrowRight className="w-4 h-4" strokeWidth={1.5} />
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {/* PASO 2: Ingresos y liquidez actual */}
-                {step === 2 && (
-                  <div className="space-y-6">
-                    <div className="space-y-2">
-                      <span className="text-xs font-medium uppercase tracking-wider text-slate-500">
-                        2 · Ingresos y liquidez actual
-                      </span>
-                      <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-slate-900">
-                        ¿Cuánto tienes disponible hoy y cada cuándo recibes ingresos?
-                      </h1>
-                      <p className="text-sm text-slate-600">
-                        No necesitas el centavo exacto; un aproximado basta para calcular tu margen real hasta tu próximo cobro.
-                      </p>
-                    </div>
-
-                    {/* Botón destacado: No estoy seguro, usar un estimado */}
-                    <motion.button
-                      type="button"
-                      whileHover={{ scale: 1.005 }}
-                      whileTap={{ scale: 0.995 }}
-                      onClick={handleApplyRealisticEstimate}
-                      className="w-full text-left rounded-2xl border border-emerald-300/90 bg-emerald-50/70 hover:bg-emerald-50 p-4 transition-all flex items-center justify-between gap-3 cursor-pointer"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-white border border-emerald-200 text-emerald-800 flex items-center justify-center shrink-0">
-                          <Sparkles className="w-4 h-4" strokeWidth={1.5} />
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">
-                            No estoy seguro, usar un estimado
-                          </p>
-                          <p className="text-xs text-slate-600">
-                            Autocompletar valores realistas según:{" "}
-                            <span className="font-medium text-slate-800">
-                              {buildRoleTagFromContext(selectedContext)}
-                            </span>
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-xs font-medium text-emerald-800 bg-white px-2.5 py-1 rounded-lg border border-emerald-200 shrink-0">
-                        Autocompletar
-                      </span>
-                    </motion.button>
-
-                    <Card className="bg-white border-[#E6E1DA] shadow-2xs py-5">
-                      <CardContent className="px-5 space-y-5">
-                        {usedEstimateBadge && (
-                          <div className="rounded-lg bg-[#FAF8F5] border border-[#E6E1DA] px-3 py-2 text-xs text-slate-700 flex items-center justify-between">
-                            <span>
-                              ✓ Estimado aplicado según tu perfil. Puedes ajustarlo libremente.
-                            </span>
-                          </div>
-                        )}
-
-                        <div>
-                          <label className="block text-xs font-medium text-slate-700 mb-1.5">
-                            Saldo disponible hoy ($ MXN)
-                          </label>
-                          <div className="relative">
-                            <Wallet
-                              className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"
-                              strokeWidth={1.5}
-                            />
-                            <input
-                              type="number"
-                              min={0}
-                              value={currentBalance}
-                              onChange={(e) => setCurrentBalance(e.target.value)}
-                              placeholder="Ej. 5000"
-                              className="w-full h-11 pl-10 pr-14 rounded-xl border border-[#E6E1DA] bg-[#FAF8F5]/70 text-base font-semibold text-slate-900 focus:bg-white focus:border-slate-900 focus:outline-none"
-                            />
-                            <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-mono text-slate-400">
-                              MXN
-                            </span>
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-medium text-slate-700 mb-1.5">
-                            ¿Cada cuándo recibes ingresos?
-                          </label>
-                          <div className="grid grid-cols-3 gap-2">
-                            {(
-                              [
-                                { id: "semanal", label: "Semanal", defaultDays: 5 },
-                                { id: "quincenal", label: "Quincenal", defaultDays: 6 },
-                                { id: "mensual", label: "Mensual", defaultDays: 12 },
-                              ] as const
-                            ).map((freq) => (
-                              <button
-                                key={freq.id}
-                                type="button"
-                                onClick={() => {
-                                  setPayFrequency(freq.id);
-                                  setNextPaydayDays(freq.defaultDays);
-                                }}
-                                className={`py-2.5 px-3 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
-                                  payFrequency === freq.id
-                                    ? "bg-slate-900 text-[#FAF8F5] border-slate-900"
-                                    : "bg-[#FAF8F5] text-slate-700 border-[#E6E1DA] hover:border-slate-400"
-                                }`}
-                              >
-                                {freq.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                          <div>
-                            <label className="block text-xs font-medium text-slate-700 mb-1.5">
-                              Días para tu próximo pago
-                            </label>
-                            <div className="relative">
-                              <Calendar
-                                className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"
-                                strokeWidth={1.5}
-                              />
-                              <input
-                                type="number"
-                                min={1}
-                                max={31}
-                                value={nextPaydayDays}
-                                onChange={(e) =>
-                                  setNextPaydayDays(Math.max(1, Number(e.target.value)))
-                                }
-                                className="w-full h-10 pl-10 pr-12 rounded-xl border border-[#E6E1DA] bg-[#FAF8F5]/70 text-sm font-medium text-slate-900 focus:bg-white focus:border-slate-900 focus:outline-none"
-                              />
-                              <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-slate-400">
-                                días
-                              </span>
-                            </div>
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-medium text-slate-700 mb-1.5">
-                              Monto aproximado de tu próximo ingreso
-                            </label>
-                            <input
-                              type="number"
-                              min={0}
-                              value={nextPaydayAmount}
-                              onChange={(e) => setNextPaydayAmount(e.target.value)}
-                              placeholder="Ej. 7500"
-                              className="w-full h-10 px-3.5 rounded-xl border border-[#E6E1DA] bg-[#FAF8F5]/70 text-sm font-medium text-slate-900 focus:bg-white focus:border-slate-900 focus:outline-none"
-                            />
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <div className="flex items-center justify-between pt-2">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={goBack}
-                        className="h-11 px-4 rounded-xl text-slate-600 hover:text-slate-900 gap-1.5 cursor-pointer"
-                      >
-                        <ArrowLeft className="w-4 h-4" strokeWidth={1.5} />
-                        Atrás
-                      </Button>
-
-                      <Button
-                        type="button"
-                        onClick={goNext}
-                        size="lg"
-                        className="h-11 px-6 rounded-xl bg-slate-900 text-[#FAF8F5] hover:bg-slate-800 text-sm font-medium gap-2 cursor-pointer"
-                      >
-                        Continuar
-                        <ArrowRight className="w-4 h-4" strokeWidth={1.5} />
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {/* PASO 3: Compromisos próximos */}
-                {step === 3 && (
-                  <div className="space-y-6">
-                    <div className="space-y-2">
-                      <span className="text-xs font-medium uppercase tracking-wider text-slate-500">
-                        3 · Compromisos en puerta
-                      </span>
-                      <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-slate-900">
-                        ¿Tienes algún pago fuerte en los próximos 7 días?
-                      </h1>
-                      <p className="text-sm text-slate-600">
-                        Toca un chip rápido para apartar ese dinero de tu saldo disponible en un clic, o salta este paso si ya tienes todo cubierto.
-                      </p>
-                    </div>
-
-                    {/* Chips rápidos para agregar en un clic */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                      {QUICK_COMMITMENT_CHIPS.map((chip) => {
-                        const Icon = chip.icon;
-                        const active = commitments.some((c) => c.id === chip.id);
-                        return (
-                          <motion.button
-                            key={chip.id}
-                            type="button"
-                            whileHover={{ y: -1.5 }}
-                            whileTap={{ scale: 0.99 }}
-                            onClick={() => toggleCommitmentChip(chip)}
-                            className={`p-3.5 rounded-xl border text-left transition-all flex items-center justify-between gap-3 cursor-pointer ${
-                              active
-                                ? "bg-slate-900 text-[#FAF8F5] border-slate-900 shadow-2xs"
-                                : "bg-white text-slate-900 border-[#E6E1DA] hover:border-slate-400"
-                            }`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div
-                                className={`w-8 h-8 rounded-lg flex items-center justify-center border ${
-                                  active
-                                    ? "bg-white/10 border-white/20 text-white"
-                                    : "bg-[#FAF8F5] border-[#E6E1DA] text-slate-700"
-                                }`}
-                              >
+                            <div className="flex items-center justify-between">
+                              <span className="text-2xl">{item.emoji}</span>
+                              <div className="w-8 h-8 rounded-xl bg-white/90 border border-slate-200/80 flex items-center justify-center text-slate-800">
                                 <Icon className="w-4 h-4" strokeWidth={1.5} />
                               </div>
-                              <div>
-                                <p className="text-xs font-semibold">
-                                  {chip.title}
-                                </p>
-                                <p
-                                  className={`text-[11px] font-mono ${
-                                    active ? "text-emerald-300" : "text-slate-500"
-                                  }`}
-                                >
-                                  ${chip.amount.toLocaleString()} MXN · en {chip.dueInDays}d
-                                </p>
-                              </div>
                             </div>
-                            <span
-                              className={`text-xs font-medium px-2 py-0.5 rounded-md ${
-                                active
-                                  ? "bg-white/15 text-white"
-                                  : "bg-[#FAF8F5] text-slate-600"
-                              }`}
-                            >
-                              {active ? "Agregado ✓" : "+ Agregar"}
-                            </span>
+                            <div>
+                              <p className="text-base font-bold font-heading text-slate-900 leading-tight">
+                                {item.title}
+                              </p>
+                              <span className="text-[11px] font-semibold text-slate-500">
+                                {item.tag}
+                              </span>
+                            </div>
                           </motion.button>
                         );
                       })}
-                    </div>
-
-                    {/* Agregar compromiso personalizado */}
-                    <Card className="bg-white border-[#E6E1DA] shadow-2xs py-4">
-                      <CardContent className="px-4 space-y-3">
-                        <form
-                          onSubmit={handleAddCustomCommitment}
-                          className="flex flex-col sm:flex-row gap-2"
-                        >
-                          <input
-                            type="text"
-                            value={customCommitmentTitle}
-                            onChange={(e) => setCustomCommitmentTitle(e.target.value)}
-                            placeholder="Otro pago (ej. Dentista, Gasolina...)"
-                            className="flex-1 h-9 px-3 rounded-lg border border-[#E6E1DA] bg-[#FAF8F5]/70 text-xs text-slate-900 focus:bg-white focus:border-slate-900 focus:outline-none"
-                          />
-                          <div className="flex gap-2">
-                            <input
-                              type="number"
-                              min={1}
-                              value={customCommitmentAmount}
-                              onChange={(e) => setCustomCommitmentAmount(e.target.value)}
-                              placeholder="$ Monto"
-                              className="w-28 h-9 px-3 rounded-lg border border-[#E6E1DA] bg-[#FAF8F5]/70 text-xs text-slate-900 focus:bg-white focus:border-slate-900 focus:outline-none"
-                            />
-                            <Button
-                              type="submit"
-                              variant="outline"
-                              size="sm"
-                              className="h-9 px-3 rounded-lg border-[#E6E1DA] text-xs cursor-pointer"
-                            >
-                              <Plus className="w-3.5 h-3.5" strokeWidth={1.5} />
-                              Añadir
-                            </Button>
-                          </div>
-                        </form>
-
-                        {commitments.length > 0 && (
-                          <div className="pt-2 border-t border-[#F3EFEA] space-y-1.5">
-                            <div className="flex items-center justify-between text-[11px] text-slate-500">
-                              <span>Pagos apartados para esta semana:</span>
-                              <span className="font-mono font-semibold text-slate-900">
-                                Total: $
-                                {commitments
-                                  .reduce((sum, item) => sum + item.amount, 0)
-                                  .toLocaleString()}{" "}
-                                MXN
-                              </span>
-                            </div>
-                            {commitments.map((item) => (
-                              <div
-                                key={item.id}
-                                className="flex items-center justify-between text-xs bg-[#FAF8F5] px-3 py-1.5 rounded-lg border border-[#ECE7DF]"
-                              >
-                                <span className="font-medium text-slate-800">
-                                  {item.title}
-                                </span>
-                                <div className="flex items-center gap-2.5">
-                                  <span className="font-mono text-slate-700">
-                                    ${item.amount.toLocaleString()}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveCommitment(item.id)}
-                                    className="text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
-                                    aria-label="Eliminar compromiso"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-
-                    <div className="flex items-center justify-between pt-2">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={goBack}
-                        className="h-11 px-4 rounded-xl text-slate-600 hover:text-slate-900 gap-1.5 cursor-pointer"
-                      >
-                        <ArrowLeft className="w-4 h-4" strokeWidth={1.5} />
-                        Atrás
-                      </Button>
-
-                      <div className="flex items-center gap-2">
-                        {commitments.length === 0 && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={goNext}
-                            className="h-11 px-4 rounded-xl border-[#E6E1DA] bg-white text-slate-600 hover:text-slate-900 text-xs font-medium cursor-pointer"
-                          >
-                            Saltar paso
-                          </Button>
-                        )}
-                        <Button
-                          type="button"
-                          onClick={goNext}
-                          size="lg"
-                          className="h-11 px-6 rounded-xl bg-slate-900 text-[#FAF8F5] hover:bg-slate-800 text-sm font-medium gap-2 cursor-pointer"
-                        >
-                          Continuar
-                          <ArrowRight className="w-4 h-4" strokeWidth={1.5} />
-                        </Button>
-                      </div>
                     </div>
                   </div>
                 )}
 
-                {/* PASO 4: Tu meta principal */}
-                {step === 4 && (
-                  <div className="space-y-6">
-                    <div className="space-y-2">
-                      <span className="text-xs font-medium uppercase tracking-wider text-slate-500">
-                        4 · Tu meta principal
-                      </span>
-                      <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-slate-900">
-                        ¿Para qué estás ahorrando hoy?
-                      </h1>
-                      <p className="text-sm text-slate-600">
-                        Conectamos cada compra que consultes con esta meta para mostrarte si te acerca o te retrasa antes de pagar.
-                      </p>
-                    </div>
+                {/* STEP 2: Quincena libre con Emojis, Slider Visual y Botones 1-Toque */}
+                {step === 2 && (
+                  <div className="space-y-4">
+                    {/* Max 6 words title */}
+                    <h1 className="text-2xl sm:text-3xl font-bold font-heading text-center text-slate-900 tracking-tight">
+                      Mi quincena libre anda por:
+                    </h1>
 
-                    {/* Presets de metas */}
+                    {/* 1-Tap 3D Level Buttons (🪙 $1,500 | 💰 $3,000 | 💎 $5,000+) */}
                     <div className="grid grid-cols-3 gap-2.5">
-                      {GOAL_PRESETS.map((preset) => {
-                        const Icon = preset.icon;
-                        const isSelected = goalTitle === preset.title;
+                      {QUINCENA_LEVEL_TIERS.map((tier) => {
+                        const isSelected =
+                          Math.abs(
+                            selectedQuincenaAllowance - tier.currentBalance
+                          ) < 400;
                         return (
                           <motion.button
-                            key={preset.title}
+                            key={tier.id}
                             type="button"
-                            whileHover={{ y: -1.5 }}
-                            whileTap={{ scale: 0.99 }}
-                            onClick={() => {
-                              setGoalTitle(preset.title);
-                              setGoalTargetAmount(String(preset.amount));
-                            }}
-                            className={`p-3.5 rounded-xl border text-left transition-all flex flex-col gap-2 cursor-pointer ${
-                              isSelected
-                                ? "bg-slate-900 text-[#FAF8F5] border-slate-900 shadow-2xs"
-                                : "bg-white text-slate-900 border-[#E6E1DA] hover:border-slate-400"
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => handleSelectQuincenaTier(tier)}
+                            className={`p-3.5 rounded-3xl border-2 border-b-4 active:border-b-2 active:translate-y-0.5 transition-all flex flex-col items-center text-center gap-1.5 cursor-pointer shadow-2xs ${
+                              tier.cardStyle
+                            } ${
+                              isSelected ? "ring-2 ring-slate-900" : ""
                             }`}
                           >
-                            <Icon
-                              className={`w-4 h-4 ${
-                                isSelected ? "text-emerald-300" : "text-slate-700"
-                              }`}
-                              strokeWidth={1.5}
-                            />
-                            <div>
-                              <p className="text-xs font-semibold leading-tight">
-                                {preset.title}
-                              </p>
-                              <p
-                                className={`text-[11px] font-mono mt-0.5 ${
-                                  isSelected ? "text-slate-300" : "text-slate-500"
-                                }`}
-                              >
-                                ${preset.amount.toLocaleString()}
-                              </p>
-                            </div>
+                            <span className="text-2xl">{tier.emoji}</span>
+                            <span className="text-base sm:text-lg font-bold font-heading text-slate-900">
+                              {tier.label}
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-500">
+                              {tier.tag}
+                            </span>
                           </motion.button>
                         );
                       })}
                     </div>
 
-                    <Card className="bg-white border-[#E6E1DA] shadow-2xs py-5">
-                      <CardContent className="px-5 space-y-4">
-                        <div>
-                          <label className="block text-xs font-medium text-slate-700 mb-1.5">
-                            Nombre de tu meta
-                          </label>
-                          <div className="relative">
-                            <Target
-                              className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"
-                              strokeWidth={1.5}
-                            />
-                            <input
-                              type="text"
-                              value={goalTitle}
-                              onChange={(e) => setGoalTitle(e.target.value)}
-                              placeholder="Ej. Laptop, Viaje, Fondo de emergencia..."
-                              className="w-full h-11 pl-10 pr-4 rounded-xl border border-[#E6E1DA] bg-[#FAF8F5]/70 text-sm font-medium text-slate-900 focus:bg-white focus:border-slate-900 focus:outline-none"
-                            />
-                          </div>
-                        </div>
+                    {/* Interactive Emoji Visual Level Slider */}
+                    <div className="p-4 rounded-3xl bg-white border-2 border-b-4 border-[#E6E1DA] space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold font-heading text-slate-500 flex items-center gap-1.5">
+                          <SlidersHorizontal
+                            className="w-3.5 h-3.5 text-emerald-700"
+                            strokeWidth={1.5}
+                          />
+                          Desliza tu nivel
+                        </span>
+                        <span className="text-xl font-bold font-heading text-emerald-800">
+                          {selectedQuincenaAllowance < 2200
+                            ? "🪙"
+                            : selectedQuincenaAllowance < 4200
+                            ? "💰"
+                            : "💎"}{" "}
+                          ${selectedQuincenaAllowance.toLocaleString()} MXN
+                        </span>
+                      </div>
 
-                        <div>
-                          <label className="block text-xs font-medium text-slate-700 mb-1.5">
-                            Monto objetivo ($ MXN)
-                          </label>
-                          <div className="relative">
-                            <input
-                              type="number"
-                              min={500}
-                              value={goalTargetAmount}
-                              onChange={(e) => setGoalTargetAmount(e.target.value)}
-                              placeholder="15000"
-                              className="w-full h-11 px-4 pr-14 rounded-xl border border-[#E6E1DA] bg-[#FAF8F5]/70 text-base font-semibold text-slate-900 focus:bg-white focus:border-slate-900 focus:outline-none"
-                            />
-                            <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-mono text-slate-400">
-                              MXN
+                      <input
+                        type="range"
+                        min={500}
+                        max={8000}
+                        step={250}
+                        value={selectedQuincenaAllowance}
+                        onChange={(e) => {
+                          playTap();
+                          setSelectedQuincenaAllowance(Number(e.target.value));
+                        }}
+                        className="w-full h-3 bg-[#E6E1DA] rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                      />
+
+                      <div className="flex justify-between text-[11px] font-bold font-heading text-slate-400">
+                        <span>🪙 $500</span>
+                        <span>💰 $3,000</span>
+                        <span>💎 $8,000+</span>
+                      </div>
+
+                      <motion.button
+                        type="button"
+                        whileTap={{ scale: 0.96 }}
+                        onClick={() => {
+                          playTap();
+                          setStep(3);
+                        }}
+                        className="w-full h-11 rounded-2xl bg-slate-900 text-white font-bold font-heading text-xs border-2 border-slate-950 border-b-4 active:border-b-2 active:translate-y-0.5 flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <span>
+                          Confirmar ${selectedQuincenaAllowance.toLocaleString()}
+                        </span>
+                        <ArrowRight className="w-4 h-4" strokeWidth={1.5} />
+                      </motion.button>
+                    </div>
+                  </div>
+                )}
+
+                {/* STEP 3: Compromisos próximos (Max 6 words title, 1-tap 3D cards auto-advance) */}
+                {step === 3 && (
+                  <div className="space-y-4">
+                    <h1 className="text-2xl sm:text-3xl font-bold font-heading text-center text-slate-900 tracking-tight">
+                      ¿Pagos fuertes esta semana?
+                    </h1>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      {QUICK_COMMITMENT_CARDS.map((card) => (
+                        <motion.button
+                          key={card.id}
+                          type="button"
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => handleSelectCommitmentCard(card)}
+                          className={`p-4 rounded-3xl border-2 border-b-4 active:border-b-2 active:translate-y-0.5 transition-all text-left flex flex-col justify-between gap-2.5 cursor-pointer shadow-2xs hover:shadow-md ${card.cardStyle}`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-2xl">{card.emoji}</span>
+                            <span className="text-xs font-bold font-heading px-2 py-0.5 rounded-full bg-white/90 border border-slate-200 text-slate-800">
+                              {card.amount === 0
+                                ? "$0"
+                                : `$${card.amount.toLocaleString()}`}
                             </span>
                           </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                          <div>
+                            <p className="text-sm sm:text-base font-bold font-heading text-slate-900 leading-tight">
+                              {card.title}
+                            </p>
+                            <span className="text-[11px] font-semibold text-slate-500">
+                              {card.amount === 0
+                                ? "Sin cobros próximos"
+                                : `Vence en ${card.dueInDays} días`}
+                            </span>
+                          </div>
+                        </motion.button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-                    <div className="flex items-center justify-between pt-2">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={goBack}
-                        className="h-11 px-4 rounded-xl text-slate-600 hover:text-slate-900 gap-1.5 cursor-pointer"
-                      >
-                        <ArrowLeft className="w-4 h-4" strokeWidth={1.5} />
-                        Atrás
-                      </Button>
+                {/* STEP 4: Tu meta principal (Max 6 words title, 1-tap triggers playLevelUp + confetti) */}
+                {step === 4 && (
+                  <div className="space-y-4">
+                    <h1 className="text-2xl sm:text-3xl font-bold font-heading text-center text-slate-900 tracking-tight">
+                      ¿Cuál es tu meta principal?
+                    </h1>
 
-                      <Button
-                        type="button"
-                        onClick={handleFinishOnboarding}
-                        size="lg"
-                        className="h-11 px-7 rounded-xl bg-slate-900 text-[#FAF8F5] hover:bg-slate-800 text-sm font-medium gap-2 shadow-sm cursor-pointer"
-                      >
-                        Calcular mi liquidez real
-                        <ArrowRight className="w-4 h-4" strokeWidth={1.5} />
-                      </Button>
+                    <div className="grid grid-cols-2 gap-3">
+                      {GOAL_CARDS.map((goal) => {
+                        const Icon = goal.icon;
+                        return (
+                          <motion.button
+                            key={goal.id}
+                            type="button"
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => handleSelectGoalAndFinish(goal)}
+                            className={`p-4 rounded-3xl border-2 border-b-4 active:border-b-2 active:translate-y-0.5 transition-all text-left flex flex-col justify-between gap-3 cursor-pointer shadow-2xs hover:shadow-md ${goal.cardStyle}`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-2xl">{goal.emoji}</span>
+                              <div className="w-8 h-8 rounded-xl bg-white/90 border border-slate-200/80 flex items-center justify-center text-slate-800">
+                                <Icon className="w-4 h-4" strokeWidth={1.5} />
+                              </div>
+                            </div>
+                            <div>
+                              <p className="text-base font-bold font-heading text-slate-900 leading-tight">
+                                {goal.title}
+                              </p>
+                              <span className="text-xs font-bold font-heading text-emerald-800">
+                                Meta: ${goal.amount.toLocaleString()}
+                              </span>
+                            </div>
+                          </motion.button>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -966,11 +874,13 @@ export default function OnboardingPage() {
         </div>
       </main>
 
-      {/* Minimal Footer */}
-      <footer className="py-5 text-center text-xs text-slate-400">
-        Tus respuestas se guardan en tu sesión para personalizar el simulador pre-compra.
+      {/* Compact Footer Indicator */}
+      <footer className="py-3 text-center text-[11px] font-bold font-heading text-slate-400">
+        <span className="inline-flex items-center gap-1">
+          <Zap className="w-3 h-3 text-emerald-600" strokeWidth={1.5} />1 toque
+          para avanzar · Cero formularios
+        </span>
       </footer>
     </div>
   );
 }
-

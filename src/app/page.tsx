@@ -2,351 +2,306 @@
 
 import React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   Compass,
   ArrowRight,
-  Clock,
   SlidersHorizontal,
   SearchCheck,
   CalendarCheck2,
-  CheckCircle2,
-  ShieldCheck,
   Sparkles,
+  Sprout,
+  Flame,
+  Zap,
+  ShieldCheck,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { playTap, playCoin, playLevelUp } from "@/lib/soundEffects";
+import { useFinancial } from "@/context/FinancialContext";
 
-const fadeUp = {
-  hidden: { opacity: 0, y: 20 },
-  visible: (delay = 0) => ({
-    opacity: 1,
-    y: 0,
-    transition: {
-      duration: 0.55,
-      delay,
-      ease: [0.22, 1, 0.36, 1] as const,
-    },
-  }),
-};
-
-const steps = [
+const QUICK_STEPS = [
   {
     number: "01",
-    badge: "60 segundos",
-    title: "Conecta o estima tu contexto en 60 segundos",
-    description:
-      "Sin formularios eternos ni hojas de cálculo. Indica tu saldo actual, cuándo vuelves a cobrar y tus pagos fijos próximos para conocer tu liquidez real.",
-    detail: "Saldo disponible − compromisos fijos − reserva vital",
+    emoji: "🪙",
+    badge: "30 seg",
+    title: "Elige tu nivel con 1 toque",
+    tag: "🪙 $1,500 · 💰 $3,000 · 💎 $5,000+",
     icon: SlidersHorizontal,
+    cardStyle:
+      "border-emerald-300 border-b-emerald-600 bg-gradient-to-b from-white to-emerald-50/70",
   },
   {
     number: "02",
-    badge: "Antes de pagar",
-    title: "Consulta cualquier compra antes de pagar",
-    description:
-      "Escribe lo que quieres comprar o su precio en un segundo. Evaluamos al instante si el gasto es viable hoy o si compromete el dinero de tu semana.",
-    detail: "Veredicto claro en tiempo real, sin tecnicismos",
+    emoji: "📸",
+    badge: "IA Láser",
+    title: "Escanea o simula tu compra",
+    tag: "Tenis, audífonos o capturas",
     icon: SearchCheck,
+    cardStyle:
+      "border-amber-300 border-b-amber-500 bg-gradient-to-b from-white to-amber-50/70",
   },
   {
     number: "03",
-    badge: "Plan claro",
-    title: "Descubre cuándo y cómo comprar sin afectar tus metas",
-    description:
-      "Si hoy no es el mejor momento, te mostramos alternativas reales: esperar a tu próxima nómina o apartar un micro-ahorro semanal sin estrés.",
-    detail: "Compara escenarios antes de pasar la tarjeta",
+    emoji: "🌳",
+    badge: "+50 XP",
+    title: "Haz crecer tu Planta Financiera",
+    tag: "5 niveles de evolución y rachas 🔥",
     icon: CalendarCheck2,
+    cardStyle:
+      "border-teal-300 border-b-teal-600 bg-gradient-to-b from-white to-teal-50/70",
   },
 ];
 
+const PLANT_LEVELS_STRIP = [
+  { lvl: 1, label: "1. Supervivencia 🌱" },
+  { lvl: 2, label: "2. Estabilidad 🌿" },
+  { lvl: 3, label: "3. Seguridad 🪴" },
+  { lvl: 4, label: "4. Libertad 🌳" },
+  { lvl: 5, label: "5. Abundancia ✨" },
+];
+
 export default function LandingPage() {
+  const router = useRouter();
+  const { loadPreloadedSandboxProfile, startFreshOnboarding } = useFinancial();
+
   return (
-    <div className="min-h-screen bg-[#FAF8F5] text-slate-900 flex flex-col font-sans">
-      {/* Minimalist Navbar */}
-      <header className="sticky top-0 z-30 border-b border-[#E6E1DA]/80 bg-[#FAF8F5]/85 backdrop-blur-md">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+    <div className="min-h-screen bg-[#FAF8F5] text-slate-900 flex flex-col justify-between font-sans overflow-x-hidden">
+      {/* Minimalist Gamified Navbar */}
+      <header className="sticky top-0 z-30 border-b border-[#E6E1DA]/80 bg-[#FAF8F5]/90 backdrop-blur-md">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <Link
             href="/"
-            className="flex items-center gap-2.5 group focus:outline-none"
+            onClick={() => playTap()}
+            className="flex items-center gap-2.5 group"
           >
-            <div className="w-9 h-9 rounded-xl bg-slate-900 text-[#FAF8F5] flex items-center justify-center shadow-xs group-hover:bg-slate-800 transition-colors">
+            <div className="w-9 h-9 rounded-xl bg-slate-900 text-[#FAF8F5] flex items-center justify-center shadow-xs">
               <Compass className="w-5 h-5" strokeWidth={1.5} />
             </div>
-            <div className="flex flex-col">
-              <span className="text-base font-semibold tracking-tight text-slate-900 leading-none">
-                AntesDeGastar
-              </span>
-              <span className="text-[11px] text-slate-500 tracking-tight mt-0.5">
-                claridad financiera pre-compra
-              </span>
-            </div>
+            <span className="text-lg font-bold font-heading tracking-tight text-slate-900">
+              AntesDeGastar
+            </span>
           </Link>
 
-          <nav className="flex items-center gap-5 sm:gap-7">
-            <a
-              href="#como-funciona"
-              className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
+          <div className="flex items-center gap-2.5">
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                playTap();
+                router.push("/auth");
+              }}
+              className="h-10 px-4 rounded-2xl border-2 border-b-4 border-[#DCD5CA] bg-white text-slate-900 font-bold font-heading text-xs sm:text-sm cursor-pointer active:border-b-2 active:translate-y-0.5"
             >
-              Cómo funciona
-            </a>
-            <Button
-              nativeButton={false}
-              render={<Link href="/auth" />}
-              variant="outline"
-              className="h-9 px-4 rounded-xl border-slate-300/90 bg-white/80 text-slate-900 hover:bg-slate-900 hover:text-[#FAF8F5] transition-colors text-sm font-medium shadow-2xs"
-            >
-              Iniciar sesión
-            </Button>
-          </nav>
+              Entrar
+            </motion.button>
+          </div>
         </div>
       </header>
 
-      <main className="flex-1">
-        {/* Clean Editorial Hero Section */}
-        <section className="relative overflow-hidden pt-16 pb-20 sm:pt-24 sm:pb-28">
-          {/* Subtle Warm Editorial Background Accents */}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 top-0 -z-10 flex justify-center overflow-hidden"
+      {/* Main Zero-Noise Hero Stage */}
+      <main className="flex-1 flex flex-col justify-center py-8 sm:py-12 px-4 sm:px-6">
+        <div className="max-w-4xl mx-auto w-full text-center space-y-6">
+          {/* Interactive Animated Plant Hero Badge */}
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col items-center gap-2"
           >
-            <div className="h-[420px] w-[820px] rounded-full bg-gradient-to-b from-[#EDE6DA]/70 via-[#F3EFEA]/40 to-transparent blur-3xl" />
-          </div>
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.94 }}
+              onClick={() => playLevelUp()}
+              className="relative w-28 h-28 rounded-3xl bg-gradient-to-b from-emerald-50 via-white to-amber-50/60 border-2 border-b-4 border-emerald-300 shadow-sm flex items-center justify-center cursor-pointer group"
+              title="¡Toca para celebrar!"
+            >
+              <svg
+                viewBox="0 0 120 110"
+                className="w-24 h-24 overflow-visible"
+                aria-label="Árbol financiero"
+              >
+                <ellipse cx="60" cy="98" rx="30" ry="5" fill="#E2DCD3" />
+                <path
+                  d="M40 72 L80 72 L74 96 C73 98 71 99 68 99 L52 99 C49 99 47 98 46 96 Z"
+                  fill="#D97757"
+                />
+                <rect
+                  x="36"
+                  y="66"
+                  width="48"
+                  height="7"
+                  rx="3.5"
+                  fill="#C86849"
+                />
+                <motion.g
+                  animate={{ rotate: [-2, 2, -2], y: [0, -2, 0] }}
+                  transition={{
+                    duration: 3,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                  }}
+                >
+                  <path
+                    d="M56 67 L58 36 L62 36 L64 67 Z"
+                    fill="#78350F"
+                  />
+                  <circle cx="46" cy="38" r="14" fill="#059669" />
+                  <circle cx="74" cy="38" r="14" fill="#10B981" />
+                  <circle cx="60" cy="26" r="17" fill="#34D399" />
+                  <circle cx="52" cy="24" r="3.5" fill="#FBBF24" />
+                  <circle cx="68" cy="28" r="3.5" fill="#FBBF24" />
+                  <circle cx="60" cy="16" r="4" fill="#FDE047" />
+                </motion.g>
+              </svg>
+              <span className="absolute -top-2 -right-2 px-2 py-0.5 rounded-full bg-orange-500 text-white text-[10px] font-bold font-heading border-2 border-white shadow-2xs flex items-center gap-0.5">
+                <Flame className="w-3 h-3 fill-white" strokeWidth={1.5} />
+                +XP
+              </span>
+            </motion.button>
 
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 text-center">
-            <motion.div
-              initial="hidden"
-              animate="visible"
-              custom={0}
-              variants={fadeUp}
-              className="inline-flex items-center gap-2 rounded-full border border-[#E2DCD3] bg-white/80 px-3.5 py-1.5 text-xs font-medium text-slate-700 shadow-2xs mb-8"
+            <Badge
+              variant="outline"
+              className="border-emerald-300 bg-emerald-50 text-emerald-900 px-3 py-1 text-xs font-bold font-heading"
             >
               <Sparkles className="w-3.5 h-3.5 text-emerald-700" strokeWidth={1.5} />
-              <span>Copiloto de liquidez y decisiones cotidianas</span>
-            </motion.div>
+              Tu Copiloto Pre-Compra Gamificado
+            </Badge>
+          </motion.div>
 
-            <motion.h1
-              initial="hidden"
-              animate="visible"
-              custom={0.08}
-              variants={fadeUp}
-              className="text-4xl sm:text-5xl md:text-6xl font-semibold tracking-tight text-slate-900 leading-[1.08] text-balance"
-            >
-              Toma mejores decisiones con tu dinero antes de gastar, no después
-            </motion.h1>
+          {/* Short Punchy Title */}
+          <motion.h1
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="text-3xl sm:text-5xl font-bold font-heading tracking-tight text-slate-900 leading-[1.08] text-balance"
+          >
+            Decide tus compras antes de gastar 🌱
+          </motion.h1>
 
-            <motion.p
-              initial="hidden"
-              animate="visible"
-              custom={0.16}
-              variants={fadeUp}
-              className="mt-6 text-lg sm:text-xl text-slate-600 max-w-2xl mx-auto leading-relaxed text-balance font-normal"
-            >
-              Los bancos te avisan cuando el dinero ya salió. Nosotros traducimos tu saldo en
-              liquidez real para que sepas al instante si una compra cabe hoy en tu vida o cómo
-              planearla en paz.
-            </motion.p>
-
-            <motion.div
-              initial="hidden"
-              animate="visible"
-              custom={0.24}
-              variants={fadeUp}
-              className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3.5"
-            >
-              <Button
-                nativeButton={false}
-                render={<Link href="/auth" />}
-                size="lg"
-                className="h-12 px-7 rounded-xl bg-slate-900 text-[#FAF8F5] hover:bg-slate-800 text-base font-medium shadow-sm transition-all gap-2.5 w-full sm:w-auto"
+          {/* 5 Evolution Levels Visual Strip */}
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="flex flex-wrap items-center justify-center gap-1.5"
+          >
+            {PLANT_LEVELS_STRIP.map((item) => (
+              <button
+                key={item.lvl}
+                type="button"
+                onClick={() => playTap()}
+                className="px-3 py-1 rounded-xl bg-white border-2 border-b-4 border-[#E6E1DA] text-xs font-bold font-heading text-slate-700 active:border-b-2 active:translate-y-0.5 cursor-pointer"
               >
-                Evaluar mi primera compra
-                <ArrowRight className="w-4 h-4" strokeWidth={1.5} />
-              </Button>
-              <a
-                href="#como-funciona"
-                className="inline-flex items-center justify-center h-12 px-6 rounded-xl text-sm font-medium text-slate-700 hover:text-slate-900 hover:bg-[#EFECE6]/70 transition-colors w-full sm:w-auto"
-              >
-                Ver cómo funciona en 3 pasos
-              </a>
-            </motion.div>
+                {item.label}
+              </button>
+            ))}
+          </motion.div>
 
-            {/* Editorial Preview Pill / Micro Decision Strip */}
-            <motion.div
-              initial="hidden"
-              animate="visible"
-              custom={0.34}
-              variants={fadeUp}
-              className="mt-14 max-w-2xl mx-auto rounded-2xl border border-[#E4DEC6]/90 bg-white/90 p-4 sm:p-5 shadow-xs text-left"
+          {/* Two Giant 3D Tactile Action Cards (Zero Friction) */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.14 }}
+            className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 max-w-xl mx-auto pt-2"
+          >
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.96 }}
+              onClick={() => {
+                playTap();
+                startFreshOnboarding();
+                router.push("/onboarding");
+              }}
+              className="p-4 rounded-3xl bg-emerald-600 hover:bg-emerald-500 text-white border-2 border-emerald-700 border-b-4 border-b-emerald-800 active:border-b-2 active:translate-y-0.5 shadow-md flex items-center justify-between gap-3 text-left cursor-pointer"
             >
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-start gap-3.5">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200/80 text-emerald-800 flex items-center justify-center shrink-0 mt-0.5">
-                    <CheckCircle2 className="w-5 h-5" strokeWidth={1.5} />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-medium uppercase tracking-wider text-slate-400">
-                        Ejemplo de consulta
-                      </span>
-                      <span className="text-xs font-medium text-emerald-800 bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 rounded-full">
-                        Compra viable hoy
-                      </span>
-                    </div>
-                    <p className="text-sm sm:text-base font-medium text-slate-900 mt-1">
-                      “¿Me conviene comprar unos audífonos de $2,300 MXN hoy?”
-                    </p>
-                    <p className="text-xs text-slate-600 mt-0.5">
-                      Apartando tu renta y gastos de los próximos 6 días, aún conservas $1,400 MXN de margen libre.
-                    </p>
-                  </div>
-                </div>
-                <div className="sm:text-right border-t sm:border-t-0 pt-3 sm:pt-0 border-[#EFECE6] shrink-0">
-                  <span className="text-[11px] uppercase tracking-wider text-slate-400 block">
-                    Disponible real
-                  </span>
-                  <span className="text-lg font-semibold text-slate-900 font-mono">
-                    $3,700 MXN
-                  </span>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        </section>
-
-        {/* Visual Section of 3 Clean Cards Explaining the Flow */}
-        <section
-          id="como-funciona"
-          className="py-16 sm:py-24 border-t border-[#E6E1DA]/80 bg-[#F6F3EE]/60"
-        >
-          <div className="max-w-6xl mx-auto px-4 sm:px-6">
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-60px" }}
-              transition={{ duration: 0.5 }}
-              className="max-w-2xl mb-12 sm:mb-16"
-            >
-              <Badge
-                variant="outline"
-                className="mb-3 border-[#DCD5CA] bg-[#FAF8F5] text-slate-700 px-3 py-1 text-xs font-medium"
-              >
-                Cómo funciona
-              </Badge>
-              <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold tracking-tight text-slate-900 text-balance">
-                Un flujo pensado para personas reales, no para contadores
-              </h2>
-              <p className="mt-3 text-base text-slate-600 leading-relaxed">
-                Tres pasos simples para transformar la incertidumbre de cada compra en una decisión
-                informada y tranquila.
-              </p>
-            </motion.div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {steps.map((step, index) => {
-                const IconComponent = step.icon;
-                return (
-                  <motion.div
-                    key={step.number}
-                    initial={{ opacity: 0, y: 22 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, margin: "-40px" }}
-                    transition={{
-                      duration: 0.5,
-                      delay: index * 0.1,
-                      ease: [0.22, 1, 0.36, 1],
-                    }}
-                  >
-                    <Card className="h-full bg-white border-[#E6E1DA] hover:border-slate-300 transition-all duration-300 shadow-2xs hover:shadow-md flex flex-col justify-between">
-                      <div>
-                        <CardHeader className="pb-2">
-                          <div className="flex items-center justify-between mb-4">
-                            <div className="w-11 h-11 rounded-xl bg-[#FAF8F5] border border-[#E6E1DA] text-slate-900 flex items-center justify-center">
-                              <IconComponent className="w-5 h-5" strokeWidth={1.5} />
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-medium text-slate-600 bg-[#F3EFEA] px-2.5 py-1 rounded-full">
-                                {step.badge}
-                              </span>
-                              <span className="text-sm font-mono font-semibold text-slate-400">
-                                {step.number}
-                              </span>
-                            </div>
-                          </div>
-                          <CardTitle className="text-xl font-semibold text-slate-900 leading-snug">
-                            {step.title}
-                          </CardTitle>
-                        </CardHeader>
-
-                        <CardContent className="pt-2">
-                          <CardDescription className="text-slate-600 text-sm sm:text-base leading-relaxed">
-                            {step.description}
-                          </CardDescription>
-                        </CardContent>
-                      </div>
-
-                      <CardContent className="pt-4 mt-2">
-                        <div className="rounded-xl bg-[#FAF8F5] border border-[#ECE7DF] px-3.5 py-2.5 flex items-center gap-2 text-xs font-medium text-slate-700">
-                          <Clock className="w-3.5 h-3.5 text-slate-500 shrink-0" strokeWidth={1.5} />
-                          <span>{step.detail}</span>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-                );
-              })}
-            </div>
-
-            {/* Bottom Subtle Callout */}
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5, delay: 0.2 }}
-              className="mt-14 rounded-2xl border border-[#E6E1DA] bg-white p-6 sm:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 shadow-2xs"
-            >
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
-                  <ShieldCheck className="w-4 h-4 text-emerald-700" strokeWidth={1.5} />
-                  <span>Sin conectar credenciales bancarias sensibles</span>
-                </div>
-                <h3 className="text-lg sm:text-xl font-semibold text-slate-900">
-                  ¿Tienes una compra en mente ahora mismo?
-                </h3>
-                <p className="text-sm text-slate-600">
-                  Ponla a prueba en menos de un minuto y descubre tu verdadero margen disponible.
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-100 block">
+                  Nuevo Usuario · 4 Toques
+                </span>
+                <p className="text-lg font-bold font-heading leading-tight mt-0.5">
+                  Crear mi Planta 🌱
                 </p>
               </div>
-              <Button
-                nativeButton={false}
-                render={<Link href="/auth" />}
-                size="lg"
-                className="h-11 px-6 rounded-xl bg-slate-900 text-[#FAF8F5] hover:bg-slate-800 text-sm font-medium shrink-0 gap-2"
-              >
-                Evaluar mi primera compra
-                <ArrowRight className="w-4 h-4" strokeWidth={1.5} />
-              </Button>
-            </motion.div>
-          </div>
-        </section>
+              <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
+                <ArrowRight className="w-5 h-5 text-white" strokeWidth={1.5} />
+              </div>
+            </motion.button>
+
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.96 }}
+              onClick={() => {
+                playCoin();
+                loadPreloadedSandboxProfile("carlos");
+                router.push("/app");
+              }}
+              className="p-4 rounded-3xl bg-slate-900 hover:bg-slate-800 text-white border-2 border-slate-950 border-b-4 border-b-black active:border-b-2 active:translate-y-0.5 shadow-md flex items-center justify-between gap-3 text-left cursor-pointer"
+            >
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-300 block">
+                  Demo 1-Clic · Plaid Sandbox
+                </span>
+                <p className="text-lg font-bold font-heading leading-tight mt-0.5">
+                  Probar Simulador ⚡
+                </p>
+              </div>
+              <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center shrink-0">
+                <Zap className="w-5 h-5 text-amber-300" strokeWidth={1.5} />
+              </div>
+            </motion.button>
+          </motion.div>
+
+          {/* 3 Tactile Visual Cue Cards (Zero Paragraphs) */}
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="grid grid-cols-1 md:grid-cols-3 gap-3.5 pt-4 text-left"
+          >
+            {QUICK_STEPS.map((step) => {
+              const Icon = step.icon;
+              return (
+                <div
+                  key={step.number}
+                  onClick={() => playTap()}
+                  className={`p-4 rounded-3xl border-2 border-b-4 transition-all cursor-pointer flex flex-col justify-between gap-3 ${step.cardStyle}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-2xl">{step.emoji}</span>
+                    <span className="text-xs font-bold font-heading px-2.5 py-0.5 rounded-full bg-white/90 border border-slate-200 text-slate-800">
+                      {step.badge}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-base font-bold font-heading text-slate-900 leading-snug">
+                      {step.title}
+                    </p>
+                    <p className="text-xs font-bold font-heading text-slate-600 mt-0.5">
+                      {step.tag}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-200/60 text-[11px] font-bold font-heading text-slate-500">
+                    <span>Paso {step.number}</span>
+                    <Icon className="w-4 h-4 text-slate-700" strokeWidth={1.5} />
+                  </div>
+                </div>
+              );
+            })}
+          </motion.div>
+        </div>
       </main>
 
-      {/* Minimal Editorial Footer */}
-      <footer className="border-t border-[#E6E1DA] bg-[#FAF8F5] py-8">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+      {/* Compact Footer */}
+      <footer className="border-t border-[#E6E1DA] bg-[#FAF8F5] py-4">
+        <div className="max-w-5xl mx-auto px-4 flex flex-wrap items-center justify-between gap-2 text-xs font-bold font-heading text-slate-500">
           <div className="flex items-center gap-2">
-            <Compass className="w-4 h-4 text-slate-700" strokeWidth={1.5} />
-            <span className="font-medium text-slate-800">AntesDeGastar</span>
-            <span>· Copiloto financiero pre-compra</span>
+            < Sprout className="w-4 h-4 text-emerald-700" strokeWidth={1.5} />
+            <span>AntesDeGastar · Claridad antes de pagar</span>
           </div>
-          <p>Diseñado para dar claridad antes de pagar, no culpa después.</p>
+          <div className="flex items-center gap-1.5 text-emerald-800">
+            <ShieldCheck className="w-4 h-4" strokeWidth={1.5} />
+            <span>Cero formularios largos · Cero pedir género</span>
+          </div>
         </div>
       </footer>
     </div>

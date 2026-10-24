@@ -52,28 +52,32 @@ const QUICK_PURCHASE_EXAMPLES = [
     name: "Audífonos Inalámbricos Sony",
     price: 2300,
     icon: Headphones,
-    gradient: "from-emerald-50 to-teal-50/60 border-emerald-200/80",
+    gradient:
+      "from-emerald-50 to-teal-50/70 border-2 border-b-4 border-emerald-300 border-b-emerald-500 active:border-b-2 active:translate-y-0.5",
   },
   {
     label: "Tenis $1,800",
     name: "Tenis Deportivos",
     price: 1800,
     icon: Footprints,
-    gradient: "from-amber-50 to-orange-50/60 border-amber-200/80",
+    gradient:
+      "from-amber-50 to-orange-50/70 border-2 border-b-4 border-amber-300 border-b-amber-500 active:border-b-2 active:translate-y-0.5",
   },
   {
     label: "Videojuego $1,200",
     name: "Videojuego Edición Estándar",
     price: 1200,
     icon: Gamepad2,
-    gradient: "from-sky-50 to-indigo-50/60 border-sky-200/80",
+    gradient:
+      "from-sky-50 to-indigo-50/70 border-2 border-b-4 border-sky-300 border-b-sky-500 active:border-b-2 active:translate-y-0.5",
   },
   {
     label: "Cena $550",
     name: "Cena con amigos",
     price: 550,
     icon: Utensils,
-    gradient: "from-rose-50 to-pink-50/60 border-rose-200/80",
+    gradient:
+      "from-rose-50 to-pink-50/70 border-2 border-b-4 border-rose-300 border-b-rose-500 active:border-b-2 active:translate-y-0.5",
   },
 ];
 
@@ -580,7 +584,7 @@ export default function AppDashboardPage() {
                   type="submit"
                   whileTap={{ scale: 0.96 }}
                   disabled={isEvaluatingApi}
-                  className="h-12 px-6 rounded-2xl bg-slate-900 hover:bg-slate-800 text-[#FAF8F5] font-bold font-heading text-sm flex items-center justify-center gap-2 shadow-sm cursor-pointer shrink-0"
+                  className="h-12 px-6 rounded-2xl bg-slate-900 hover:bg-slate-800 text-[#FAF8F5] font-bold font-heading text-sm border-2 border-slate-950 border-b-4 border-b-black active:border-b-2 active:translate-y-0.5 flex items-center justify-center gap-2 shadow-sm cursor-pointer shrink-0"
                 >
                   {isEvaluatingApi ? (
                     <>
@@ -600,7 +604,7 @@ export default function AppDashboardPage() {
               </form>
 
               {/* Interactive Gradient Quick Purchase Chips */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
                 {QUICK_PURCHASE_EXAMPLES.map((example) => {
                   const Icon = example.icon;
                   const isSelected = parsedItemPrice === example.price;
@@ -610,12 +614,12 @@ export default function AppDashboardPage() {
                       type="button"
                       whileTap={{ scale: 0.96 }}
                       onClick={() => handleSelectExample(example)}
-                      className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-2.5 cursor-pointer bg-gradient-to-br ${
+                      className={`p-3 rounded-2xl text-left transition-all flex items-center gap-2.5 cursor-pointer bg-gradient-to-br ${
                         example.gradient
                       } ${
                         isSelected
                           ? "ring-2 ring-slate-900 shadow-xs"
-                          : "hover:opacity-90"
+                          : "hover:opacity-95"
                       }`}
                     >
                       <div className="w-8 h-8 rounded-xl bg-white/90 border border-white text-slate-800 flex items-center justify-center shrink-0 shadow-2xs">
