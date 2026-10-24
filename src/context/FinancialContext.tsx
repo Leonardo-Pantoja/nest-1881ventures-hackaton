@@ -56,6 +56,7 @@ export interface FinancialProfile {
   goal: FinancialGoal;
   wishlist?: WishlistItem[];
   wisdomXp?: number;
+  streakCount?: number;
   isOnboarded: boolean;
   plaidConnected?: boolean;
   institutionName?: string;
@@ -87,6 +88,7 @@ export const PRELOADED_SANDBOX_PROFILES: Record<string, FinancialProfile> = {
     },
     wishlist: [],
     wisdomXp: 120,
+    streakCount: 3,
     isOnboarded: true,
     plaidConnected: true,
     institutionName: "BBVA Sandbox (Plaid)",
@@ -115,6 +117,7 @@ export const PRELOADED_SANDBOX_PROFILES: Record<string, FinancialProfile> = {
     },
     wishlist: [],
     wisdomXp: 240,
+    streakCount: 5,
     isOnboarded: true,
     plaidConnected: true,
     institutionName: "Nu México Sandbox (Plaid)",
@@ -228,6 +231,8 @@ interface FinancialContextType {
   addToWishlist: (item: Omit<WishlistItem, "id" | "savedAt">) => void;
   registerPurchaseAnyway: (name: string, price: number) => void;
   awardWisdomXp: (amount?: number) => void;
+  incrementStreak: (reason?: string) => void;
+  streakCelebration: { id: number; count: number; reason: string } | null;
 }
 
 const STORAGE_KEY = "antesdegastar_financial_profile_v1";
@@ -242,6 +247,11 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
     price: 2300,
     imageName: null,
   });
+  const [streakCelebration, setStreakCelebration] = useState<{
+    id: number;
+    count: number;
+    reason: string;
+  } | null>(null);
 
   useEffect(() => {
     try {
@@ -367,9 +377,11 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         id: `wish-${Date.now()}`,
         savedAt: new Date().toISOString(),
       };
+      const nextStreak = (prev.streakCount ?? 3) + 1;
       const updated = {
         ...prev,
         wisdomXp: (prev.wisdomXp || 100) + 50,
+        streakCount: nextStreak,
         wishlist: [newItem, ...existing.filter((w) => w.name !== item.name)],
       };
       try {
@@ -377,6 +389,41 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
       } catch {
         // Ignore
       }
+      const celId = Date.now();
+      setStreakCelebration({
+        id: celId,
+        count: nextStreak,
+        reason: "¡Ahorro inteligente! +50 XP",
+      });
+      setTimeout(() => {
+        setStreakCelebration((cur) => (cur?.id === celId ? null : cur));
+      }, 3200);
+      return updated;
+    });
+  };
+
+  const incrementStreak = (reason = "¡Buena decisión evaluada!") => {
+    setProfile((prev) => {
+      const nextStreak = (prev.streakCount ?? 3) + 1;
+      const updated = {
+        ...prev,
+        streakCount: nextStreak,
+        wisdomXp: (prev.wisdomXp || 100) + 25,
+      };
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      } catch {
+        // Ignore
+      }
+      const celId = Date.now();
+      setStreakCelebration({
+        id: celId,
+        count: nextStreak,
+        reason,
+      });
+      setTimeout(() => {
+        setStreakCelebration((cur) => (cur?.id === celId ? null : cur));
+      }, 3000);
       return updated;
     });
   };
@@ -426,6 +473,8 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         addToWishlist,
         registerPurchaseAnyway,
         awardWisdomXp,
+        incrementStreak,
+        streakCelebration,
       }}
     >
       {children}

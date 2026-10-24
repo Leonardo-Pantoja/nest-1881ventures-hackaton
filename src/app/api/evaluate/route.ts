@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 export interface EvaluateRequestPayload {
   itemName: string;
   itemPrice: number;
+  imageBase64?: string | null;
+  imageMimeType?: string | null;
   profile: {
     name?: string;
     roleTag?: string;
@@ -28,6 +30,8 @@ export interface EvaluateRequestPayload {
 }
 
 export interface EvaluateApiResponse {
+  detectedItemName: string;
+  detectedItemPrice: number;
   verdict: "VIABLE" | "PRECAUCION" | "COMPROMETE";
   badgeLabel: "Compra viable hoy" | "Viable con precaución" | "Compromete tu quincena";
   headlineLine1: string;
@@ -49,7 +53,7 @@ export interface EvaluateApiResponse {
 function buildDeterministicEvaluation(
   payload: EvaluateRequestPayload
 ): EvaluateApiResponse {
-  const itemName = payload.itemName?.trim() || "Artículo consultado";
+  const itemName = payload.itemName?.trim() || "Artículo escaneado";
   const itemPrice = Math.max(0, Number(payload.itemPrice) || 0);
   const profile = payload.profile;
 
@@ -128,17 +132,19 @@ function buildDeterministicEvaluation(
     verdict === "COMPROMETE"
       ? `Pagar "${itemName}" hoy rebasa tu dinero libre por $${Math.abs(
           remainingAfterBuyToday
-        ).toLocaleString()} MXN y tocaría lo que ya apartaste para tus pagos fijos.`
+        ).toLocaleString()} MXN y tocaría tus pagos fijos.`
       : verdict === "PRECAUCION"
-      ? `Puedes pagar "${itemName}" hoy sin tocar tus pagos fijos, pero te dejaría con solo $${remainingFreeSafe.toLocaleString()} MXN libres para imprevistos.`
-      : `"${itemName}" cabe cómodamente en tu dinero libre de hoy y aún te deja $${remainingFreeSafe.toLocaleString()} MXN tranquilos para el resto de la semana.`;
+      ? `Puedes pagar "${itemName}" hoy, pero te dejaría con solo $${remainingFreeSafe.toLocaleString()} MXN libres esta semana.`
+      : `"${itemName}" cabe en tu liquidez de hoy y aún te deja $${remainingFreeSafe.toLocaleString()} MXN libres.`;
 
   const headlineLine2 =
     verdict === "COMPROMETE"
-      ? `Compara abajo cómo cambia tu tranquilidad si esperas ${profile.nextPaydayDays} días a cobrar o si lo planeas con micro-ahorro.`
-      : `Tus compromisos próximos ($${commitmentsTotal.toLocaleString()} MXN) y tu reserva de paz siguen protegidos.`;
+      ? `Espera ${profile.nextPaydayDays}d a cobrar o usa micro-ahorro para proteger tu planta 🌱`
+      : `Tus pagos próximos ($${commitmentsTotal.toLocaleString()} MXN) y tu colchón siguen protegidos ✨`;
 
   return {
+    detectedItemName: itemName,
+    detectedItemPrice: itemPrice,
     verdict,
     badgeLabel,
     headlineLine1,
@@ -161,15 +167,31 @@ function buildDeterministicEvaluation(
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as EvaluateRequestPayload;
-    const baseResult = buildDeterministicEvaluation(body);
+    let baseResult = buildDeterministicEvaluation(body);
 
     const geminiKey = process.env.GEMINI_API_KEY;
-    const openaiKey = process.env.OPENAI_API_KEY;
 
-    // Si hay API key configurada en entorno (local o Vercel), enriquecer las 2 líneas empáticas con IA manteniendo los cálculos deterministas exactos
+    // Multimodal Gemini API support (Vision + Financial Empathy) with instant local fallback
     if (geminiKey) {
       try {
-        const prompt = `Eres un copiloto financiero empático en México. El usuario quiere comprar "${body.itemName}" por $${body.itemPrice} MXN. Su dinero libre real hoy es $${baseResult.safeToSpend} MXN y el veredicto matemático es "${baseResult.badgeLabel}". Devuelve un JSON estricto con {"headlineLine1": "frase empática de 1 línea con los montos clave", "headlineLine2": "segunda línea breve de consejo humano sin tecnicismos"}.`;
+        const hasImage = Boolean(body.imageBase64);
+        const rawBase64 = body.imageBase64
+          ? body.imageBase64.replace(/^data:image\/\w+;base64,/, "")
+          : null;
+
+        const promptText = hasImage
+          ? `Analiza esta captura de tienda o foto de producto en México. Extrae el nombre del producto y su precio en pesos mexicanos (MXN). El usuario tiene $${baseResult.safeToSpend} MXN libres hoy. Devuelve un JSON estricto con: {"detectedItemName": "Nombre corto del producto", "detectedItemPrice": numero_entero_precio, "headlineLine1": "frase empática juvenil de 1 línea con el impacto en su liquidez", "headlineLine2": "segunda línea breve de consejo amigable"}.`
+          : `Eres un copiloto financiero juvenil en México. El usuario quiere comprar "${body.itemName}" por $${body.itemPrice} MXN. Su dinero libre real hoy es $${baseResult.safeToSpend} MXN y el veredicto es "${baseResult.badgeLabel}". Devuelve un JSON estricto con {"detectedItemName": "${body.itemName}", "detectedItemPrice": ${body.itemPrice}, "headlineLine1": "frase empática de 1 línea con los montos clave", "headlineLine2": "segunda línea breve de consejo sin tecnicismos"}.`;
+
+        const parts: Record<string, unknown>[] = [{ text: promptText }];
+        if (hasImage && rawBase64) {
+          parts.push({
+            inlineData: {
+              mimeType: body.imageMimeType || "image/png",
+              data: rawBase64,
+            },
+          });
+        }
 
         const response = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
@@ -177,13 +199,13 @@ export async function POST(request: Request) {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              contents: [{ parts: [{ text: prompt }] }],
+              contents: [{ parts }],
               generationConfig: {
                 responseMimeType: "application/json",
-                temperature: 0.3,
+                temperature: 0.25,
               },
             }),
-            signal: AbortSignal.timeout(3500),
+            signal: AbortSignal.timeout(3200),
           }
         );
 
@@ -192,64 +214,36 @@ export async function POST(request: Request) {
           const rawText =
             data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
           const parsed = JSON.parse(rawText);
-          if (parsed?.headlineLine1 && parsed?.headlineLine2) {
-            return NextResponse.json({
-              ...baseResult,
-              headlineLine1: parsed.headlineLine1,
-              headlineLine2: parsed.headlineLine2,
-              source: "ai",
-            } satisfies EvaluateApiResponse);
-          }
-        }
-      } catch {
-        // Fallback silencioso al motor determinista local
-      }
-    } else if (openaiKey) {
-      try {
-        const response = await fetch(
-          "https://api.openai.com/v1/chat/completions",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${openaiKey}`,
-            },
-            body: JSON.stringify({
-              model: "gpt-4o-mini",
-              response_format: { type: "json_object" },
-              messages: [
-                {
-                  role: "system",
-                  content:
-                    'Devuelve JSON con {"headlineLine1": "...", "headlineLine2": "..."} en español cercano, sin tecnicismos.',
-                },
-                {
-                  role: "user",
-                  content: `Compra: ${body.itemName} ($${body.itemPrice} MXN). Dinero libre hoy: $${baseResult.safeToSpend} MXN. Veredicto: ${baseResult.badgeLabel}.`,
-                },
-              ],
-              temperature: 0.3,
-            }),
-            signal: AbortSignal.timeout(3500),
-          }
-        );
 
-        if (response.ok) {
-          const data = await response.json();
-          const parsed = JSON.parse(
-            data?.choices?.[0]?.message?.content || "{}"
-          );
-          if (parsed?.headlineLine1 && parsed?.headlineLine2) {
-            return NextResponse.json({
-              ...baseResult,
-              headlineLine1: parsed.headlineLine1,
-              headlineLine2: parsed.headlineLine2,
-              source: "ai",
-            } satisfies EvaluateApiResponse);
-          }
+          const finalName =
+            typeof parsed?.detectedItemName === "string" &&
+            parsed.detectedItemName.trim()
+              ? parsed.detectedItemName.trim()
+              : body.itemName;
+          const finalPrice =
+            typeof parsed?.detectedItemPrice === "number" &&
+            parsed.detectedItemPrice > 0
+              ? Math.round(parsed.detectedItemPrice)
+              : body.itemPrice;
+
+          // Re-run deterministic math with detected price if image changed it
+          baseResult = buildDeterministicEvaluation({
+            ...body,
+            itemName: finalName,
+            itemPrice: finalPrice,
+          });
+
+          return NextResponse.json({
+            ...baseResult,
+            detectedItemName: finalName,
+            detectedItemPrice: finalPrice,
+            headlineLine1: parsed?.headlineLine1 || baseResult.headlineLine1,
+            headlineLine2: parsed?.headlineLine2 || baseResult.headlineLine2,
+            source: "ai",
+          } satisfies EvaluateApiResponse);
         }
       } catch {
-        // Fallback silencioso al motor determinista local
+        // Instant silent fallback to local deterministic evaluation
       }
     }
 
@@ -261,4 +255,3 @@ export async function POST(request: Request) {
     );
   }
 }
-
