@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useFinancial } from "@/context/FinancialContext";
+import { createClient } from "@/lib/supabase/client";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 18 },
@@ -54,29 +55,89 @@ export default function AuthPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  // Preparado para Supabase Auth (supabase.auth.signInWithPassword / signUp)
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !password.trim()) return;
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (!cleanEmail || !password.trim()) return;
 
     setIsSubmitting(true);
     setStatusMessage(null);
 
-    // Simulación de llamada a Supabase Auth
-    await new Promise((resolve) => setTimeout(resolve, 550));
+    const supabase = createClient();
 
-    if (authMode === "signup") {
-      startFreshOnboarding(email.trim());
-      router.push("/onboarding");
-    } else {
-      loadPreloadedSandboxProfile("carlos");
-      router.push("/app");
+    try {
+      if (authMode === "signup") {
+        // Create a new Supabase Auth user
+        const { data, error } = await supabase.auth.signUp({
+          email: cleanEmail,
+          password,
+        });
+
+        if (error) throw error;
+
+        // Email confirmation may be required
+        if (!data.session) {
+          setStatusMessage(
+            "Revisa tu correo para confirmar tu cuenta antes de iniciar sesión.",
+          );
+          return;
+        }
+
+        startFreshOnboarding(cleanEmail);
+        router.replace("/onboarding");
+        return;
+      }
+
+      // Sign in with an existing account
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password,
+      });
+
+      if (signInError) throw signInError;
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        throw new Error("No se pudo verificar la sesión.");
+      }
+
+      // Check whether onboarding is completed
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("onboarding_completed_at")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profileError) throw profileError;
+
+      if (profile?.onboarding_completed_at) {
+        router.replace("/app");
+      } else {
+        startFreshOnboarding(cleanEmail);
+        router.replace("/onboarding");
+      }
+
+      router.refresh();
+    } catch (error) {
+      setStatusMessage(
+        error instanceof Error
+          ? error.message
+          : "Ocurrió un error al autenticar.",
+      );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleStartFromScratch = () => {
     startFreshOnboarding(email.trim() || undefined);
-    router.push("/onboarding");
+    router.push("/onboarding?demo=1");
   };
 
   const handleLoadPreloadedProfile = () => {
@@ -134,7 +195,8 @@ export default function AuthPage() {
                 : "Crea tu cuenta en segundos"}
             </h1>
             <p className="text-sm text-slate-600">
-              Solo lo esencial para evaluar tus compras con claridad. Sin formularios invasivos.
+              Solo lo esencial para evaluar tus compras con claridad. Sin
+              formularios invasivos.
             </p>
           </motion.div>
 
@@ -154,7 +216,10 @@ export default function AuthPage() {
                     variant="outline"
                     className="border-emerald-300/80 bg-emerald-50/90 text-emerald-900 text-[11px] font-medium px-2.5 py-0.5"
                   >
-                    <Sparkles className="w-3 h-3 text-emerald-700" strokeWidth={1.5} />
+                    <Sparkles
+                      className="w-3 h-3 text-emerald-700"
+                      strokeWidth={1.5}
+                    />
                     Plaid Sandbox Ready
                   </Badge>
                   <span className="text-[11px] font-mono text-slate-400">
@@ -165,7 +230,8 @@ export default function AuthPage() {
                   Inicio Rápido para Demo (Plaid Sandbox)
                 </CardTitle>
                 <CardDescription className="text-xs text-slate-600">
-                  Elige cómo quieres recorrer la experiencia sin configurar credenciales reales:
+                  Elige cómo quieres recorrer la experiencia sin configurar
+                  credenciales reales:
                 </CardDescription>
               </CardHeader>
 
@@ -187,7 +253,8 @@ export default function AuthPage() {
                         Comenzar Onboarding desde cero (Nuevo Usuario)
                       </p>
                       <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
-                        Configura o estima tu contexto financiero en 60 segundos paso a paso.
+                        Configura o estima tu contexto financiero en 60 segundos
+                        paso a paso.
                       </p>
                     </div>
                   </div>
@@ -214,7 +281,9 @@ export default function AuthPage() {
                         Cargar perfil precargado con datos bancarios simulados
                       </p>
                       <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">
-                        Salta directo a <span className="font-mono text-emerald-300">/app</span> con saldo, nómina y compromisos vía Plaid Sandbox.
+                        Salta directo a{" "}
+                        <span className="font-mono text-emerald-300">/app</span>{" "}
+                        con saldo, nómina y compromisos vía Plaid Sandbox.
                       </p>
                     </div>
                   </div>
@@ -328,7 +397,9 @@ export default function AuthPage() {
                         required
                         minLength={6}
                         autoComplete={
-                          authMode === "signin" ? "current-password" : "new-password"
+                          authMode === "signin"
+                            ? "current-password"
+                            : "new-password"
                         }
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
@@ -352,7 +423,10 @@ export default function AuthPage() {
 
                   {statusMessage && (
                     <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs text-emerald-800 flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 shrink-0" strokeWidth={1.5} />
+                      <CheckCircle2
+                        className="w-4 h-4 shrink-0"
+                        strokeWidth={1.5}
+                      />
                       <span>{statusMessage}</span>
                     </div>
                   )}
@@ -364,7 +438,10 @@ export default function AuthPage() {
                   >
                     {isSubmitting ? (
                       <>
-                        <Loader2 className="w-4 h-4 animate-spin" strokeWidth={1.5} />
+                        <Loader2
+                          className="w-4 h-4 animate-spin"
+                          strokeWidth={1.5}
+                        />
                         <span>Conectando con Supabase Auth...</span>
                       </>
                     ) : (
@@ -381,7 +458,10 @@ export default function AuthPage() {
                 </form>
 
                 <div className="mt-4 pt-3 border-t border-[#F3EFEA] flex items-center justify-center gap-1.5 text-[11px] text-slate-500">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" strokeWidth={1.5} />
+                  <ShieldCheck
+                    className="w-3.5 h-3.5 text-emerald-700"
+                    strokeWidth={1.5}
+                  />
                   <span>
                     Sin campos de género, edad ni datos personales innecesarios.
                   </span>
@@ -394,9 +474,9 @@ export default function AuthPage() {
 
       {/* Footer Note */}
       <footer className="py-5 text-center text-xs text-slate-400">
-        Protegido con sesiones cifradas · Preparado para Supabase Auth &amp; Plaid Sandbox
+        Protegido con sesiones cifradas · Preparado para Supabase Auth &amp;
+        Plaid Sandbox
       </footer>
     </div>
   );
 }
-
