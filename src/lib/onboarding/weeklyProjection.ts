@@ -41,9 +41,11 @@ function toCents(value: number): number {
 
 function paymentDue(
   day: number,
-  dueInDays: number,
-  frequency: CommitmentFrequency
+  dueInDays: number | null,
+  frequency: CommitmentFrequency | null
 ): boolean {
+  if (dueInDays === null || frequency === null) return false;
+
   if (day < dueInDays) {
     return false;
   }
@@ -84,11 +86,17 @@ export function projectSixWeeks(
 
   const firstPayday = profile.nextPaydayDays;
   const paycheck = profile.nextPaydayAmount;
+  const currentBalance = profile.currentBalance;
+  const dailyEssentialBurn = profile.dailyEssentialBurn;
+  const safetyBuffer = profile.safetyBuffer;
 
   // Solo proyectamos ingresos de frecuencia
   // semanal o quincenal conocida.
   if (
     !profile.isOnboarded ||
+    currentBalance === null ||
+    dailyEssentialBurn === null ||
+    safetyBuffer === null ||
     firstPayday === null ||
     !Number.isInteger(firstPayday) ||
     firstPayday < 1 ||
@@ -111,8 +119,9 @@ export function projectSixWeeks(
 
   if (
     goal &&
-    goal.currentSaved > 0 &&
-    goal.savingsLocation === "desconocido"
+    (goal.currentSaved === null ||
+      goal.targetAmount === null ||
+      (goal.currentSaved > 0 && goal.savingsLocation === "desconocido"))
   ) {
     return incomplete;
   }
@@ -128,7 +137,7 @@ export function projectSixWeeks(
     return incomplete;
   }
 
-  const payments = [
+  const candidatePayments = [
     ...profile.commitments.map((item) => ({
       dueInDays: item.dueInDays,
       frequency: item.frequency,
@@ -140,16 +149,30 @@ export function projectSixWeeks(
       amount: item.nextPayment,
     })),
   ];
+  const payments: Array<{
+    dueInDays: number;
+    frequency: CommitmentFrequency;
+    amount: number;
+  }> = [];
 
-  for (const payment of payments) {
+  for (const payment of candidatePayments) {
     if (
+      payment.dueInDays === null ||
+      payment.frequency === null ||
       !Number.isInteger(payment.dueInDays) ||
       payment.dueInDays < 0 ||
+      payment.amount === null ||
       !Number.isFinite(payment.amount) ||
       payment.amount < 0
     ) {
       return incomplete;
     }
+
+    payments.push({
+      dueInDays: payment.dueInDays,
+      frequency: payment.frequency,
+      amount: payment.amount,
+    });
 
     // En un horizonte de 42 días puede existir
     // un segundo pago mensual. Sin fechas exactas
@@ -162,14 +185,13 @@ export function projectSixWeeks(
     }
   }
 
-  const dailyCost = toCents(
-    profile.dailyEssentialBurn
-  );
+  const dailyCost = toCents(dailyEssentialBurn);
 
-  const buffer = toCents(profile.safetyBuffer);
+  const buffer = toCents(safetyBuffer);
   let protectedSavings = 0;
 
   if (goal?.savingsLocation === "incluido") {
+    if (goal.currentSaved === null) return incomplete;
     const saved = toCents(goal.currentSaved);
 
     protectedSavings =
@@ -198,7 +220,7 @@ export function projectSixWeeks(
     return total;
   }
 
-  let balance = toCents(profile.currentBalance);
+  let balance = toCents(currentBalance);
   let lowestBalance = balance;
 
   const weeks: ProjectedWeek[] = [];

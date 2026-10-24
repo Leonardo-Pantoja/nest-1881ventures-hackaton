@@ -18,12 +18,12 @@ import type {
 
 export interface SafeToSpendResult {
   status: "calculado" | "datos_incompletos";
-  currentBalance: number;
-  essentialExpenses: number;
-  pendingCommitments: number;
-  pendingDebtPayments: number;
-  safetyBuffer: number;
-  protectedSavings: number;
+  currentBalance: number | null;
+  essentialExpenses: number | null;
+  pendingCommitments: number | null;
+  pendingDebtPayments: number | null;
+  safetyBuffer: number | null;
+  protectedSavings: number | null;
   safeToSpend: number | null;
   shortfall: number | null;
 }
@@ -47,11 +47,13 @@ function toCents(amount: number): number {
 // Determina cuántas veces vence un pago
 // dentro del periodo analizado.
 function contarPagos(
-  dueInDays: number,
-  frequency: CommitmentFrequency,
+  dueInDays: number | null,
+  frequency: CommitmentFrequency | null,
   days: number
 ): number | null {
   if (
+    dueInDays === null ||
+    frequency === null ||
     !Number.isInteger(dueInDays) ||
     dueInDays < 0
   ) {
@@ -99,17 +101,15 @@ function contarPagos(
 export function calculateSafeToSpend(
   profile: OnboardingProfile
 ): SafeToSpendResult {
-  const balance = toCents(profile.currentBalance);
-  const buffer = toCents(profile.safetyBuffer);
-
   const incomplete: SafeToSpendResult = {
     status: "datos_incompletos",
-    currentBalance: balance / 100,
-    essentialExpenses: 0,
-    pendingCommitments: 0,
-    pendingDebtPayments: 0,
-    safetyBuffer: buffer / 100,
-    protectedSavings: 0,
+    currentBalance:
+      profile.currentBalance === null ? null : profile.currentBalance,
+    essentialExpenses: null,
+    pendingCommitments: null,
+    pendingDebtPayments: null,
+    safetyBuffer: profile.safetyBuffer,
+    protectedSavings: null,
     safeToSpend: null,
     shortfall: null,
   };
@@ -120,6 +120,15 @@ export function calculateSafeToSpend(
   // ni con un onboarding incompleto.
   if (
     !profile.isOnboarded ||
+    profile.currentBalance === null ||
+    profile.dailyEssentialBurn === null ||
+    profile.safetyBuffer === null ||
+    !Number.isFinite(profile.currentBalance) ||
+    !Number.isFinite(profile.dailyEssentialBurn) ||
+    !Number.isFinite(profile.safetyBuffer) ||
+    profile.currentBalance < 0 ||
+    profile.dailyEssentialBurn < 0 ||
+    profile.safetyBuffer < 0 ||
     days === null ||
     !Number.isInteger(days) ||
     days < 0
@@ -127,12 +136,16 @@ export function calculateSafeToSpend(
     return incomplete;
   }
 
+  const balance = toCents(profile.currentBalance);
+  const buffer = toCents(profile.safetyBuffer);
+
   const goal = profile.primaryGoal;
 
   if (
     goal &&
-    goal.currentSaved > 0 &&
-    goal.savingsLocation === "desconocido"
+    (goal.currentSaved === null ||
+      goal.targetAmount === null ||
+      (goal.currentSaved > 0 && goal.savingsLocation === "desconocido"))
   ) {
     return incomplete;
   }
@@ -161,7 +174,7 @@ export function calculateSafeToSpend(
   let pendingCommitments = 0;
 
   for (const item of profile.commitments) {
-    if (item.isConfirmed === false) {
+    if (item.isConfirmed === false || item.amount === null) {
       return incomplete;
     }
 
@@ -186,6 +199,10 @@ export function calculateSafeToSpend(
   let pendingDebtPayments = 0;
 
   for (const debt of profile.debts) {
+    if (debt.nextPayment === null) {
+      return incomplete;
+    }
+
     const paymentCount = contarPagos(
       debt.dueInDays,
       debt.frequency,
@@ -207,6 +224,7 @@ export function calculateSafeToSpend(
   let protectedSavings = 0;
 
   if (goal?.savingsLocation === "incluido") {
+    if (goal.currentSaved === null) return incomplete;
     const saved = toCents(goal.currentSaved);
 
     // Conservamos la regla inicial:

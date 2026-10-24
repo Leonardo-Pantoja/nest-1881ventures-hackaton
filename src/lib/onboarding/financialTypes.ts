@@ -51,15 +51,15 @@ export interface FinancialGoal {
   title: string;
   category: GoalCategory;
 
-  targetAmount: number;
-  currentSaved: number;
+  targetAmount: number | null;
+  currentSaved: number | null;
 
   // Opcional si el usuario aún no sabe cuándo
   targetDate?: string;
   timeframe?: GoalTimeframe;
 
   // Aportación que planea realizar
-  weeklyContribution?: number;
+  weeklyContribution?: number | null;
 
   // ¿Por qué quiere conseguir esta meta?
   reason?: string;
@@ -88,10 +88,10 @@ export type CommitmentKind =
 export interface Commitment {
   id: string;
   title: string;
-  amount: number;
-  dueInDays: number;
+  amount: number | null;
+  dueInDays: number | null;
   category: string;
-  frequency: CommitmentFrequency;
+  frequency: CommitmentFrequency | null;
   kind: CommitmentKind;
   isConfirmed?: boolean;
 }
@@ -104,11 +104,11 @@ export interface Debt {
   id: string;
   title: string;
 
-  totalBalance: number;
-  nextPayment: number;
-  dueInDays: number;
+  totalBalance: number | null;
+  nextPayment: number | null;
+  dueInDays: number | null;
 
-  frequency: CommitmentFrequency;
+  frequency: CommitmentFrequency | null;
   apr?: number;
 }
 
@@ -124,7 +124,7 @@ export interface OnboardingProfile {
   lifeContext: LifeContextTag[];
 
   // Pantalla 2: Ingresos
-  currentBalance: number;
+  currentBalance: number | null;
   payFrequency: PayFrequency;
 
   // null = todavía no conocemos el dato
@@ -132,12 +132,12 @@ export interface OnboardingProfile {
   nextPaydayDays: number | null;
 
   // Pantalla 3: Gastos y deudas
-  dailyEssentialBurn: number;
+  dailyEssentialBurn: number | null;
   commitments: Commitment[];
   debts: Debt[];
 
   // Pantalla 4: Metas y seguridad
-  safetyBuffer: number;
+  safetyBuffer: number | null;
   primaryGoal?: FinancialGoal;
 
   // Estado del onboarding

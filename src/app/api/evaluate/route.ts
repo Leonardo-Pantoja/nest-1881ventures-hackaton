@@ -1,257 +1,413 @@
 import { NextResponse } from "next/server";
 
+import {
+  InvalidDemoProfileError,
+  isMissingSupabaseSessionError,
+  mapSupabaseRecord,
+  resolveEvaluationProfile,
+} from "@/lib/finance";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import {
+  buildPurchaseReport,
+  calculateSafeToSpend,
+  evaluatePurchase,
+} from "@/lib/onboarding";
+import type { OnboardingProfile } from "@/lib/onboarding/financialTypes";
+
 export interface EvaluateRequestPayload {
-  itemName: string;
-  itemPrice: number;
-  imageBase64?: string | null;
-  imageMimeType?: string | null;
-  profile: {
-    name?: string;
-    roleTag?: string;
-    currentBalance: number;
-    nextPaydayDays: number;
-    nextPaydayAmount: number;
-    safetyBuffer: number;
-    dailyEssentialBurn: number;
-    commitments: {
-      id: string;
-      title: string;
-      amount: number;
-      dueInDays: number;
-      category: string;
-    }[];
-    goal: {
-      title: string;
-      targetAmount: number;
-      currentSaved: number;
-      weeklyContribution: number;
-    };
-  };
+  itemName?: unknown;
+  itemPrice?: unknown;
+  mode?: unknown;
+  demoProfileId?: unknown;
 }
 
+export type EvaluationStatus =
+  | "dentro_del_margen"
+  | "excede_el_margen"
+  | "precaucion"
+  | "datos_incompletos"
+  | "error_procesamiento";
+
 export interface EvaluateApiResponse {
+  status: EvaluationStatus;
   detectedItemName: string;
   detectedItemPrice: number;
-  verdict: "VIABLE" | "PRECAUCION" | "COMPROMETE";
-  badgeLabel: "Compra viable hoy" | "Viable con precaución" | "Compromete tu quincena";
+  verdict: "VIABLE" | "PRECAUCION" | "COMPROMETE" | "DATOS_INCOMPLETOS";
+  badgeLabel:
+    | "Compra viable hoy"
+    | "Viable con precaución"
+    | "Compromete tu quincena"
+    | "Datos financieros incompletos";
   headlineLine1: string;
   headlineLine2: string;
-  safeToSpend: number;
-  remainingAfterBuyToday: number;
-  remainingFreeSafe: number;
-  freeMoneyRemainingPct: number;
-  usedByPurchasePct: number;
-  daysGoalDelayed: number;
-  liquidityAfterPayday: number;
-  remainingIfWaitPayday: number;
-  waitRemainingPct: number;
-  suggestedWeeklySave: number;
-  weeksNeeded: number;
-  source: "ai" | "local-fallback";
+  safeToSpend: number | null;
+  daysUntilNextIncome: number | null;
+  remainingAfterBuyToday: number | null;
+  remainingFreeSafe: number | null;
+  exceedsBy: number | null;
+  freeMoneyRemainingPct: number | null;
+  usedByPurchasePct: number | null;
+  daysGoalDelayed: number | null;
+  liquidityAfterPayday: number | null;
+  remainingIfWaitPayday: number | null;
+  waitRemainingPct: number | null;
+  suggestedWeeklySave: number | null;
+  weeksNeeded: number | null;
+  consideredExpenses: {
+    currentBalance: number | null;
+    essentialExpenses: number | null;
+    pendingCommitments: number | null;
+    pendingDebtPayments: number | null;
+    safetyBuffer: number | null;
+    protectedSavings: number | null;
+  };
+  missingInformation: string[];
+  projectionStatus: "calculado" | "datos_incompletos";
+  projection: ReturnType<typeof buildPurchaseReport>["projectionBefore"] | null;
+  goalImpact: null;
+  source: "deterministic";
+}
+
+class EvaluationRequestError extends Error {
+  constructor(
+    message: string,
+    readonly httpStatus: number,
+    readonly code: string,
+  ) {
+    super(message);
+  }
+}
+
+async function loadAccountProfile(): Promise<OnboardingProfile> {
+  if (
+    !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+  ) {
+    throw new EvaluationRequestError(
+      "El servicio financiero no está configurado.",
+      503,
+      "supabase_not_configured",
+    );
+  }
+
+  let supabase;
+  try {
+    supabase = await createServerSupabaseClient();
+  } catch (error) {
+    console.error("Supabase client initialization failed:", error);
+    throw new EvaluationRequestError(
+      "No se pudo conectar con el servicio financiero.",
+      503,
+      "supabase_unavailable",
+    );
+  }
+
+  const { data: authData, error: authError } =
+    await supabase.auth.getUser();
+  if (authError) {
+    if (isMissingSupabaseSessionError(authError)) {
+      throw new EvaluationRequestError(
+        "Inicia sesión para evaluar una compra.",
+        401,
+        "authentication_required",
+      );
+    }
+    console.error("Supabase authentication lookup failed:", authError.message);
+    throw new EvaluationRequestError(
+      "No se pudo verificar la sesión. Inténtalo de nuevo.",
+      503,
+      "session_verification_failed",
+    );
+  }
+  if (!authData.user) {
+    throw new EvaluationRequestError(
+      "Inicia sesión para evaluar una compra.",
+      401,
+      "authentication_required",
+    );
+  }
+
+  const userId = authData.user.id;
+  const [profileResult, incomeResult, commitmentResult, goalResult] =
+    await Promise.all([
+      supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
+      supabase
+        .from("income_sources")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("is_active", true),
+      supabase
+        .from("commitments")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("is_active", true),
+      supabase
+        .from("goals")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("is_active", true),
+    ]);
+
+  const queryError = [
+    profileResult.error,
+    incomeResult.error,
+    commitmentResult.error,
+    goalResult.error,
+  ].find((error) => error !== null);
+  if (queryError) {
+    console.error("Financial account query failed:", queryError.message);
+    throw new EvaluationRequestError(
+      "No fue posible cargar todos tus datos financieros.",
+      503,
+      "financial_data_unavailable",
+    );
+  }
+
+  if (!profileResult.data) {
+    throw new EvaluationRequestError(
+      "No encontramos un perfil financiero para esta cuenta.",
+      422,
+      "financial_profile_missing",
+    );
+  }
+
+  const profile = mapSupabaseRecord(
+    {
+      profile: profileResult.data,
+      incomeSources: incomeResult.data ?? [],
+      commitments: commitmentResult.data ?? [],
+      goals: goalResult.data ?? [],
+    },
+  );
+  if (!profile) {
+    throw new EvaluationRequestError(
+      "No se pudo interpretar el perfil financiero.",
+      422,
+      "financial_profile_invalid",
+    );
+  }
+
+  return profile;
 }
 
 function buildDeterministicEvaluation(
-  payload: EvaluateRequestPayload
+  itemName: string,
+  itemPrice: number,
+  profile: OnboardingProfile,
 ): EvaluateApiResponse {
-  const itemName = payload.itemName?.trim() || "Artículo escaneado";
-  const itemPrice = Math.max(0, Number(payload.itemPrice) || 0);
-  const profile = payload.profile;
-
-  const commitmentsTotal = (profile.commitments || [])
-    .filter((c) => c.dueInDays <= profile.nextPaydayDays)
-    .reduce((acc, c) => acc + c.amount, 0);
-
-  const essentialLivingCost =
-    (profile.dailyEssentialBurn || 150) * (profile.nextPaydayDays || 6);
-
-  const safeToSpend = Math.max(
-    0,
-    (profile.currentBalance || 0) -
-      commitmentsTotal -
-      essentialLivingCost -
-      (profile.safetyBuffer || 500)
-  );
-
-  const remainingAfterBuyToday = safeToSpend - itemPrice;
-  const remainingFreeSafe = Math.max(0, remainingAfterBuyToday);
-
-  const freeMoneyRemainingPct =
-    safeToSpend > 0
-      ? Math.max(
-          0,
-          Math.min(100, Math.round((remainingFreeSafe / safeToSpend) * 100))
-        )
-      : 0;
-
-  const usedByPurchasePct = 100 - freeMoneyRemainingPct;
-
-  let verdict: "VIABLE" | "PRECAUCION" | "COMPROMETE" = "VIABLE";
-  let badgeLabel:
-    | "Compra viable hoy"
-    | "Viable con precaución"
-    | "Compromete tu quincena" = "Compra viable hoy";
-
-  if (remainingAfterBuyToday < 0) {
-    verdict = "COMPROMETE";
-    badgeLabel = "Compromete tu quincena";
-  } else if (remainingAfterBuyToday < (profile.safetyBuffer || 500) * 0.5) {
-    verdict = "PRECAUCION";
-    badgeLabel = "Viable con precaución";
+  const safe = calculateSafeToSpend(profile);
+  const purchase = evaluatePurchase(profile, itemPrice);
+  const report = buildPurchaseReport(profile, itemPrice);
+  const isComplete =
+    profile.isOnboarded &&
+    safe.status === "calculado" &&
+    safe.safeToSpend !== null &&
+    profile.nextPaydayAmount !== null &&
+    purchase.status === "evaluada" &&
+    purchase.remainingSafeToSpend !== null;
+  const missingInformation: string[] = [];
+  if (!profile.isOnboarded) missingInformation.push("Onboarding financiero incompleto.");
+  if (profile.currentBalance === null) missingInformation.push("Saldo actual desconocido.");
+  if (profile.nextPaydayDays === null) missingInformation.push("Fecha del próximo ingreso desconocida.");
+  if (profile.nextPaydayAmount === null) missingInformation.push("Importe del próximo ingreso desconocido.");
+  if (profile.dailyEssentialBurn === null) missingInformation.push("Gastos esenciales diarios desconocidos.");
+  if (profile.safetyBuffer === null) missingInformation.push("Colchón de seguridad desconocido.");
+  if (
+    profile.commitments.some(
+      (item) =>
+        item.amount === null ||
+        item.dueInDays === null ||
+        item.frequency === null ||
+        item.isConfirmed === false,
+    )
+  ) {
+    missingInformation.push("Hay compromisos con importe, fecha o frecuencia sin confirmar.");
+  }
+  if (
+    profile.debts.some(
+      (debt) =>
+        debt.nextPayment === null ||
+        debt.dueInDays === null ||
+        debt.frequency === null,
+    )
+  ) {
+    missingInformation.push("Hay pagos de deuda con importe, fecha o frecuencia desconocidos.");
+  }
+  if (
+    profile.primaryGoal &&
+    (profile.primaryGoal.currentSaved === null ||
+      profile.primaryGoal.targetAmount === null ||
+      (profile.primaryGoal.currentSaved > 0 &&
+        profile.primaryGoal.savingsLocation === "desconocido"))
+  ) {
+    missingInformation.push("Falta información sobre el saldo o la ubicación de los ahorros de tu meta.");
+  }
+  if (!isComplete && missingInformation.length === 0) {
+    missingInformation.push("Faltan datos necesarios para calcular el margen disponible.");
   }
 
-  const dailyGoalRate = Math.max(
-    1,
-    (profile.goal?.weeklyContribution || 500) / 7
-  );
-  const daysGoalDelayed = Math.max(1, Math.round(itemPrice / dailyGoalRate));
+  let status: EvaluationStatus = "datos_incompletos";
+  if (isComplete && purchase.assessment === "excede_margen") {
+    status = "excede_el_margen";
+  } else if (
+    isComplete &&
+    purchase.remainingSafeToSpend !== null &&
+    safe.safetyBuffer !== null &&
+    purchase.remainingSafeToSpend < safe.safetyBuffer * 0.5
+  ) {
+    status = "precaucion";
+  } else if (isComplete) {
+    status = "dentro_del_margen";
+  }
 
-  const liquidityAfterPayday = Math.max(
-    0,
-    safeToSpend + (profile.nextPaydayAmount || 0)
-  );
-  const remainingIfWaitPayday = Math.max(0, liquidityAfterPayday - itemPrice);
-  const waitRemainingPct =
-    liquidityAfterPayday > 0
-      ? Math.min(
-          100,
-          Math.round((remainingIfWaitPayday / liquidityAfterPayday) * 100)
-        )
-      : 100;
+  const verdict =
+    status === "datos_incompletos"
+      ? "DATOS_INCOMPLETOS"
+      : status === "excede_el_margen"
+        ? "COMPROMETE"
+        : status === "precaucion"
+          ? "PRECAUCION"
+          : "VIABLE";
+  const badgeLabel =
+    status === "datos_incompletos"
+      ? "Datos financieros incompletos"
+      : status === "excede_el_margen"
+        ? "Compromete tu quincena"
+        : status === "precaucion"
+          ? "Viable con precaución"
+          : "Compra viable hoy";
 
-  const baseSuggested = Math.round(itemPrice / 6);
-  const suggestedWeeklySave = Math.min(
-    2000,
-    Math.max(100, Math.round(baseSuggested / 50) * 50)
-  );
-  const weeksNeeded = Math.max(
-    1,
-    Math.ceil(itemPrice / Math.max(50, suggestedWeeklySave))
-  );
-
+  const remaining = purchase.remainingSafeToSpend;
+  const remainingAfterPurchase =
+    purchase.status === "evaluada" &&
+    purchase.assessment === "excede_margen" &&
+    purchase.exceedsBy !== null
+      ? -purchase.exceedsBy
+      : remaining;
+  const pct =
+    safe.safeToSpend !== null && remaining !== null && safe.safeToSpend > 0
+      ? Math.round((remaining / safe.safeToSpend) * 100)
+      : null;
   const headlineLine1 =
-    verdict === "COMPROMETE"
-      ? `Pagar "${itemName}" hoy rebasa tu dinero libre por $${Math.abs(
-          remainingAfterBuyToday
-        ).toLocaleString()} MXN y tocaría tus pagos fijos.`
-      : verdict === "PRECAUCION"
-      ? `Puedes pagar "${itemName}" hoy, pero te dejaría con solo $${remainingFreeSafe.toLocaleString()} MXN libres esta semana.`
-      : `"${itemName}" cabe en tu liquidez de hoy y aún te deja $${remainingFreeSafe.toLocaleString()} MXN libres.`;
-
-  const headlineLine2 =
-    verdict === "COMPROMETE"
-      ? `Espera ${profile.nextPaydayDays}d a cobrar o usa micro-ahorro para proteger tu planta 🌱`
-      : `Tus pagos próximos ($${commitmentsTotal.toLocaleString()} MXN) y tu colchón siguen protegidos ✨`;
+    status === "datos_incompletos"
+      ? "No podemos evaluar esta compra con seguridad porque faltan datos financieros."
+      : status === "excede_el_margen"
+        ? purchase.exceedsBy !== null
+          ? `"${itemName}" supera tu margen calculado por $${purchase.exceedsBy.toLocaleString()} MXN.`
+          : `"${itemName}" supera tu margen calculado.`
+        : status === "precaucion"
+          ? `"${itemName}" cabe en tu margen, pero dejaría menos de la mitad de tu colchón de seguridad disponible.`
+          : `"${itemName}" está dentro de tu margen calculado.`;
 
   return {
+    status,
     detectedItemName: itemName,
     detectedItemPrice: itemPrice,
     verdict,
     badgeLabel,
     headlineLine1,
-    headlineLine2,
-    safeToSpend,
-    remainingAfterBuyToday,
-    remainingFreeSafe,
-    freeMoneyRemainingPct,
-    usedByPurchasePct,
-    daysGoalDelayed,
-    liquidityAfterPayday,
-    remainingIfWaitPayday,
-    waitRemainingPct,
-    suggestedWeeklySave,
-    weeksNeeded,
-    source: "local-fallback",
+    headlineLine2: purchase.explanation,
+    safeToSpend: isComplete ? safe.safeToSpend : null,
+    daysUntilNextIncome: profile.nextPaydayDays,
+    remainingAfterBuyToday: isComplete ? remainingAfterPurchase : null,
+    remainingFreeSafe: isComplete ? remaining : null,
+    exceedsBy: isComplete ? purchase.exceedsBy : null,
+    freeMoneyRemainingPct: isComplete ? pct : null,
+    usedByPurchasePct: isComplete && pct !== null ? 100 - pct : null,
+    daysGoalDelayed: null,
+    liquidityAfterPayday: null,
+    remainingIfWaitPayday: null,
+    waitRemainingPct: null,
+    suggestedWeeklySave: null,
+    weeksNeeded: null,
+    consideredExpenses: {
+      currentBalance: safe.currentBalance,
+      essentialExpenses: safe.essentialExpenses,
+      pendingCommitments: safe.pendingCommitments,
+      pendingDebtPayments: safe.pendingDebtPayments,
+      safetyBuffer: safe.safetyBuffer,
+      protectedSavings: safe.protectedSavings,
+    },
+    missingInformation,
+    projectionStatus: report.projectionBefore.status,
+    projection:
+      report.projectionBefore.status === "calculado"
+        ? report.projectionBefore
+        : null,
+    goalImpact: null,
+    source: "deterministic",
   };
 }
 
 export async function POST(request: Request) {
+  let body: EvaluateRequestPayload;
   try {
-    const body = (await request.json()) as EvaluateRequestPayload;
-    let baseResult = buildDeterministicEvaluation(body);
-
-    const geminiKey = process.env.GEMINI_API_KEY;
-
-    // Multimodal Gemini API support (Vision + Financial Empathy) with instant local fallback
-    if (geminiKey) {
-      try {
-        const hasImage = Boolean(body.imageBase64);
-        const rawBase64 = body.imageBase64
-          ? body.imageBase64.replace(/^data:image\/\w+;base64,/, "")
-          : null;
-
-        const promptText = hasImage
-          ? `Analiza esta captura de tienda o foto de producto en México. Extrae el nombre del producto y su precio en pesos mexicanos (MXN). El usuario tiene $${baseResult.safeToSpend} MXN libres hoy. Devuelve un JSON estricto con: {"detectedItemName": "Nombre corto del producto", "detectedItemPrice": numero_entero_precio, "headlineLine1": "frase empática juvenil de 1 línea con el impacto en su liquidez", "headlineLine2": "segunda línea breve de consejo amigable"}.`
-          : `Eres un copiloto financiero juvenil en México. El usuario quiere comprar "${body.itemName}" por $${body.itemPrice} MXN. Su dinero libre real hoy es $${baseResult.safeToSpend} MXN y el veredicto es "${baseResult.badgeLabel}". Devuelve un JSON estricto con {"detectedItemName": "${body.itemName}", "detectedItemPrice": ${body.itemPrice}, "headlineLine1": "frase empática de 1 línea con los montos clave", "headlineLine2": "segunda línea breve de consejo sin tecnicismos"}.`;
-
-        const parts: Record<string, unknown>[] = [{ text: promptText }];
-        if (hasImage && rawBase64) {
-          parts.push({
-            inlineData: {
-              mimeType: body.imageMimeType || "image/png",
-              data: rawBase64,
-            },
-          });
-        }
-
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ parts }],
-              generationConfig: {
-                responseMimeType: "application/json",
-                temperature: 0.25,
-              },
-            }),
-            signal: AbortSignal.timeout(3200),
-          }
-        );
-
-        if (response.ok) {
-          const data = await response.json();
-          const rawText =
-            data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-          const parsed = JSON.parse(rawText);
-
-          const finalName =
-            typeof parsed?.detectedItemName === "string" &&
-            parsed.detectedItemName.trim()
-              ? parsed.detectedItemName.trim()
-              : body.itemName;
-          const finalPrice =
-            typeof parsed?.detectedItemPrice === "number" &&
-            parsed.detectedItemPrice > 0
-              ? Math.round(parsed.detectedItemPrice)
-              : body.itemPrice;
-
-          // Re-run deterministic math with detected price if image changed it
-          baseResult = buildDeterministicEvaluation({
-            ...body,
-            itemName: finalName,
-            itemPrice: finalPrice,
-          });
-
-          return NextResponse.json({
-            ...baseResult,
-            detectedItemName: finalName,
-            detectedItemPrice: finalPrice,
-            headlineLine1: parsed?.headlineLine1 || baseResult.headlineLine1,
-            headlineLine2: parsed?.headlineLine2 || baseResult.headlineLine2,
-            source: "ai",
-          } satisfies EvaluateApiResponse);
-        }
-      } catch {
-        // Instant silent fallback to local deterministic evaluation
-      }
-    }
-
-    return NextResponse.json(baseResult);
+    body = (await request.json()) as EvaluateRequestPayload;
   } catch {
     return NextResponse.json(
-      { error: "No se pudo procesar la evaluación" },
-      { status: 400 }
+      { status: "error_procesamiento", error: "El cuerpo JSON no es válido." },
+      { status: 400 },
+    );
+  }
+
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json(
+      { status: "error_procesamiento", error: "El cuerpo de la solicitud no es válido." },
+      { status: 400 },
+    );
+  }
+
+  const itemName =
+    typeof body.itemName === "string" ? body.itemName.trim() : "";
+  const itemPrice = body.itemPrice;
+  if (
+    !itemName ||
+    typeof itemPrice !== "number" ||
+    !Number.isFinite(itemPrice) ||
+    itemPrice <= 0
+  ) {
+    return NextResponse.json(
+      { status: "error_procesamiento", error: "Se requiere un producto y un precio confirmado mayor que cero." },
+      { status: 400 },
+    );
+  }
+
+  try {
+    let profile: OnboardingProfile;
+    try {
+      profile = await resolveEvaluationProfile(body, loadAccountProfile);
+    } catch (error) {
+      if (error instanceof InvalidDemoProfileError) {
+        throw new EvaluationRequestError(error.message, 400, "invalid_demo_profile");
+      }
+      throw error;
+    }
+    return NextResponse.json(
+      buildDeterministicEvaluation(itemName, itemPrice, profile),
+    );
+  } catch (error) {
+    if (error instanceof EvaluationRequestError) {
+      return NextResponse.json(
+        {
+          status:
+            error.httpStatus >= 500
+              ? "error_procesamiento"
+              : "datos_incompletos",
+          error: error.message,
+          code: error.code,
+        },
+        { status: error.httpStatus },
+      );
+    }
+
+    console.error("Purchase evaluation failed:", error);
+    return NextResponse.json(
+      {
+        status: "error_procesamiento",
+        error: "No se pudo completar la evaluación financiera.",
+        code: "evaluation_failed",
+      },
+      { status: 500 },
     );
   }
 }

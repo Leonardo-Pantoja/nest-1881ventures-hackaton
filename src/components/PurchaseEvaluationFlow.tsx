@@ -32,6 +32,8 @@ interface PurchaseEvaluationFlowProps {
   thumbnailDataUrl?: string | null;
   storeTag?: string | null;
   apiEvaluation?: EvaluateApiResponse | null;
+  apiEvaluationError?: boolean;
+  apiErrorMessage?: string | null;
   isLoadingApi?: boolean;
   onClose?: () => void;
   onActionCompleted?: (message: string) => void;
@@ -44,6 +46,8 @@ export default function PurchaseEvaluationFlow({
   thumbnailDataUrl = null,
   storeTag = null,
   apiEvaluation = null,
+  apiEvaluationError = false,
+  apiErrorMessage = null,
   isLoadingApi = false,
   onClose,
   onActionCompleted,
@@ -58,51 +62,32 @@ export default function PurchaseEvaluationFlow({
 
   // Core Deterministic Financial Engine
   const metrics = useMemo(() => {
-    const commitmentsTotal = profile.commitments
-      .filter((c) => c.dueInDays <= profile.nextPaydayDays)
-      .reduce((acc, c) => acc + c.amount, 0);
-
-    const essentialLivingCost =
-      profile.dailyEssentialBurn * profile.nextPaydayDays;
-
-    const fixedAndRentTotal = commitmentsTotal + essentialLivingCost;
-
+    const evaluationIncomplete =
+      isLoadingApi ||
+      apiEvaluationError ||
+      !apiEvaluation ||
+      apiEvaluation?.status === "datos_incompletos" ||
+      apiEvaluation?.status === "error_procesamiento";
     const safeToSpend =
-      apiEvaluation?.safeToSpend ??
-      Math.max(
-        0,
-        profile.currentBalance - fixedAndRentTotal - profile.safetyBuffer
-      );
-
-    const netAfterPurchase = safeToSpend - itemPrice;
-    const isDeficit = itemPrice > 0 && netAfterPurchase < 0;
-    const missingLiquidity = isDeficit ? Math.abs(netAfterPurchase) : 0;
-
-    const weeklyGoalContribution = Math.max(
-      300,
-      profile.goal.weeklyContribution || 500
-    );
-    const weeksGoalDelayed = Math.max(
-      1,
-      Math.ceil(itemPrice / weeklyGoalContribution)
-    );
-
-    const suggestedWeeklySave = 400;
-    const microSaveWeeks = Math.max(
-      1,
-      Math.ceil(itemPrice / suggestedWeeklySave)
-    );
+      evaluationIncomplete ? 0 : (apiEvaluation?.safeToSpend ?? 0);
+    const netAfterPurchase =
+      evaluationIncomplete
+        ? 0
+        : (apiEvaluation?.remainingAfterBuyToday ?? 0);
+    const isDeficit =
+      !evaluationIncomplete &&
+      apiEvaluation?.status === "excede_el_margen";
+    const missingLiquidity =
+      isDeficit ? (apiEvaluation?.exceedsBy ?? 0) : 0;
 
     return {
       safeToSpend,
+      evaluationIncomplete,
       netAfterPurchase,
       isDeficit,
       missingLiquidity,
-      weeksGoalDelayed,
-      suggestedWeeklySave,
-      microSaveWeeks,
     };
-  }, [profile, itemPrice, apiEvaluation]);
+  }, [apiEvaluation, apiEvaluationError, isLoadingApi]);
 
   useEffect(() => {
     setSelectedDecision("idle");
@@ -115,6 +100,8 @@ export default function PurchaseEvaluationFlow({
 
   // Decision 1: "Comprar hoy"
   const handleDecisionBuyToday = () => {
+    if (metrics.evaluationIncomplete || itemPrice <= 0 || !itemName.trim())
+      return;
     playDamage();
     setSelectedDecision("bought");
     registerPurchaseAnyway(itemName, itemPrice);
@@ -126,6 +113,7 @@ export default function PurchaseEvaluationFlow({
 
   // Decision 2: "Esperar a tu nómina" (+50 XP)
   const handleDecisionWaitPayroll = () => {
+    if (itemPrice <= 0 || !itemName.trim()) return;
     playCoin();
     triggerConfettiBurst();
     setDecisionXpBonus(50);
@@ -139,7 +127,7 @@ export default function PurchaseEvaluationFlow({
       },
       50
     );
-    const msg = `🧊 ¡Guardado en tu Congelador por ${profile.nextPaydayDays} días! Acabas de proteger $${itemPrice.toLocaleString()} MXN de tu quincena`;
+    const msg = `🧊 ¡Guardado para reevaluarlo después! Esperar no garantiza que la compra sea viable.`;
     if (onActionCompleted) {
       onActionCompleted(msg);
     }
@@ -147,6 +135,7 @@ export default function PurchaseEvaluationFlow({
 
   // Decision 3: "Plan de Micro-ahorro" (+100 XP)
   const handleDecisionMicroSave = () => {
+    if (itemPrice <= 0 || !itemName.trim()) return;
     playCoin();
     triggerConfettiBurst();
     setDecisionXpBonus(100);
@@ -155,13 +144,12 @@ export default function PurchaseEvaluationFlow({
       {
         name: itemName,
         price: itemPrice,
-        plannedWeeklySave: metrics.suggestedWeeklySave,
         cooldownDays: profile.nextPaydayDays,
         strategy: "microsave",
       },
       100
     );
-    const msg = `🧊 ¡Guardado en tu Congelador por ${profile.nextPaydayDays} días! Acabas de proteger $${itemPrice.toLocaleString()} MXN de tu quincena`;
+    const msg = `🧊 ¡Plan de micro-ahorro guardado! No se descontó dinero de tu saldo ni de tu meta.`;
     if (onActionCompleted) {
       onActionCompleted(msg);
     }
@@ -218,7 +206,9 @@ export default function PurchaseEvaluationFlow({
               <h2 className="text-base sm:text-lg font-bold font-heading text-slate-900 truncate">
                 {itemName} ·{" "}
                 <span className="text-emerald-700">
-                  ${itemPrice.toLocaleString()} MXN
+                  {itemPrice > 0
+                    ? `$${itemPrice.toLocaleString()} MXN`
+                    : "precio por confirmar"}
                 </span>
               </h2>
             </div>
@@ -245,6 +235,7 @@ export default function PurchaseEvaluationFlow({
             allowLevelPreview={false}
             previewDamagePrice={itemPrice}
             recoveredXpBonus={decisionXpBonus}
+            financialEvaluation={apiEvaluation}
           />
 
           {/* 2. The 3 Collectible 3D Path Cards with 56x56 Animated Medallions */}
@@ -276,8 +267,14 @@ export default function PurchaseEvaluationFlow({
                   </motion.div>
 
                   <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold font-heading bg-amber-50 text-amber-900 border border-amber-200 text-right">
-                    {metrics.isDeficit
+                    {metrics.evaluationIncomplete
+                      ? itemPrice <= 0
+                        ? "Precio por confirmar"
+                        : "Datos incompletos"
+                      : metrics.isDeficit
                       ? `Te faltan $${metrics.missingLiquidity.toLocaleString()} libres`
+                      : apiEvaluation?.status === "precaucion"
+                      ? "Viable con precaución"
                       : `Margen: $${Math.max(
                           0,
                           metrics.netAfterPurchase
@@ -290,9 +287,16 @@ export default function PurchaseEvaluationFlow({
                     Comprar hoy
                   </h3>
                   <p className="text-sm text-slate-600 leading-relaxed mt-1">
-                    {metrics.isDeficit
-                      ? `Tomaría $${metrics.missingLiquidity.toLocaleString()} MXN del dinero apartado para tu renta/pagos fijos y retrasaría tu meta ${metrics.weeksGoalDelayed} semanas.`
-                      : `Cubres el gasto con tu dinero libre hoy, pero retrasas tu meta "${profile.goal.title}" ${metrics.weeksGoalDelayed} semanas.`}
+                    {metrics.evaluationIncomplete
+                      ? apiErrorMessage ||
+                        (itemPrice <= 0
+                          ? "Confirma un precio mayor que cero antes de solicitar una evaluación."
+                          : "No podemos recomendar comprar hoy hasta verificar tus datos financieros.")
+                      : metrics.isDeficit
+                      ? `La compra supera tu margen por $${metrics.missingLiquidity.toLocaleString()} MXN. Esta simulación no retira dinero de tus reservas ni de tu meta.`
+                      : apiEvaluation?.status === "precaucion"
+                      ? `La compra cabe en el margen calculado, pero dejaría menos de la mitad del colchón de seguridad. Esta simulación no retira dinero de tu meta.`
+                      : `Cubres el gasto con tu dinero libre hoy; esta simulación no retira dinero de tu meta "${profile.goal.title}".`}
                   </p>
                 </div>
 
@@ -300,9 +304,11 @@ export default function PurchaseEvaluationFlow({
                   <div className="flex justify-between text-[11px] font-bold font-heading text-amber-900">
                     <span>Impacto en tu quincena</span>
                     <span>
-                      {metrics.isDeficit
-                        ? "Sobregiro de pagos fijos"
-                        : `−${metrics.weeksGoalDelayed} sem de meta`}
+                      {metrics.evaluationIncomplete
+                        ? "Evaluación pendiente"
+                        : metrics.isDeficit
+                        ? "Supera el margen disponible"
+                        : "Meta principal intacta"}
                     </span>
                   </div>
                   <div className="w-full h-2 rounded-full bg-amber-200/70 overflow-hidden">
@@ -313,15 +319,19 @@ export default function PurchaseEvaluationFlow({
 
               <button
                 type="button"
+                disabled={metrics.evaluationIncomplete}
                 className="w-full h-11 rounded-xl border-2 border-b-4 border-slate-200 border-b-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold font-heading transition-colors cursor-pointer"
               >
-                Registrar compra hoy
+                {metrics.evaluationIncomplete
+                  ? "Verifica tus datos financieros"
+                  : "Registrar compra hoy"}
               </button>
             </motion.div>
 
-            {/* Carta 2 (Destacada Esmeralda): Esperar a tu nómina */}
+            {/* Carta 2 (Destacada Esmeralda): Guardar para reevaluar */}
             <motion.div
               onClick={handleDecisionWaitPayroll}
+              aria-disabled={itemPrice <= 0}
               className={`rounded-3xl bg-white border-2 border-b-4 p-6 shadow-sm flex flex-col justify-between gap-5 transition-all hover:-translate-y-1 active:translate-y-0.5 cursor-pointer ${
                 selectedDecision === "wait"
                   ? "border-[#10B981] border-b-emerald-700 ring-4 ring-emerald-500/15"
@@ -350,25 +360,26 @@ export default function PurchaseEvaluationFlow({
                       className="w-3.5 h-3.5 text-emerald-600"
                       strokeWidth={1.5}
                     />
-                    Recomendada · +50 XP
+                    Alternativa · +50 XP
                   </span>
                 </div>
 
                 <div>
                   <h3 className="text-lg font-bold font-heading text-slate-900">
-                    Esperar a tu nómina (en {profile.nextPaydayDays} días)
+                    Guardar y reevaluar después
                   </h3>
                   <p className="text-sm text-slate-600 leading-relaxed mt-1">
-                    En {profile.nextPaydayDays} días recibes tu ingreso de $
-                    {profile.nextPaydayAmount.toLocaleString()} MXN y lo compras
-                    con tranquilidad sin tocar el dinero de tus pagos fijos.
+                    Esperar no garantiza que la compra sea viable. Guarda el
+                    artículo y vuelve a evaluarlo cuando el próximo ingreso
+                    esté confirmado, considerando también las obligaciones de
+                    ese periodo.
                   </p>
                 </div>
 
                 <div className="p-3 rounded-2xl bg-emerald-50/70 border border-emerald-200/80 space-y-1.5">
                   <div className="flex justify-between text-[11px] font-bold font-heading text-emerald-900">
-                    <span>Pagos fijos protegidos</span>
-                    <span>100% intactos</span>
+                    <span>Sin retiro de ahorros</span>
+                    <span>Solo guardar</span>
                   </div>
                   <div className="w-full h-2 rounded-full bg-emerald-200/70 overflow-hidden">
                     <div className="h-full w-full bg-[#10B981] rounded-full" />
@@ -378,10 +389,11 @@ export default function PurchaseEvaluationFlow({
 
               <button
                 type="button"
+                disabled={itemPrice <= 0}
                 className="w-full h-11 rounded-xl bg-[#10B981] hover:bg-emerald-600 border-2 border-emerald-600 border-b-4 border-b-emerald-800 text-white text-xs font-bold font-heading shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Clock className="w-4 h-4" strokeWidth={1.5} />
-                <span>Esperar {profile.nextPaydayDays} días (+50 XP)</span>
+                <span>Guardar para reevaluar (+50 XP)</span>
                 <ArrowRight className="w-4 h-4" strokeWidth={1.5} />
               </button>
             </motion.div>
@@ -389,6 +401,7 @@ export default function PurchaseEvaluationFlow({
             {/* Carta 3: Plan de Micro-ahorro */}
             <motion.div
               onClick={handleDecisionMicroSave}
+              aria-disabled={itemPrice <= 0}
               className={`rounded-3xl bg-white border-2 border-b-4 p-6 shadow-sm flex flex-col justify-between gap-5 transition-all hover:-translate-y-1 active:translate-y-0.5 cursor-pointer ${
                 selectedDecision === "microsave"
                   ? "border-indigo-400 border-b-indigo-600 ring-2 ring-indigo-400/20"
@@ -427,34 +440,28 @@ export default function PurchaseEvaluationFlow({
                     Plan de Micro-ahorro
                   </h3>
                   <p className="text-sm text-slate-600 leading-relaxed mt-1">
-                    Aparta{" "}
-                    <strong className="text-slate-900">
-                      ${metrics.suggestedWeeklySave}/semana
-                    </strong>{" "}
-                    y cómpralo en{" "}
-                    <strong className="text-slate-900">
-                      {metrics.microSaveWeeks} semanas
-                    </strong>{" "}
-                    manteniendo intacto tu colchón y tu meta principal.
+                    Define cuánto puedes apartar cada semana y guarda un plan
+                    de micro-ahorro sin descontarlo de tu saldo ni de tu meta.
                   </p>
                 </div>
 
                 <div className="p-3 rounded-2xl bg-indigo-50/70 border border-indigo-200/80 space-y-1.5">
                   <div className="flex justify-between text-[11px] font-bold font-heading text-indigo-900">
-                    <span>Meta en {metrics.microSaveWeeks} pasos</span>
-                    <span>${metrics.suggestedWeeklySave}/sem</span>
+                    <span>Tu ritmo, tu decisión</span>
+                    <span>Sin monto sugerido</span>
                   </div>
                   <div className="w-full h-2 rounded-full bg-indigo-200/70 overflow-hidden">
-                    <div className="h-full w-4/5 bg-indigo-500 rounded-full" />
+                    <div className="h-full w-0 bg-indigo-500 rounded-full" />
                   </div>
                 </div>
               </div>
 
               <button
                 type="button"
+                disabled={itemPrice <= 0}
                 className="w-full h-11 rounded-xl border-2 border-b-4 border-indigo-200 border-b-indigo-300 bg-indigo-50/60 hover:bg-indigo-100/80 text-indigo-950 text-xs font-bold font-heading transition-colors cursor-pointer"
               >
-                Apartar ${metrics.suggestedWeeklySave}/sem (+100 XP)
+                Crear plan de micro-ahorro (+100 XP)
               </button>
             </motion.div>
           </div>

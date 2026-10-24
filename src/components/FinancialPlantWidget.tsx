@@ -7,14 +7,11 @@ import {
   Sprout,
   TreePine,
   AlertTriangle,
-  Zap,
-  Award,
-  Flame,
-  Heart,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useFinancial } from "@/context/FinancialContext";
 import { playTap, playLevelUp } from "@/lib/soundEffects";
+import type { EvaluateApiResponse } from "@/app/api/evaluate/route";
 
 export type PlantLevel = 1 | 2 | 3 | 4 | 5;
 
@@ -31,6 +28,7 @@ interface FinancialPlantWidgetProps {
   allowLevelPreview?: boolean;
   previewDamagePrice?: number;
   recoveredXpBonus?: number;
+  financialEvaluation?: EvaluateApiResponse | null;
 }
 
 interface LevelMetadata {
@@ -102,6 +100,7 @@ export default function FinancialPlantWidget({
   allowLevelPreview = true,
   previewDamagePrice = 0,
   recoveredXpBonus = 50,
+  financialEvaluation,
 }: FinancialPlantWidgetProps) {
   const { profile } = useFinancial();
   const [previewLevelOverride, setPreviewLevelOverride] =
@@ -118,32 +117,94 @@ export default function FinancialPlantWidget({
 
     const fixedAndRentTotal = commitmentsTotal + essentialLivingCost;
 
-    const safeToSpend = Math.max(
+    const locallyCalculatedSafeToSpend = Math.max(
       0,
       profile.currentBalance - fixedAndRentTotal - profile.safetyBuffer
     );
 
-    const totalBalance = Math.max(
-      1,
-      profile.currentBalance || fixedAndRentTotal + profile.safetyBuffer + safeToSpend
-    );
+    const hasAuthoritativeEvaluation = financialEvaluation !== undefined;
+    const evaluationComplete =
+      financialEvaluation !== null &&
+      financialEvaluation !== undefined &&
+      financialEvaluation.status !== "datos_incompletos" &&
+      financialEvaluation.status !== "error_procesamiento" &&
+      financialEvaluation.safeToSpend !== null &&
+      financialEvaluation.remainingAfterBuyToday !== null;
+    const consideredExpenses = evaluationComplete
+      ? financialEvaluation.consideredExpenses
+      : null;
+    const safeToSpend = hasAuthoritativeEvaluation
+      ? evaluationComplete
+        ? financialEvaluation.safeToSpend
+        : null
+      : locallyCalculatedSafeToSpend;
+    const totalBalance = hasAuthoritativeEvaluation
+      ? (consideredExpenses?.currentBalance ?? null)
+      : profile.currentBalance;
+    const evaluatedFixedAndRentTotal =
+      consideredExpenses?.essentialExpenses !== null &&
+      consideredExpenses?.essentialExpenses !== undefined &&
+      consideredExpenses.pendingCommitments !== null &&
+      consideredExpenses.pendingDebtPayments !== null
+        ? consideredExpenses.essentialExpenses +
+          consideredExpenses.pendingCommitments +
+          consideredExpenses.pendingDebtPayments
+        : null;
+    const displayedFixedAndRentTotal = hasAuthoritativeEvaluation
+      ? evaluatedFixedAndRentTotal
+      : fixedAndRentTotal;
+    const displayedSafetyBuffer = hasAuthoritativeEvaluation
+      ? (consideredExpenses?.safetyBuffer ?? null)
+      : profile.safetyBuffer;
 
     const activeDamage =
       simulationState === "recovered" ? 0 : Math.max(0, previewDamagePrice);
-    const netAfterPurchase = safeToSpend - activeDamage;
-    const isCriticalHit = activeDamage > 0 && netAfterPurchase < 0;
-    const missingAmount = isCriticalHit ? Math.abs(netAfterPurchase) : 0;
+    const netAfterPurchase = hasAuthoritativeEvaluation
+      ? evaluationComplete
+        ? financialEvaluation.remainingAfterBuyToday
+        : null
+      : (safeToSpend ?? 0) - activeDamage;
+    const isCriticalHit = hasAuthoritativeEvaluation
+      ? financialEvaluation?.status === "excede_el_margen"
+      : activeDamage > 0 && (netAfterPurchase ?? 0) < 0;
+    const missingAmount = hasAuthoritativeEvaluation
+      ? (financialEvaluation?.exceedsBy ?? null)
+      : isCriticalHit
+        ? Math.abs(netAfterPurchase ?? 0)
+        : 0;
 
     // 3-Segment Horizontal Bar Percentages (Fixed & Rent | Safety Buffer | Free Today)
-    const fixedPct = Math.min(
-      85,
-      Math.max(15, Math.round((fixedAndRentTotal / totalBalance) * 100))
-    );
-    const bufferPct = Math.min(
-      40,
-      Math.max(10, Math.round((profile.safetyBuffer / totalBalance) * 100))
-    );
-    const freePct = Math.max(8, 100 - fixedPct - bufferPct);
+    const fixedPct =
+      totalBalance !== null &&
+      totalBalance > 0 &&
+      displayedFixedAndRentTotal !== null
+        ? Math.min(
+            100,
+            Math.max(
+              0,
+              Math.round((displayedFixedAndRentTotal / totalBalance) * 100),
+            ),
+          )
+        : 0;
+    const bufferPct =
+      totalBalance !== null &&
+      totalBalance > 0 &&
+      displayedSafetyBuffer !== null
+        ? Math.min(
+            100 - fixedPct,
+            Math.max(
+              0,
+              Math.round((displayedSafetyBuffer / totalBalance) * 100),
+            ),
+          )
+        : 0;
+    const freePct =
+      totalBalance !== null && totalBalance > 0 && safeToSpend !== null
+        ? Math.min(
+            100 - fixedPct - bufferPct,
+            Math.max(0, Math.round((safeToSpend / totalBalance) * 100)),
+          )
+        : 0;
 
     const goalRatio =
       profile.goal.targetAmount > 0
@@ -153,9 +214,14 @@ export default function FinancialPlantWidget({
     const baseXp = profile.wisdomXp || 120;
 
     let derivedLevel: PlantLevel = 2;
-    if (safeToSpend <= 0) {
+    if (safeToSpend !== null && safeToSpend <= 0) {
       derivedLevel = 1;
-    } else if (safeToSpend < profile.safetyBuffer * 1.4 && goalRatio < 0.45) {
+    } else if (
+      safeToSpend !== null &&
+      displayedSafetyBuffer !== null &&
+      safeToSpend < displayedSafetyBuffer * 1.4 &&
+      goalRatio < 0.45
+    ) {
       derivedLevel = 2;
     } else if (goalRatio < 0.68 && baseXp < 400) {
       derivedLevel = 3;
@@ -187,13 +253,13 @@ export default function FinancialPlantWidget({
     return {
       activeLevel,
       config,
-      totalXp,
-      maxXp,
       progressPct,
+      hasAuthoritativeEvaluation,
+      evaluationComplete,
       safeToSpend,
-      totalBalance: profile.currentBalance,
-      fixedAndRentTotal,
-      safetyBuffer: profile.safetyBuffer,
+      totalBalance,
+      fixedAndRentTotal: displayedFixedAndRentTotal,
+      safetyBuffer: displayedSafetyBuffer,
       activeDamage,
       isCriticalHit,
       missingAmount,
@@ -207,14 +273,15 @@ export default function FinancialPlantWidget({
     simulationState,
     previewDamagePrice,
     recoveredXpBonus,
+    financialEvaluation,
   ]);
 
   const {
     activeLevel,
     config,
-    totalXp,
-    maxXp,
     progressPct,
+    hasAuthoritativeEvaluation,
+    evaluationComplete,
     safeToSpend,
     totalBalance,
     fixedAndRentTotal,
@@ -227,7 +294,10 @@ export default function FinancialPlantWidget({
     freePct,
   } = computedMetrics;
 
-  const isDanger = simulationState === "danger" || isCriticalHit;
+  const isDanger =
+    (simulationState === "danger" || isCriticalHit) &&
+    missingAmount !== null &&
+    missingAmount > 0;
   const isRecovered = simulationState === "recovered";
 
   return (
@@ -263,17 +333,25 @@ export default function FinancialPlantWidget({
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <div>
               <span className="text-xs font-semibold text-slate-500 block">
-                Disponible para gastar hoy:
+                {safeToSpend === null
+                  ? "Margen financiero no disponible:"
+                  : "Disponible para gastar hoy:"}
               </span>
               <span className="text-2xl sm:text-3xl font-bold font-heading text-slate-900 tracking-tight">
-                ${safeToSpend.toLocaleString()}{" "}
-                <span className="text-xs font-semibold text-slate-400">
-                  MXN
-                </span>
+                {safeToSpend === null
+                  ? "—"
+                  : `$${safeToSpend.toLocaleString()}`}{" "}
+                {safeToSpend !== null && (
+                  <span className="text-xs font-semibold text-slate-400">
+                    MXN
+                  </span>
+                )}
               </span>
             </div>
 
-            {activeDamage > 0 && !isRecovered && (
+            {activeDamage > 0 &&
+              !isRecovered &&
+              (!hasAuthoritativeEvaluation || evaluationComplete) && (
               <span
                 className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
                   isDanger
@@ -289,21 +367,51 @@ export default function FinancialPlantWidget({
           {/* Clean 3-Segment Horizontal Bar */}
           <div className="w-full h-3 rounded-full bg-slate-200/80 overflow-hidden flex gap-0.5 p-0.5">
             <div
-              style={{ width: `${fixedPct}%` }}
+              style={{
+                width: `${
+                  hasAuthoritativeEvaluation && !evaluationComplete
+                    ? 0
+                    : fixedPct
+                }%`,
+              }}
               className="h-full rounded-l-full bg-slate-400 transition-all duration-500"
-              title={`Apartado para renta y pagos fijos: -$${fixedAndRentTotal.toLocaleString()}`}
+              title={
+                fixedAndRentTotal === null
+                  ? "Compromisos considerados: desconocidos"
+                  : `Compromisos considerados: -$${fixedAndRentTotal.toLocaleString()}`
+              }
             />
             <div
-              style={{ width: `${bufferPct}%` }}
+              style={{
+                width: `${
+                  hasAuthoritativeEvaluation && !evaluationComplete
+                    ? 0
+                    : bufferPct
+                }%`,
+              }}
               className="h-full bg-slate-300 transition-all duration-500"
-              title={`Colchón de seguridad: -$${safetyBuffer.toLocaleString()}`}
+              title={
+                safetyBuffer === null
+                  ? "Colchón de seguridad: desconocido"
+                  : `Colchón de seguridad: -$${safetyBuffer.toLocaleString()}`
+              }
             />
             <div
-              style={{ width: `${freePct}%` }}
+              style={{
+                width: `${
+                  hasAuthoritativeEvaluation && !evaluationComplete
+                    ? 0
+                    : freePct
+                }%`,
+              }}
               className={`h-full rounded-r-full transition-all duration-500 ${
                 isDanger ? "bg-amber-500" : "bg-[#10B981]"
               }`}
-              title={`Libre hoy: $${safeToSpend.toLocaleString()}`}
+              title={
+                safeToSpend === null
+                  ? "Margen: desconocido"
+                  : `Margen: $${safeToSpend.toLocaleString()}`
+              }
             />
           </div>
 
@@ -311,21 +419,29 @@ export default function FinancialPlantWidget({
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px] text-slate-600 pt-0.5">
             <span>
               <strong className="text-slate-900">
-                Saldo ${totalBalance.toLocaleString()}
+                Saldo {totalBalance === null ? "—" : `$${totalBalance.toLocaleString()}`}
               </strong>
             </span>
             <span className="flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-slate-400 inline-block" />
-              Apartado para renta y pagos fijos: −$
-              {fixedAndRentTotal.toLocaleString()}
+              Compromisos considerados:{" "}
+              {fixedAndRentTotal === null
+                ? "—"
+                : `−$${fixedAndRentTotal.toLocaleString()}`}
             </span>
             <span className="flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-slate-300 inline-block" />
-              Colchón: −${safetyBuffer.toLocaleString()}
+              Colchón:{" "}
+              {safetyBuffer === null
+                ? "—"
+                : `−$${safetyBuffer.toLocaleString()}`}
             </span>
             <span className="flex items-center gap-1 font-semibold text-emerald-700">
               <span className="w-2 h-2 rounded-full bg-[#10B981] inline-block" />
-              = Libre hoy: ${safeToSpend.toLocaleString()}
+              = Margen:{" "}
+              {safeToSpend === null
+                ? "—"
+                : `$${safeToSpend.toLocaleString()}`}
             </span>
           </div>
         </div>
@@ -358,7 +474,7 @@ export default function FinancialPlantWidget({
 
         {/* Subtle Liquidity Deficit Alert */}
         <AnimatePresence>
-          {isDanger && (
+          {isDanger && missingAmount !== null && (
             <motion.div
               key="danger-wilting-badge"
               initial={{ opacity: 0, y: 8, scale: 0.95 }}
@@ -371,7 +487,7 @@ export default function FinancialPlantWidget({
                 strokeWidth={1.5}
               />
               <span>
-                Te faltan ${(missingAmount > 0 ? missingAmount : 1500).toLocaleString()} MXN de liquidez libre hoy
+                Te faltan ${missingAmount.toLocaleString()} MXN de margen libre
               </span>
             </motion.div>
           )}
@@ -871,4 +987,3 @@ export default function FinancialPlantWidget({
     </div>
   );
 }
-

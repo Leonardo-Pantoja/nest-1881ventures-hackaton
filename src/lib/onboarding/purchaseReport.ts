@@ -55,18 +55,30 @@ export function buildPurchaseReport(
     purchaseAmount * 100
   );
 
-  const balanceCents = Math.round(
-    profile.currentBalance * 100
-  );
-
   if (amountCents < 1) {
     throw new Error(
       "La compra debe ser de al menos $0.01."
     );
   }
 
+  if (profile.currentBalance === null) {
+    return {
+      status: "datos_incompletos",
+      purchase,
+      goalImpact: null,
+      projectionBefore: projectSixWeeks(profile),
+      projectionAfter: null,
+      projectedBalanceDifference: null,
+    };
+  }
+
+  const balanceCents = Math.round(profile.currentBalance * 100);
+
   // 2. La meta no se toca en este escenario
-  const goalImpact = profile.primaryGoal
+  const goalImpact =
+    profile.primaryGoal &&
+    profile.primaryGoal.targetAmount !== null &&
+    profile.primaryGoal.currentSaved !== null
     ? calculateGoalImpact(
         profile.primaryGoal,
         0

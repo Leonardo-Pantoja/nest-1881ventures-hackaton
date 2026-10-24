@@ -11,14 +11,37 @@ import QuickSnapScanner, {
 } from "@/components/QuickSnapScanner";
 import { type BottomNavTab } from "@/components/BottomNav";
 import { useFinancial } from "@/context/FinancialContext";
-import { playTap, playCoin } from "@/lib/soundEffects";
+import { playTap } from "@/lib/soundEffects";
 import type { EvaluateApiResponse } from "@/app/api/evaluate/route";
+
+interface EvaluationState {
+  key: string;
+  response: EvaluateApiResponse | null;
+  error: string | null;
+}
+
+function isEvaluationResponse(value: unknown): value is EvaluateApiResponse {
+  if (typeof value !== "object" || value === null) return false;
+  const response = value as Partial<EvaluateApiResponse>;
+  return (
+    (response.status === "dentro_del_margen" ||
+      response.status === "excede_el_margen" ||
+      response.status === "precaucion" ||
+      response.status === "datos_incompletos" ||
+      response.status === "error_procesamiento") &&
+    typeof response.detectedItemName === "string" &&
+    typeof response.detectedItemPrice === "number" &&
+    Number.isFinite(response.detectedItemPrice) &&
+    response.source === "deterministic"
+  );
+}
 
 function EvaluateContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const {
     profile,
+    mode,
     pendingEvaluation,
     setPendingEvaluation,
     incrementStreak,
@@ -26,9 +49,8 @@ function EvaluateContent() {
   } = useFinancial();
 
   const [actionToast, setActionToast] = useState<string | null>(null);
-  const [apiEvaluation, setApiEvaluation] =
-    useState<EvaluateApiResponse | null>(null);
-  const [isLoadingApi, setIsLoadingApi] = useState(false);
+  const [evaluationState, setEvaluationState] =
+    useState<EvaluationState | null>(null);
   const [scannedThumb, setScannedThumb] = useState<string | null>(null);
   const [scannedStore, setScannedStore] = useState<string | null>(null);
 
@@ -37,12 +59,35 @@ function EvaluateContent() {
     pendingEvaluation.name ||
     "Audífonos Inalámbricos Sony";
   const itemPrice =
-    Number(searchParams.get("price")) || pendingEvaluation.price || 2300;
+    Number(searchParams.get("price")) || pendingEvaluation.price || 0;
+  const evaluationKey = JSON.stringify([
+    mode,
+    profile.id,
+    itemName,
+    itemPrice,
+  ]);
+  const currentEvaluation =
+    evaluationState?.key === evaluationKey ? evaluationState : null;
+  const apiEvaluation = currentEvaluation?.response ?? null;
+  const apiEvaluationError =
+    currentEvaluation !== null && currentEvaluation.error !== null;
+  const apiErrorMessage = currentEvaluation?.error ?? null;
+  const isLoadingApi =
+    itemPrice > 0 &&
+    (mode === "demo" || mode === "authenticated") &&
+    currentEvaluation === null;
 
   useEffect(() => {
+    if (
+      itemPrice <= 0 ||
+      !itemName.trim() ||
+      (mode !== "demo" && mode !== "authenticated")
+    ) {
+      return;
+    }
+
     let active = true;
     const fetchEvaluation = async () => {
-      setIsLoadingApi(true);
       try {
         const res = await fetch("/api/evaluate", {
           method: "POST",
@@ -50,24 +95,49 @@ function EvaluateContent() {
           body: JSON.stringify({
             itemName,
             itemPrice,
-            profile,
+            mode: mode === "demo" ? "demo" : "account",
+            demoProfileId: mode === "demo" ? profile.id : undefined,
           }),
         });
-        if (res.ok && active) {
-          const data = (await res.json()) as EvaluateApiResponse;
-          setApiEvaluation(data);
+        const body: unknown = await res.json();
+        if (!res.ok) {
+          const message =
+            typeof body === "object" &&
+            body !== null &&
+            "error" in body &&
+            typeof body.error === "string"
+              ? body.error
+              : "No se pudo validar la sesión o los datos financieros.";
+          throw new Error(message);
         }
-      } catch {
-        // Automatic deterministic fallback inside PurchaseEvaluationFlow
-      } finally {
-        if (active) setIsLoadingApi(false);
+        if (!isEvaluationResponse(body)) {
+          throw new Error("El servicio devolvió una evaluación no válida.");
+        }
+        if (active) {
+          setEvaluationState({
+            key: evaluationKey,
+            response: body,
+            error: null,
+          });
+        }
+      } catch (error) {
+        if (active) {
+          setEvaluationState({
+            key: evaluationKey,
+            response: null,
+            error:
+              error instanceof Error
+                ? error.message
+                : "No se pudo conectar con el servicio financiero.",
+          });
+        }
       }
     };
     void fetchEvaluation();
     return () => {
       active = false;
     };
-  }, [itemName, itemPrice, profile]);
+  }, [evaluationKey, itemName, itemPrice, profile.id, mode]);
 
   const handleActionCompleted = (message: string) => {
     setActionToast(message);
@@ -107,18 +177,20 @@ function EvaluateContent() {
       <div className="space-y-4 max-w-xl mx-auto w-full">
         <QuickSnapScanner
           onScanComplete={(scanned: ScannedProductResult) => {
-            playCoin();
+            playTap();
             setPendingEvaluation({
               name: scanned.name,
-              price: scanned.price,
+              price: scanned.price ?? 0,
               imageName: scanned.storeTag,
             });
             setScannedThumb(scanned.thumbnailDataUrl);
             setScannedStore(scanned.storeTag);
-            if (scanned.apiResponse) {
-              setApiEvaluation(scanned.apiResponse);
+            incrementStreak("¡Escaneaste un producto! +1 Racha 🔥");
+            if (scanned.price === null) {
+              setActionToast(
+                "La lectura de imágenes con Gemini está pendiente para Fase 2. Confirma manualmente el precio en el simulador antes de evaluar.",
+              );
             }
-            incrementStreak("¡Escaneaste captura con IA! +1 Racha 🔥");
           }}
         />
 
@@ -134,6 +206,8 @@ function EvaluateContent() {
             thumbnailDataUrl={scannedThumb}
             storeTag={scannedStore}
             apiEvaluation={apiEvaluation}
+            apiEvaluationError={apiEvaluationError}
+            apiErrorMessage={apiErrorMessage}
             isLoadingApi={isLoadingApi}
             isStandalonePage
             onClose={() => router.push("/app")}
