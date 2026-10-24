@@ -1,22 +1,17 @@
 "use client";
 
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Compass,
   ChevronDown,
-  HelpCircle,
   Sparkles,
-  Camera,
   ArrowRight,
   CheckCircle2,
   SlidersHorizontal,
   UserCheck,
   X,
   Send,
-  Calendar,
   BookmarkCheck,
   Loader2,
   Flame,
@@ -28,9 +23,9 @@ import {
   Gamepad2,
   Utensils,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import AppShell from "@/components/AppShell";
 import PurchaseEvaluationFlow from "@/components/PurchaseEvaluationFlow";
 import QuickGuideModal from "@/components/QuickGuideModal";
 import FinancialPlantWidget from "@/components/FinancialPlantWidget";
@@ -38,11 +33,17 @@ import QuincenaEnergyGauge from "@/components/QuincenaEnergyGauge";
 import QuickSnapScanner, {
   type ScannedProductResult,
 } from "@/components/QuickSnapScanner";
-import BottomNav, { type BottomNavTab } from "@/components/BottomNav";
+import { type BottomNavTab } from "@/components/BottomNav";
 import {
   useFinancial,
   PRELOADED_SANDBOX_PROFILES,
 } from "@/context/FinancialContext";
+import {
+  playTap,
+  playCoin,
+  playDamage,
+  playLevelUp,
+} from "@/lib/soundEffects";
 import type { EvaluateApiResponse } from "@/app/api/evaluate/route";
 
 const QUICK_PURCHASE_EXAMPLES = [
@@ -89,7 +90,7 @@ export default function AppDashboardPage() {
     streakCelebration,
   } = useFinancial();
 
-  // Mobile-First Navigation & Progressive Disclosure States
+  // Navigation & Progressive Disclosure States
   const [activeBottomTab, setActiveBottomTab] = useState<BottomNavTab>("home");
   const [showWhyBreakdown, setShowWhyBreakdown] = useState(false);
   const [showTourModal, setShowTourModal] = useState(false);
@@ -98,14 +99,19 @@ export default function AppDashboardPage() {
 
   // Pre-purchase Copilot states
   const [queryText, setQueryText] = useState("Audífonos de $2,300");
-  const [parsedItemName, setParsedItemName] = useState("Audífonos Inalámbricos Sony");
+  const [parsedItemName, setParsedItemName] = useState(
+    "Audífonos Inalámbricos Sony"
+  );
   const [parsedItemPrice, setParsedItemPrice] = useState<number>(2300);
-  const [scannedThumbnailUrl, setScannedThumbnailUrl] = useState<string | null>(null);
+  const [scannedThumbnailUrl, setScannedThumbnailUrl] = useState<string | null>(
+    null
+  );
   const [scannedStoreTag, setScannedStoreTag] = useState<string | null>(null);
   const [showEvaluationView, setShowEvaluationView] = useState(false);
 
   // /api/evaluate state
-  const [apiEvaluation, setApiEvaluation] = useState<EvaluateApiResponse | null>(null);
+  const [apiEvaluation, setApiEvaluation] =
+    useState<EvaluateApiResponse | null>(null);
   const [isEvaluatingApi, setIsEvaluatingApi] = useState(false);
 
   // Quick expense bottom bar & toast feedback
@@ -116,7 +122,6 @@ export default function AppDashboardPage() {
     message: string;
   } | null>(null);
 
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const simulatorSectionRef = useRef<HTMLElement | null>(null);
 
   // Auto-open the 3-slide welcome guide the first time the user enters /app
@@ -146,7 +151,8 @@ export default function AppDashboardPage() {
       .filter((c) => c.dueInDays <= profile.nextPaydayDays)
       .reduce((acc, c) => acc + c.amount, 0);
 
-    const essentialLivingCost = profile.dailyEssentialBurn * profile.nextPaydayDays;
+    const essentialLivingCost =
+      profile.dailyEssentialBurn * profile.nextPaydayDays;
 
     const safeToSpend = Math.max(
       0,
@@ -160,7 +166,9 @@ export default function AppDashboardPage() {
       profile.goal.targetAmount > 0
         ? Math.min(
             100,
-            Math.round((profile.goal.currentSaved / profile.goal.targetAmount) * 100)
+            Math.round(
+              (profile.goal.currentSaved / profile.goal.targetAmount) * 100
+            )
           )
         : 0;
 
@@ -172,8 +180,18 @@ export default function AppDashboardPage() {
     };
   }, [profile]);
 
-  // Call /api/evaluate + Increment Streak 🔥 for evaluating before spending!
-  const runEvaluation = async (name: string, price: number, imageName?: string | null) => {
+  // Call /api/evaluate + Increment Streak 🔥 + Sound FX
+  const runEvaluation = async (
+    name: string,
+    price: number,
+    imageName?: string | null
+  ) => {
+    if (price > financialMetrics.safeToSpend) {
+      playDamage();
+    } else {
+      playCoin();
+    }
+
     setPendingEvaluation({
       name,
       price,
@@ -227,7 +245,10 @@ export default function AppDashboardPage() {
     }
   };
 
-  const handleSelectExample = (example: (typeof QUICK_PURCHASE_EXAMPLES)[number]) => {
+  const handleSelectExample = (
+    example: (typeof QUICK_PURCHASE_EXAMPLES)[number]
+  ) => {
+    playTap();
     setQueryText(example.label);
     setParsedItemName(example.name);
     setParsedItemPrice(example.price);
@@ -256,8 +277,13 @@ export default function AppDashboardPage() {
 
   const handleAnalyzeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    playTap();
     if (!queryText.trim() && parsedItemPrice <= 0) return;
-    void runEvaluation(parsedItemName, parsedItemPrice || 1200, scannedStoreTag);
+    void runEvaluation(
+      parsedItemName,
+      parsedItemPrice || 1200,
+      scannedStoreTag
+    );
   };
 
   const handleQuickExpenseSubmit = (e: React.FormEvent) => {
@@ -271,12 +297,13 @@ export default function AppDashboardPage() {
     const amount = Math.round(parseFloat(match[1]));
     if (amount <= 0) return;
 
+    playCoin();
     updateProfile({
       currentBalance: Math.max(0, profile.currentBalance - amount),
     });
 
     triggerToast(
-      `Gasto registrado: −$${amount.toLocaleString()} MXN (${quickExpenseInput.trim()})`
+      `−$${amount.toLocaleString()} MXN (${quickExpenseInput.trim()})`
     );
     setQuickExpenseInput("");
     setIsQuickExpenseOpen(false);
@@ -291,7 +318,10 @@ export default function AppDashboardPage() {
     } else if (tab === "simulate") {
       setShowGoalsSheet(false);
       setShowProfileSheet(false);
-      simulatorSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      simulatorSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
     } else if (tab === "goals") {
       setShowProfileSheet(false);
       setShowGoalsSheet(true);
@@ -302,65 +332,11 @@ export default function AppDashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF8F5] text-slate-900 flex flex-col justify-between font-sans pb-36">
-      {/* Compact Mobile-First Header with Streak Counter 🔥 */}
-      <header className="sticky top-0 z-30 border-b border-[#E6E1DA]/90 bg-[#FAF8F5]/90 backdrop-blur-md">
-        <div className="max-w-lg mx-auto px-4 h-14 flex items-center justify-between gap-2">
-          <Link href="/" className="flex items-center gap-2 group shrink-0">
-            <div className="w-8 h-8 rounded-xl bg-slate-900 text-[#FAF8F5] flex items-center justify-center shadow-2xs">
-              <Compass className="w-4 h-4" strokeWidth={1.5} />
-            </div>
-            <span className="text-sm font-bold tracking-tight text-slate-900">
-              AntesDeGastar
-            </span>
-          </Link>
-
-          <div className="flex items-center gap-2">
-            {/* Streak Counter Badge 🔥 */}
-            <motion.button
-              type="button"
-              whileTap={{ scale: 0.96 }}
-              onClick={() => handleBottomNavSelect("goals")}
-              className="h-8 px-3 rounded-full bg-gradient-to-r from-orange-100 via-amber-100 to-yellow-100 border border-orange-300/80 text-orange-950 text-xs font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer"
-              title="Racha de Buenas Decisiones"
-            >
-              <Flame
-                className="w-3.5 h-3.5 text-orange-600 fill-orange-500"
-                strokeWidth={1.5}
-              />
-              <span>{profile.streakCount ?? 3}</span>
-              <span className="text-[10px] font-semibold text-orange-800 hidden sm:inline">
-                Racha
-              </span>
-            </motion.button>
-
-            {/* Profile Pill */}
-            <motion.button
-              type="button"
-              whileTap={{ scale: 0.96 }}
-              onClick={() => handleBottomNavSelect("profile")}
-              className="h-8 px-2.5 rounded-full border border-[#E6E1DA] bg-white text-xs font-semibold text-slate-800 flex items-center gap-1.5 shadow-2xs cursor-pointer"
-            >
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              <span className="truncate max-w-[92px]">
-                {profile.name.split(" ")[0]}
-              </span>
-            </motion.button>
-
-            {/* Quick Tour Help Icon */}
-            <motion.button
-              type="button"
-              whileTap={{ scale: 0.96 }}
-              onClick={() => setShowTourModal(true)}
-              className="w-8 h-8 rounded-full border border-[#E6E1DA] bg-white text-slate-600 flex items-center justify-center cursor-pointer"
-              title="Guía rápida"
-            >
-              <HelpCircle className="w-4 h-4" strokeWidth={1.5} />
-            </motion.button>
-          </div>
-        </div>
-      </header>
-
+    <AppShell
+      activeTab={activeBottomTab}
+      onSelectTab={handleBottomNavSelect}
+      onOpenGuide={() => setShowTourModal(true)}
+    >
       {/* Celebratory Streak Popup Banner 🔥 */}
       <AnimatePresence>
         {streakCelebration && (
@@ -370,7 +346,7 @@ export default function AppDashboardPage() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -18, scale: 0.92 }}
             transition={{ type: "spring", stiffness: 360, damping: 22 }}
-            className="fixed top-16 left-1/2 -translate-x-1/2 z-50 rounded-full bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500 text-white px-4 py-2 shadow-lg flex items-center gap-2 text-xs font-bold whitespace-nowrap border-2 border-white"
+            className="fixed top-16 md:top-6 left-1/2 -translate-x-1/2 z-50 rounded-full bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500 text-white px-4 py-2 shadow-lg flex items-center gap-2 text-xs font-bold font-heading whitespace-nowrap border-2 border-white"
           >
             <Flame className="w-4 h-4 fill-white text-white" strokeWidth={1.5} />
             <span>
@@ -380,136 +356,149 @@ export default function AppDashboardPage() {
         )}
       </AnimatePresence>
 
-      {/* Main Mobile-First Feed */}
-      <main className="flex-1 max-w-lg w-full mx-auto px-4 pt-4 space-y-4">
-        {/* 1. Protagonist Gamified Financial Plant Widget */}
-        <motion.section
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35 }}
-        >
-          <FinancialPlantWidget
-            simulationState={
-              financialMetrics.safeToSpend < parsedItemPrice && parsedItemPrice > 0
-                ? "danger"
-                : "normal"
-            }
-          />
-        </motion.section>
+      {/* ADHD-Friendly Gamified Grid (Zero Visual Clutter) */}
+      <div className="space-y-5">
+        {/* Top Row on Desktop: Plant Widget + Hero Liquidity + Quincena Energy */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+          {/* 1. Protagonist Gamified Financial Plant Widget */}
+          <motion.section
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35 }}
+            className="lg:col-span-7 flex flex-col"
+          >
+            <FinancialPlantWidget
+              simulationState={
+                financialMetrics.safeToSpend < parsedItemPrice &&
+                parsedItemPrice > 0
+                  ? "danger"
+                  : "normal"
+              }
+            />
+          </motion.section>
 
-        {/* 2. Hero Liquidity Card (Single Protagonist Number + Visual Cues) */}
-        <motion.section
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.04 }}
-        >
-          <Card className="bg-gradient-to-br from-white via-white to-emerald-50/40 border-[#E2DCD3] shadow-xs rounded-3xl py-5 px-1">
-            <CardContent className="px-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-500">
-                  Hoy puedes gastar con tranquilidad:
-                </span>
-                <Badge
-                  variant="outline"
-                  className="border-emerald-300 bg-emerald-50 text-emerald-900 text-[11px] font-semibold"
-                >
-                  Nómina en {profile.nextPaydayDays}d
-                </Badge>
-              </div>
+          {/* Right Column: Hero Liquidity + Energy Gauge */}
+          <div className="lg:col-span-5 flex flex-col justify-between gap-4">
+            {/* 2. Hero Liquidity Card (Single Protagonist Number) */}
+            <motion.section
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.04 }}
+            >
+              <Card className="bg-gradient-to-br from-white via-white to-emerald-50/50 border-[#E2DCD3] shadow-xs rounded-3xl py-5 px-1">
+                <CardContent className="px-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-500">
+                      Disponible libre hoy:
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className="border-emerald-300 bg-emerald-50 text-emerald-900 text-[11px] font-bold font-heading"
+                    >
+                      Nómina en {profile.nextPaydayDays}d
+                    </Badge>
+                  </div>
 
-              <div className="flex items-baseline justify-between gap-2">
-                <div className="flex items-baseline gap-1.5">
-                  <motion.span
-                    key={financialMetrics.safeToSpend}
-                    initial={{ scale: 0.94 }}
-                    animate={{ scale: 1 }}
-                    className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 font-mono"
-                  >
-                    ${financialMetrics.safeToSpend.toLocaleString()}
-                  </motion.span>
-                  <span className="text-xs font-bold text-slate-400">MXN</span>
-                </div>
-
-                <motion.button
-                  type="button"
-                  whileTap={{ scale: 0.96 }}
-                  onClick={() => setShowWhyBreakdown((prev) => !prev)}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-slate-700 bg-[#FAF8F5] hover:bg-[#F3EFEA] border border-[#E6E1DA] px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
-                >
-                  <span>¿Por qué este monto?</span>
-                  <ChevronDown
-                    className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                      showWhyBreakdown ? "rotate-180" : ""
-                    }`}
-                    strokeWidth={1.5}
-                  />
-                </motion.button>
-              </div>
-
-              <AnimatePresence initial={false}>
-                {showWhyBreakdown && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.25 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="pt-3 mt-1 border-t border-[#EFECE6] grid grid-cols-2 gap-2">
-                      <div className="p-2.5 rounded-2xl bg-[#FAF8F5] border border-[#E6E1DA]">
-                        <span className="text-[10px] text-slate-500 block">
-                          Saldo en cuenta
-                        </span>
-                        <span className="text-xs font-bold text-slate-900 font-mono">
-                          ${profile.currentBalance.toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="p-2.5 rounded-2xl bg-rose-50/60 border border-rose-200/70">
-                        <span className="text-[10px] text-rose-700 block">
-                          Pagos fijos ({profile.commitments.length})
-                        </span>
-                        <span className="text-xs font-bold text-rose-800 font-mono">
-                          −${financialMetrics.commitmentsTotal.toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="p-2.5 rounded-2xl bg-amber-50/60 border border-amber-200/70">
-                        <span className="text-[10px] text-amber-800 block">
-                          Vital ({profile.nextPaydayDays} días)
-                        </span>
-                        <span className="text-xs font-bold text-amber-900 font-mono">
-                          −${financialMetrics.essentialLivingCost.toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="p-2.5 rounded-2xl bg-emerald-50/60 border border-emerald-200/70">
-                        <span className="text-[10px] text-emerald-800 block">
-                          Colchón paz
-                        </span>
-                        <span className="text-xs font-bold text-emerald-900 font-mono">
-                          −${profile.safetyBuffer.toLocaleString()}
-                        </span>
-                      </div>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <div className="flex items-baseline gap-1.5">
+                      <motion.span
+                        key={financialMetrics.safeToSpend}
+                        initial={{ scale: 0.94 }}
+                        animate={{ scale: 1 }}
+                        className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 font-heading"
+                      >
+                        ${financialMetrics.safeToSpend.toLocaleString()}
+                      </motion.span>
+                      <span className="text-xs font-bold text-slate-400 font-heading">
+                        MXN
+                      </span>
                     </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </CardContent>
-          </Card>
-        </motion.section>
 
-        {/* 3. Real-Time Spring Speedometer / Thermometer of Quincena Energy */}
-        <motion.section
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.08 }}
-        >
-          <QuincenaEnergyGauge
-            safeToSpend={financialMetrics.safeToSpend}
-            previewPrice={parsedItemPrice}
-            nextPaydayDays={profile.nextPaydayDays}
-          />
-        </motion.section>
+                    <motion.button
+                      type="button"
+                      whileTap={{ scale: 0.96 }}
+                      onClick={() => {
+                        playTap();
+                        setShowWhyBreakdown((prev) => !prev);
+                      }}
+                      className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 bg-[#FAF8F5] hover:bg-[#F3EFEA] border border-[#E6E1DA] px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
+                    >
+                      <span>¿Por qué?</span>
+                      <ChevronDown
+                        className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                          showWhyBreakdown ? "rotate-180" : ""
+                        }`}
+                        strokeWidth={1.5}
+                      />
+                    </motion.button>
+                  </div>
 
-        {/* 4. El Copiloto Pre-Compra (Interactive Cards & Chips with Micro-interactions) */}
+                  <AnimatePresence initial={false}>
+                    {showWhyBreakdown && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.25 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="pt-3 mt-1 border-t border-[#EFECE6] grid grid-cols-2 gap-2">
+                          <div className="p-2.5 rounded-2xl bg-[#FAF8F5] border border-[#E6E1DA]">
+                            <span className="text-[10px] text-slate-500 block">
+                              Saldo cuenta
+                            </span>
+                            <span className="text-xs font-bold text-slate-900 font-heading">
+                              ${profile.currentBalance.toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="p-2.5 rounded-2xl bg-rose-50/60 border border-rose-200/70">
+                            <span className="text-[10px] text-rose-700 block">
+                              Pagos fijos ({profile.commitments.length})
+                            </span>
+                            <span className="text-xs font-bold text-rose-800 font-heading">
+                              −${financialMetrics.commitmentsTotal.toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="p-2.5 rounded-2xl bg-amber-50/60 border border-amber-200/70">
+                            <span className="text-[10px] text-amber-800 block">
+                              Vital ({profile.nextPaydayDays}d)
+                            </span>
+                            <span className="text-xs font-bold text-amber-900 font-heading">
+                              −${financialMetrics.essentialLivingCost.toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="p-2.5 rounded-2xl bg-emerald-50/60 border border-emerald-200/70">
+                            <span className="text-[10px] text-emerald-800 block">
+                              Colchón paz
+                            </span>
+                            <span className="text-xs font-bold text-emerald-900 font-heading">
+                              −${profile.safetyBuffer.toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </CardContent>
+              </Card>
+            </motion.section>
+
+            {/* 3. Real-Time Spring Speedometer / Thermometer of Quincena Energy */}
+            <motion.section
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.08 }}
+            >
+              <QuincenaEnergyGauge
+                safeToSpend={financialMetrics.safeToSpend}
+                previewPrice={parsedItemPrice}
+                nextPaydayDays={profile.nextPaydayDays}
+              />
+            </motion.section>
+          </div>
+        </div>
+
+        {/* 4. El Copiloto Pre-Compra (Scanner + Quick Chips) */}
         <motion.section
           ref={simulatorSectionRef}
           initial={{ opacity: 0, y: 14 }}
@@ -518,18 +507,18 @@ export default function AppDashboardPage() {
           className="space-y-3"
         >
           <Card className="bg-white border-[#E2DCD3] shadow-xs rounded-3xl py-5 px-1">
-            <CardContent className="px-4 space-y-4">
+            <CardContent className="px-4 sm:px-6 space-y-4">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-2xs">
                     <Sparkles className="w-4 h-4" strokeWidth={1.5} />
                   </div>
-                  <h2 className="text-base sm:text-lg font-bold tracking-tight text-slate-900">
-                    ¿Qué estás pensando comprar hoy?
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 font-heading">
+                    ¿Qué quieres comprar hoy?
                   </h2>
                 </div>
-                <span className="text-[11px] font-semibold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">
-                  +1 🔥 al evaluar
+                <span className="text-[11px] font-bold font-heading text-orange-800 bg-orange-100/90 border border-orange-200 px-2.5 py-0.5 rounded-full">
+                  +1 🔥 Racha
                 </span>
               </div>
 
@@ -551,11 +540,11 @@ export default function AppDashboardPage() {
                     />
                     <div className="min-w-0">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 block">
-                        ✓ Captura escaneada · {scannedStoreTag}
+                        ✓ Captura lista · {scannedStoreTag}
                       </span>
-                      <p className="text-xs font-bold text-slate-900 truncate">
+                      <p className="text-xs font-bold text-slate-900 truncate font-heading">
                         {parsedItemName} ·{" "}
-                        <span className="font-mono text-emerald-800">
+                        <span className="text-emerald-800">
                           ${parsedItemPrice.toLocaleString()} MXN
                         </span>
                       </p>
@@ -564,6 +553,7 @@ export default function AppDashboardPage() {
                   <button
                     type="button"
                     onClick={() => {
+                      playTap();
                       setScannedThumbnailUrl(null);
                       setScannedStoreTag(null);
                     }}
@@ -574,31 +564,35 @@ export default function AppDashboardPage() {
                 </motion.div>
               )}
 
-              <form onSubmit={handleAnalyzeSubmit} className="space-y-2.5">
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={queryText}
-                    onChange={(e) => handleQueryInputChange(e.target.value)}
-                    placeholder='O escribe precio: ej. "Tenis 1800" o "Cena 450"'
-                    className="w-full h-12 px-4 rounded-2xl border border-[#DCD5CA] bg-[#FAF8F5] text-sm sm:text-base font-medium text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-emerald-600 focus:outline-none transition-all"
-                  />
-                </div>
+              <form
+                onSubmit={handleAnalyzeSubmit}
+                className="flex flex-col sm:flex-row gap-2.5"
+              >
+                <input
+                  type="text"
+                  value={queryText}
+                  onChange={(e) => handleQueryInputChange(e.target.value)}
+                  placeholder='Ej. "Tenis 1800" o "Cena 450"'
+                  className="flex-1 h-12 px-4 rounded-2xl border border-[#DCD5CA] bg-[#FAF8F5] text-sm sm:text-base font-semibold text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-emerald-600 focus:outline-none transition-all"
+                />
 
                 <motion.button
                   type="submit"
                   whileTap={{ scale: 0.96 }}
                   disabled={isEvaluatingApi}
-                  className="w-full h-12 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-[#FAF8F5] font-bold text-sm flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                  className="h-12 px-6 rounded-2xl bg-slate-900 hover:bg-slate-800 text-[#FAF8F5] font-bold font-heading text-sm flex items-center justify-center gap-2 shadow-sm cursor-pointer shrink-0"
                 >
                   {isEvaluatingApi ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin" strokeWidth={1.5} />
-                      <span>Analizando impacto...</span>
+                      <Loader2
+                        className="w-4 h-4 animate-spin"
+                        strokeWidth={1.5}
+                      />
+                      <span>Evaluando...</span>
                     </>
                   ) : (
                     <>
-                      <span>Analizar compra</span>
+                      <span>Simular impacto</span>
                       <ArrowRight className="w-4 h-4" strokeWidth={1.5} />
                     </>
                   )}
@@ -606,43 +600,38 @@ export default function AppDashboardPage() {
               </form>
 
               {/* Interactive Gradient Quick Purchase Chips */}
-              <div className="space-y-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
-                  Toca un antojo rápido para simular:
-                </span>
-                <div className="grid grid-cols-2 gap-2">
-                  {QUICK_PURCHASE_EXAMPLES.map((example) => {
-                    const Icon = example.icon;
-                    const isSelected = parsedItemPrice === example.price;
-                    return (
-                      <motion.button
-                        key={example.label}
-                        type="button"
-                        whileTap={{ scale: 0.96 }}
-                        onClick={() => handleSelectExample(example)}
-                        className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-2.5 cursor-pointer bg-gradient-to-br ${
-                          example.gradient
-                        } ${
-                          isSelected
-                            ? "ring-2 ring-slate-900 shadow-xs"
-                            : "hover:opacity-90"
-                        }`}
-                      >
-                        <div className="w-8 h-8 rounded-xl bg-white/90 border border-white text-slate-800 flex items-center justify-center shrink-0 shadow-2xs">
-                          <Icon className="w-4 h-4" strokeWidth={1.5} />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-slate-900 truncate">
-                            {example.name.split(" ")[0]}
-                          </p>
-                          <p className="text-[11px] font-mono font-semibold text-slate-600">
-                            ${example.price.toLocaleString()}
-                          </p>
-                        </div>
-                      </motion.button>
-                    );
-                  })}
-                </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                {QUICK_PURCHASE_EXAMPLES.map((example) => {
+                  const Icon = example.icon;
+                  const isSelected = parsedItemPrice === example.price;
+                  return (
+                    <motion.button
+                      key={example.label}
+                      type="button"
+                      whileTap={{ scale: 0.96 }}
+                      onClick={() => handleSelectExample(example)}
+                      className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-2.5 cursor-pointer bg-gradient-to-br ${
+                        example.gradient
+                      } ${
+                        isSelected
+                          ? "ring-2 ring-slate-900 shadow-xs"
+                          : "hover:opacity-90"
+                      }`}
+                    >
+                      <div className="w-8 h-8 rounded-xl bg-white/90 border border-white text-slate-800 flex items-center justify-center shrink-0 shadow-2xs">
+                        <Icon className="w-4 h-4" strokeWidth={1.5} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold font-heading text-slate-900 truncate">
+                          {example.name.split(" ")[0]}
+                        </p>
+                        <p className="text-[11px] font-bold font-heading text-slate-600">
+                          ${example.price.toLocaleString()}
+                        </p>
+                      </div>
+                    </motion.button>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
@@ -654,7 +643,7 @@ export default function AppDashboardPage() {
               animate={{ opacity: 1, y: 0 }}
               className="rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50/80 to-white px-4 py-3 flex items-center justify-between gap-2"
             >
-              <div className="flex items-center gap-2 text-xs font-medium text-emerald-950 truncate">
+              <div className="flex items-center gap-2 text-xs font-semibold text-emerald-950 truncate">
                 <BookmarkCheck
                   className="w-4 h-4 text-emerald-700 shrink-0"
                   strokeWidth={1.5}
@@ -666,68 +655,72 @@ export default function AppDashboardPage() {
                     .join(" · ")}
                 </span>
               </div>
-              <span className="text-[10px] font-bold text-emerald-800 bg-white px-2 py-0.5 rounded-full border border-emerald-200 shrink-0">
+              <span className="text-[10px] font-bold font-heading text-emerald-800 bg-white px-2.5 py-0.5 rounded-full border border-emerald-200 shrink-0">
                 +50 XP
               </span>
             </motion.div>
           )}
         </motion.section>
-      </main>
-
-      {/* Discreet Floating Pill Above BottomNav: Quick Text Expense */}
-      <div className="fixed bottom-20 inset-x-0 z-30 px-4 pointer-events-none">
-        <div className="max-w-lg mx-auto flex justify-end pointer-events-auto">
-          <AnimatePresence mode="wait">
-            {!isQuickExpenseOpen ? (
-              <motion.button
-                key="collapsed-quick-expense"
-                type="button"
-                whileTap={{ scale: 0.96 }}
-                onClick={() => setIsQuickExpenseOpen(true)}
-                className="h-10 px-4 rounded-full bg-slate-900 text-[#FAF8F5] shadow-md text-xs font-semibold flex items-center gap-2 cursor-pointer border border-slate-700"
-              >
-                <Zap className="w-3.5 h-3.5 text-amber-400" strokeWidth={1.5} />
-                <span>Gasto rápido (“Gasté 150”)</span>
-              </motion.button>
-            ) : (
-              <motion.form
-                key="expanded-quick-expense"
-                initial={{ opacity: 0, y: 10, scale: 0.96 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 8, scale: 0.96 }}
-                onSubmit={handleQuickExpenseSubmit}
-                className="w-full rounded-2xl bg-white border border-slate-300 shadow-xl p-2 flex items-center gap-2"
-              >
-                <input
-                  type="text"
-                  autoFocus
-                  value={quickExpenseInput}
-                  onChange={(e) => setQuickExpenseInput(e.target.value)}
-                  placeholder='Ej. "Gasté 150 en comida"'
-                  className="flex-1 h-9 px-3 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 bg-transparent focus:outline-none"
-                />
-                <motion.button
-                  type="submit"
-                  whileTap={{ scale: 0.96 }}
-                  className="h-9 px-3.5 rounded-xl bg-slate-900 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer"
-                >
-                  <Send className="w-3.5 h-3.5" strokeWidth={1.5} />
-                  <span>Restar</span>
-                </motion.button>
-                <button
-                  type="button"
-                  onClick={() => setIsQuickExpenseOpen(false)}
-                  className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 cursor-pointer"
-                >
-                  <X className="w-4 h-4" strokeWidth={1.5} />
-                </button>
-              </motion.form>
-            )}
-          </AnimatePresence>
-        </div>
       </div>
 
-      {/* Sheet Modal: Retos y Metas (Tab 3 of BottomNav) */}
+      {/* Discreet Floating Pill: Quick Text Expense */}
+      <div className="fixed bottom-20 md:bottom-6 right-4 z-30 pointer-events-auto">
+        <AnimatePresence mode="wait">
+          {!isQuickExpenseOpen ? (
+            <motion.button
+              key="collapsed-quick-expense"
+              type="button"
+              whileTap={{ scale: 0.96 }}
+              onClick={() => {
+                playTap();
+                setIsQuickExpenseOpen(true);
+              }}
+              className="h-10 px-4 rounded-full bg-slate-900 text-[#FAF8F5] shadow-md text-xs font-bold font-heading flex items-center gap-2 cursor-pointer border border-slate-700"
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-400" strokeWidth={1.5} />
+              <span>Gasto rápido (“Gasté 150”)</span>
+            </motion.button>
+          ) : (
+            <motion.form
+              key="expanded-quick-expense"
+              initial={{ opacity: 0, y: 10, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.96 }}
+              onSubmit={handleQuickExpenseSubmit}
+              className="w-80 sm:w-96 rounded-2xl bg-white border-2 border-slate-300 shadow-xl p-2 flex items-center gap-2"
+            >
+              <input
+                type="text"
+                autoFocus
+                value={quickExpenseInput}
+                onChange={(e) => setQuickExpenseInput(e.target.value)}
+                placeholder='Ej. "Gasté 150 en comida"'
+                className="flex-1 h-9 px-3 text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-400 bg-transparent focus:outline-none"
+              />
+              <motion.button
+                type="submit"
+                whileTap={{ scale: 0.96 }}
+                className="h-9 px-3.5 rounded-xl bg-slate-900 text-white text-xs font-bold font-heading flex items-center gap-1 cursor-pointer"
+              >
+                <Send className="w-3.5 h-3.5" strokeWidth={1.5} />
+                <span>Restar</span>
+              </motion.button>
+              <button
+                type="button"
+                onClick={() => {
+                  playTap();
+                  setIsQuickExpenseOpen(false);
+                }}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="w-4 h-4" strokeWidth={1.5} />
+              </button>
+            </motion.form>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Sheet Modal: Retos y Metas */}
       <AnimatePresence>
         {showGoalsSheet && (
           <motion.div
@@ -750,13 +743,14 @@ export default function AppDashboardPage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Trophy className="w-5 h-5 text-amber-600" strokeWidth={1.5} />
-                  <h3 className="text-base font-bold text-slate-900">
+                  <h3 className="text-base font-bold font-heading text-slate-900">
                     Retos, Rachas y tu Meta
                   </h3>
                 </div>
                 <button
                   type="button"
                   onClick={() => {
+                    playTap();
                     setShowGoalsSheet(false);
                     setActiveBottomTab("home");
                   }}
@@ -767,31 +761,40 @@ export default function AppDashboardPage() {
               </div>
 
               {/* Active Streak Card */}
-              <div className="p-4 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 text-white flex items-center justify-between">
+              <div
+                onClick={() => playLevelUp()}
+                className="p-4 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 text-white flex items-center justify-between cursor-pointer"
+              >
                 <div className="space-y-0.5">
-                  <span className="text-[11px] uppercase tracking-wider opacity-90 font-semibold">
+                  <span className="text-[11px] uppercase tracking-wider opacity-90 font-bold">
                     Racha de Buenas Decisiones
                   </span>
-                  <p className="text-2xl font-bold font-mono">
+                  <p className="text-2xl font-bold font-heading">
                     {profile.streakCount ?? 3} seguidas 🔥
                   </p>
                   <p className="text-xs opacity-90">
-                    Suma +1 cada vez que evalúas o decides esperar.
+                    Toca para celebrar con confeti 🎉
                   </p>
                 </div>
-                <Flame className="w-10 h-10 text-white/90 fill-white/30" strokeWidth={1.5} />
+                <Flame
+                  className="w-10 h-10 text-white/90 fill-white/30"
+                  strokeWidth={1.5}
+                />
               </div>
 
               {/* Active Savings Goal Progress */}
               <div className="p-4 rounded-2xl bg-white border border-[#E6E1DA] space-y-2.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Target className="w-4 h-4 text-emerald-700" strokeWidth={1.5} />
-                    <span className="text-xs font-bold text-slate-900">
+                    <Target
+                      className="w-4 h-4 text-emerald-700"
+                      strokeWidth={1.5}
+                    />
+                    <span className="text-xs font-bold font-heading text-slate-900">
                       {profile.goal.title}
                     </span>
                   </div>
-                  <span className="text-xs font-mono font-bold text-emerald-700">
+                  <span className="text-xs font-bold font-heading text-emerald-700">
                     {financialMetrics.goalPct}%
                   </span>
                 </div>
@@ -804,9 +807,13 @@ export default function AppDashboardPage() {
                   />
                 </div>
 
-                <div className="flex justify-between text-[11px] text-slate-500 font-mono">
-                  <span>Ahorrado: ${profile.goal.currentSaved.toLocaleString()}</span>
-                  <span>Meta: ${profile.goal.targetAmount.toLocaleString()}</span>
+                <div className="flex justify-between text-[11px] text-slate-500 font-semibold">
+                  <span>
+                    Ahorrado: ${profile.goal.currentSaved.toLocaleString()}
+                  </span>
+                  <span>
+                    Meta: ${profile.goal.targetAmount.toLocaleString()}
+                  </span>
                 </div>
               </div>
             </motion.div>
@@ -814,7 +821,7 @@ export default function AppDashboardPage() {
         )}
       </AnimatePresence>
 
-      {/* Sheet Modal: Cambiar Perfil (Tab 4 of BottomNav) */}
+      {/* Sheet Modal: Cambiar Perfil */}
       <AnimatePresence>
         {showProfileSheet && (
           <motion.div
@@ -836,14 +843,18 @@ export default function AppDashboardPage() {
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <UserCheck className="w-5 h-5 text-emerald-700" strokeWidth={1.5} />
-                  <h3 className="text-base font-bold text-slate-900">
-                    Cambiar Perfil o Contexto
+                  <UserCheck
+                    className="w-5 h-5 text-emerald-700"
+                    strokeWidth={1.5}
+                  />
+                  <h3 className="text-base font-bold font-heading text-slate-900">
+                    Cambiar Perfil
                   </h3>
                 </div>
                 <button
                   type="button"
                   onClick={() => {
+                    playTap();
                     setShowProfileSheet(false);
                     setActiveBottomTab("home");
                   }}
@@ -863,6 +874,7 @@ export default function AppDashboardPage() {
                       type="button"
                       whileTap={{ scale: 0.96 }}
                       onClick={() => {
+                        playCoin();
                         loadPreloadedSandboxProfile(key);
                         setShowProfileSheet(false);
                         setActiveBottomTab("home");
@@ -875,7 +887,9 @@ export default function AppDashboardPage() {
                       }`}
                     >
                       <div>
-                        <p className="text-sm font-bold">{item.name}</p>
+                        <p className="text-sm font-bold font-heading">
+                          {item.name}
+                        </p>
                         <p
                           className={`text-xs ${
                             isCurrent ? "text-slate-300" : "text-slate-500"
@@ -899,8 +913,11 @@ export default function AppDashboardPage() {
               <motion.button
                 type="button"
                 whileTap={{ scale: 0.96 }}
-                onClick={() => router.push("/onboarding")}
-                className="w-full h-11 rounded-2xl border border-[#DCD5CA] bg-white text-xs font-bold text-slate-800 flex items-center justify-center gap-2 cursor-pointer"
+                onClick={() => {
+                  playTap();
+                  router.push("/onboarding");
+                }}
+                className="w-full h-11 rounded-2xl border border-[#DCD5CA] bg-white text-xs font-bold font-heading text-slate-800 flex items-center justify-center gap-2 cursor-pointer"
               >
                 <SlidersHorizontal className="w-4 h-4" strokeWidth={1.5} />
                 <span>Personalizar desde cero (Onboarding)</span>
@@ -953,7 +970,7 @@ export default function AppDashboardPage() {
             initial={{ opacity: 0, y: 20, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.96 }}
-            className="fixed bottom-20 left-1/2 -translate-x-1/2 z-40 rounded-2xl bg-slate-900 text-[#FAF8F5] px-4 py-2.5 shadow-lg border border-slate-800 flex items-center gap-2.5 text-xs font-semibold max-w-sm w-[90%]"
+            className="fixed bottom-24 md:bottom-8 left-1/2 -translate-x-1/2 z-40 rounded-2xl bg-slate-900 text-[#FAF8F5] px-4 py-2.5 shadow-lg border border-slate-800 flex items-center gap-2.5 text-xs font-bold font-heading max-w-sm w-[90%]"
           >
             <CheckCircle2
               className="w-4 h-4 text-emerald-400 shrink-0"
@@ -969,12 +986,6 @@ export default function AppDashboardPage() {
         isOpen={showTourModal}
         onClose={() => setShowTourModal(false)}
       />
-
-      {/* Native-Style Fixed Mobile Bottom Navigation */}
-      <BottomNav
-        activeTab={activeBottomTab}
-        onSelectTab={handleBottomNavSelect}
-      />
-    </div>
+    </AppShell>
   );
 }

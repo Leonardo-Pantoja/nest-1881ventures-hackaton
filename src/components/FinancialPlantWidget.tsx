@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useFinancial } from "@/context/FinancialContext";
+import { playTap, playLevelUp } from "@/lib/soundEffects";
 
 export type PlantLevel = 1 | 2 | 3 | 4 | 5;
 
@@ -43,9 +44,9 @@ const LEVELS_CONFIG: Record<PlantLevel, LevelMetadata> = {
   1: {
     level: 1,
     name: "Supervivencia",
-    subtitle: "Semilla en tierra firme · Construyendo tu primer margen",
+    subtitle: "Semilla firme · Tu primer margen está creciendo 🌱",
     nextMilestoneHint:
-      "Mantén tu saldo libre positivo hasta tu próxima nómina para subir a Nivel 2: Estabilidad",
+      "Mantén saldo libre positivo para subir a Nivel 2: Estabilidad",
     accentColor: "#D97706",
     badgeClasses: "bg-amber-100/90 text-amber-900 border-amber-300",
     xpRange: [0, 100],
@@ -53,7 +54,7 @@ const LEVELS_CONFIG: Record<PlantLevel, LevelMetadata> = {
   2: {
     level: 2,
     name: "Estabilidad",
-    subtitle: "Brote joven · Tus pagos de esta semana están cubiertos",
+    subtitle: "Brote joven · Tus pagos de la semana están cubiertos 🌿",
     nextMilestoneHint:
       "Protege tu colchón 1 quincena más para subir a Nivel 3: Seguridad",
     accentColor: "#10B981",
@@ -63,9 +64,9 @@ const LEVELS_CONFIG: Record<PlantLevel, LevelMetadata> = {
   3: {
     level: 3,
     name: "Seguridad",
-    subtitle: "Planta frondosa · Tu fondo de tranquilidad está activo",
+    subtitle: "Planta frondosa · Tu reserva de paz está activa ✨",
     nextMilestoneHint:
-      "Completa el 60% de tu meta de ahorro principal para subir a Nivel 4: Libertad",
+      "Llega al 60% de tu meta para subir a Nivel 4: Libertad",
     accentColor: "#059669",
     badgeClasses: "bg-teal-100/90 text-teal-900 border-teal-300",
     xpRange: [250, 450],
@@ -73,9 +74,9 @@ const LEVELS_CONFIG: Record<PlantLevel, LevelMetadata> = {
   4: {
     level: 4,
     name: "Libertad",
-    subtitle: "Árbol en flor · Decides tus compras con total calma",
+    subtitle: "Árbol en flor · Decides tus compras con calma 🌸",
     nextMilestoneHint:
-      "Alcanza el 85% de tu meta y 2 quincenas sin compras impulsivas para subir a Nivel 5: Abundancia",
+      "Alcanza el 85% de tu meta para subir a Nivel 5: Abundancia",
     accentColor: "#0D9488",
     badgeClasses: "bg-pink-100/90 text-pink-900 border-pink-300",
     xpRange: [450, 700],
@@ -83,9 +84,9 @@ const LEVELS_CONFIG: Record<PlantLevel, LevelMetadata> = {
   5: {
     level: 5,
     name: "Abundancia",
-    subtitle: "Árbol radiante con frutos dorados · Dominio financiero total",
+    subtitle: "Árbol dorado · Dominio financiero total 🏆",
     nextMilestoneHint:
-      "¡Nivel máximo alcanzado! Cada buena decisión sigue sumando XP a tu bosque financiero",
+      "¡Nivel máximo! Cada buena decisión suma XP a tu bosque",
     accentColor: "#F59E0B",
     badgeClasses: "bg-amber-100 text-amber-950 border-amber-400",
     xpRange: [700, 1000],
@@ -741,12 +742,17 @@ export default function FinancialPlantWidget({
                 <button
                   key={lvl}
                   type="button"
-                  onClick={() =>
+                  onClick={() => {
+                    if (lvl > activeLevel) {
+                      playLevelUp();
+                    } else {
+                      playTap();
+                    }
                     setPreviewLevelOverride(
                       previewLevelOverride === lvl ? null : lvl
-                    )
-                  }
-                  className={`h-6 px-2 rounded-lg text-[11px] font-medium transition-all cursor-pointer ${
+                    );
+                  }}
+                  className={`h-6 px-2 rounded-lg text-[11px] font-bold font-heading transition-all cursor-pointer ${
                     isSelected
                       ? "bg-slate-900 text-[#FAF8F5] shadow-2xs"
                       : "bg-white/80 text-slate-600 hover:bg-white border border-[#E6E1DA]"
@@ -760,7 +766,10 @@ export default function FinancialPlantWidget({
             {previewLevelOverride && (
               <button
                 type="button"
-                onClick={() => setPreviewLevelOverride(null)}
+                onClick={() => {
+                  playTap();
+                  setPreviewLevelOverride(null);
+                }}
                 className="text-[10px] text-slate-400 hover:text-slate-700 ml-1 underline cursor-pointer"
               >
                 Auto

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useFinancial } from "@/context/FinancialContext";
+import { playTap, playCoin } from "@/lib/soundEffects";
 import type { EvaluateApiResponse } from "@/app/api/evaluate/route";
 
 export interface ScannedProductResult {
@@ -192,6 +193,7 @@ export default function QuickSnapScanner({
 
     setIsScanning(false);
     setIsPickerOpen(false);
+    playCoin();
 
     onScanComplete({
       name: finalName,
@@ -245,8 +247,11 @@ export default function QuickSnapScanner({
       <motion.button
         type="button"
         whileTap={{ scale: 0.96 }}
-        onClick={() => setIsPickerOpen((prev) => !prev)}
-        className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-500 to-amber-500 text-white font-bold text-xs sm:text-sm shadow-sm hover:opacity-95 transition-all flex items-center justify-between gap-2 cursor-pointer"
+        onClick={() => {
+          playTap();
+          setIsPickerOpen((prev) => !prev);
+        }}
+        className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-500 to-amber-500 text-white font-bold font-heading text-xs sm:text-sm shadow-sm hover:opacity-95 transition-all flex items-center justify-between gap-2 cursor-pointer"
       >
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0">

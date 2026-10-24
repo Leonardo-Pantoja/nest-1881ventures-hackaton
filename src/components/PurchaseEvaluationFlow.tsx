@@ -27,6 +27,12 @@ import FinancialPlantWidget, {
 } from "@/components/FinancialPlantWidget";
 import QuincenaEnergyGauge from "@/components/QuincenaEnergyGauge";
 import { useFinancial } from "@/context/FinancialContext";
+import {
+  playTap,
+  playCoin,
+  playDamage,
+  playLevelUp,
+} from "@/lib/soundEffects";
 import type { EvaluateApiResponse } from "@/app/api/evaluate/route";
 
 interface PurchaseEvaluationFlowProps {
@@ -82,13 +88,20 @@ export default function PurchaseEvaluationFlow({
 
   const handleSelectScenarioTab = (tab: "today" | "wait" | "microsave") => {
     setActiveTab(tab);
-    if ((tab === "wait" || tab === "microsave") && !hasAwardedTabStreakRef.current) {
-      hasAwardedTabStreakRef.current = true;
-      incrementStreak(
-        tab === "wait"
-          ? "¡Elegiste esperar a nómina! +1 Racha 🔥"
-          : "¡Activaste plan de Micro-ahorro! +1 Racha 🔥"
-      );
+    if (tab === "wait" || tab === "microsave") {
+      playCoin();
+      if (!hasAwardedTabStreakRef.current) {
+        hasAwardedTabStreakRef.current = true;
+        incrementStreak(
+          tab === "wait"
+            ? "¡Elegiste esperar a nómina! +1 Racha 🔥"
+            : "¡Activaste plan de Micro-ahorro! +1 Racha 🔥"
+        );
+      }
+    } else if (metrics.verdict === "COMPROMETE") {
+      playDamage();
+    } else {
+      playTap();
     }
   };
 
@@ -191,7 +204,17 @@ export default function PurchaseEvaluationFlow({
     };
   }, [profile, itemPrice, weeklySaveAmount, apiEvaluation]);
 
+  // Play initial verdict sound cue on mount/item change
+  useEffect(() => {
+    if (metrics.verdict === "COMPROMETE") {
+      playDamage();
+    } else {
+      playCoin();
+    }
+  }, [itemName, itemPrice, metrics.verdict]);
+
   const handleSaveToWishlist = () => {
+    playLevelUp();
     addToWishlist({
       name: itemName,
       price: itemPrice,
@@ -207,6 +230,11 @@ export default function PurchaseEvaluationFlow({
   };
 
   const handleRegisterAnyway = () => {
+    if (metrics.verdict === "COMPROMETE") {
+      playDamage();
+    } else {
+      playTap();
+    }
     registerPurchaseAnyway(itemName, itemPrice);
     const msg = `Compra registrada: −$${itemPrice.toLocaleString()} MXN (${itemName})`;
     if (onActionCompleted) {
