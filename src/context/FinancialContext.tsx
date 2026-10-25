@@ -69,13 +69,29 @@ export interface IncomeSourceRecord {
   nextPaymentDate?: string;
 }
 
+export interface GoalSubStage {
+  id: string;
+  title: string;
+  targetAmount: number;
+  savedAmount?: number;
+}
+
 export interface FinancialGoal {
+  id?: string;
   title: string;
   targetAmount: number;
   currentSaved: number;
   weeklyContribution: number;
   deadlineLabel: string;
+  savingsLocation?: "incluido" | "separado" | "desconocido";
+  subGoals?: GoalSubStage[];
 }
+
+export type WishlistDecisionStatus =
+  | "postponed"
+  | "microsave"
+  | "purchased"
+  | "discarded";
 
 export interface WishlistItem {
   id: string;
@@ -85,6 +101,13 @@ export interface WishlistItem {
   plannedWeeklySave?: number;
   cooldownDays?: number;
   strategy?: "wait" | "microsave";
+  decision?: WishlistDecisionStatus;
+  holdUntil?: string;
+  savedAmount?: number;
+  availableBefore?: number;
+  availableAfter?: number;
+  awardedXp?: number;
+  explanation?: string;
 }
 
 export interface PendingPurchaseEvaluation {
@@ -96,6 +119,9 @@ export interface PendingPurchaseEvaluation {
 export interface FinancialProfile {
   id: string;
   name: string;
+  nickname?: string;
+  age?: number | null;
+  dependentsCount?: number;
   email?: string;
   roleTag: string;
   lifeContext: LifeContextTag[];
@@ -110,6 +136,7 @@ export interface FinancialProfile {
   plannedExpenses?: PlannedExpenseItem[];
   incomeSources?: IncomeSourceRecord[];
   goal: FinancialGoal;
+  goalsList?: FinancialGoal[];
   wishlist?: WishlistItem[];
   wisdomXp?: number;
   streakCount?: number;
@@ -193,20 +220,92 @@ export const PRELOADED_SANDBOX_PROFILES: Record<string, FinancialProfile> = {
       },
     ],
     goal: {
+      id: "goal-carlos-1",
       title: "Fondo de emergencia",
       targetAmount: 20000,
       currentSaved: 8000,
       weeklyContribution: 600,
       deadlineLabel: "Diciembre",
+      savingsLocation: "separado",
+      subGoals: [
+        { id: "sub-c1", title: "Reserva 1 mes de renta", targetAmount: 6500 },
+        { id: "sub-c2", title: "Fondo médico familiar", targetAmount: 6500 },
+        { id: "sub-c3", title: "Colchón imprevistos auto", targetAmount: 7000 },
+      ],
     },
+    goalsList: [
+      {
+        id: "goal-carlos-1",
+        title: "Fondo de emergencia",
+        targetAmount: 20000,
+        currentSaved: 8000,
+        weeklyContribution: 600,
+        deadlineLabel: "Diciembre",
+        savingsLocation: "separado",
+        subGoals: [
+          { id: "sub-c1", title: "Reserva 1 mes de renta", targetAmount: 6500 },
+          { id: "sub-c2", title: "Fondo médico familiar", targetAmount: 6500 },
+          { id: "sub-c3", title: "Colchón imprevistos auto", targetAmount: 7000 },
+        ],
+      },
+      {
+        id: "goal-carlos-2",
+        title: "Viaje Familiar",
+        targetAmount: 50000,
+        currentSaved: 15000,
+        weeklyContribution: 1000,
+        deadlineLabel: "Vacaciones Verano",
+        savingsLocation: "separado",
+        subGoals: [
+          { id: "sub-v1", title: "Vuelos", targetAmount: 12000 },
+          { id: "sub-v2", title: "Hospedaje", targetAmount: 18000 },
+          { id: "sub-v3", title: "Viáticos y Tours", targetAmount: 20000 },
+        ],
+      },
+    ],
     wishlist: [
       {
         id: "wish-initial-1",
         name: "Chamarra Impermeable",
         price: 1450,
         savedAt: "2026-10-22T10:00:00.000Z",
+        holdUntil: "2026-10-30",
         cooldownDays: 6,
         strategy: "wait",
+        decision: "postponed",
+        availableBefore: 100,
+        availableAfter: 0,
+        awardedXp: 50,
+        explanation:
+          "En espera hasta tu próxima quincena para proteger el complemento de renta ($2,100) y tu tarjeta ($500).",
+      },
+      {
+        id: "wish-initial-2",
+        name: "Audífonos Inalámbricos Sony",
+        price: 2300,
+        savedAt: "2026-10-20T10:00:00.000Z",
+        plannedWeeklySave: 400,
+        savedAmount: 800,
+        cooldownDays: 14,
+        strategy: "microsave",
+        decision: "microsave",
+        availableBefore: 100,
+        availableAfter: 100,
+        awardedXp: 100,
+        explanation:
+          "Plan de micro-ahorro fijo semanal de $400 MXN sin comprometer tu liquidez ni retirar de tu meta.",
+      },
+      {
+        id: "wish-initial-3",
+        name: "Reloj Deportivo",
+        price: 1850,
+        savedAt: "2026-10-15T10:00:00.000Z",
+        cooldownDays: 0,
+        strategy: "wait",
+        decision: "discarded",
+        awardedXp: 75,
+        explanation:
+          "Descartado tras enfriamiento: decidiste priorizar tu Fondo de emergencia y salvaste $1,850 MXN.",
       },
     ],
     wisdomXp: 120,
@@ -270,20 +369,66 @@ export const PRELOADED_SANDBOX_PROFILES: Record<string, FinancialProfile> = {
       },
     ],
     goal: {
+      id: "goal-mateo-1",
       title: "Laptop",
       targetAmount: 15000,
       currentSaved: 10500,
       weeklyContribution: 500,
       deadlineLabel: "Diciembre",
+      savingsLocation: "separado",
+      subGoals: [
+        { id: "sub-m1", title: "Equipo base MacBook / ThinkPad", targetAmount: 11500 },
+        { id: "sub-m2", title: "Memoria RAM / SSD extra", targetAmount: 2000 },
+        { id: "sub-m3", title: "Funda y periféricos", targetAmount: 1500 },
+      ],
     },
+    goalsList: [
+      {
+        id: "goal-mateo-1",
+        title: "Laptop",
+        targetAmount: 15000,
+        currentSaved: 10500,
+        weeklyContribution: 500,
+        deadlineLabel: "Diciembre",
+        savingsLocation: "separado",
+        subGoals: [
+          { id: "sub-m1", title: "Equipo base MacBook / ThinkPad", targetAmount: 11500 },
+          { id: "sub-m2", title: "Memoria RAM / SSD extra", targetAmount: 2000 },
+          { id: "sub-m3", title: "Funda y periféricos", targetAmount: 1500 },
+        ],
+      },
+    ],
     wishlist: [
       {
         id: "wish-initial-1",
         name: "Chamarra Impermeable",
         price: 1450,
         savedAt: "2026-10-22T10:00:00.000Z",
+        holdUntil: "2026-10-30",
         cooldownDays: 6,
         strategy: "wait",
+        decision: "postponed",
+        availableBefore: 2481,
+        availableAfter: 1031,
+        awardedXp: 50,
+        explanation:
+          "En espera 6 días para confirmar que no afecte tu gasto diario de transporte y copias.",
+      },
+      {
+        id: "wish-mateo-2",
+        name: "Monitor Externo 24 pulgadas",
+        price: 2800,
+        savedAt: "2026-10-19T10:00:00.000Z",
+        plannedWeeklySave: 350,
+        savedAmount: 1050,
+        cooldownDays: 10,
+        strategy: "microsave",
+        decision: "microsave",
+        availableBefore: 2481,
+        availableAfter: 2481,
+        awardedXp: 100,
+        explanation:
+          "Ahorro programado de $350/semana sin tocar los $10,500 MXN ya reservados para tu Laptop.",
       },
     ],
     wisdomXp: 240,
@@ -455,11 +600,103 @@ interface FinancialContextType {
     frequency: CommitmentDbFrequency;
   }) => void;
   removePlannedExpense: (id: string) => void;
+  contributeToWishlistItem: (id: string, amount: number) => Promise<void>;
+  updateWishlistDecisionStatus: (
+    id: string,
+    decisionStatus: "purchased" | "discarded",
+  ) => Promise<void>;
+  saveGoalWithSubGoals: (input: {
+    id?: string;
+    title: string;
+    targetAmount: number;
+    currentSaved: number;
+    weeklyContribution: number;
+    savingsLocation: "incluido" | "separado" | "desconocido";
+    deadlineLabel?: string;
+    subGoals: GoalSubStage[];
+  }) => Promise<void>;
+  selectActiveGoal: (goalId: string) => void;
+  saveFullProfileSettings: (input: {
+    displayName: string;
+    nickname?: string;
+    age?: number | null;
+    dependentsCount?: number;
+    lifeContext: LifeContextTag[];
+    currentBalance: number;
+    safetyBuffer: number;
+    dailyEssentialBurn: number;
+  }) => Promise<void>;
+  upsertIncomeSource: (input: {
+    id?: string;
+    name: string;
+    amount: number;
+    frequency: CommitmentDbFrequency;
+    nextPaymentDate: string;
+  }) => Promise<void>;
+  deleteIncomeSource: (id: string) => Promise<void>;
 }
 
 const DEMO_STORAGE_KEY = "antesdegastar_demo_profile_v2";
 const LEGACY_STORAGE_KEY = "antesdegastar_financial_profile_v1";
 const EVAL_STORAGE_KEY = "antesdegastar_pending_eval_v1";
+const SUBGOALS_STORAGE_PREFIX = "antesdegastar_goal_subgoals_v1_";
+const WISHLIST_META_STORAGE_PREFIX = "antesdegastar_wishlist_meta_v1_";
+
+function readStoredSubGoals(goalId?: string): GoalSubStage[] {
+  if (!goalId || typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(`${SUBGOALS_STORAGE_PREFIX}${goalId}`);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeStoredSubGoals(goalId: string, subGoals: GoalSubStage[]): void {
+  if (!goalId || typeof window === "undefined") return;
+  try {
+    localStorage.setItem(
+      `${SUBGOALS_STORAGE_PREFIX}${goalId}`,
+      JSON.stringify(subGoals),
+    );
+  } catch {
+    // ignore storage quota errors
+  }
+}
+
+interface StoredWishlistMeta {
+  savedAmount?: number;
+  decision?: WishlistDecisionStatus;
+}
+
+function readWishlistMetaMap(userId: string): Record<string, StoredWishlistMeta> {
+  if (!userId || typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(`${WISHLIST_META_STORAGE_PREFIX}${userId}`);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return typeof parsed === "object" && parsed !== null ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeWishlistMetaMap(
+  userId: string,
+  map: Record<string, StoredWishlistMeta>,
+): void {
+  if (!userId || typeof window === "undefined") return;
+  try {
+    localStorage.setItem(
+      `${WISHLIST_META_STORAGE_PREFIX}${userId}`,
+      JSON.stringify(map),
+    );
+  } catch {
+    // ignore storage errors
+  }
+}
 const FinancialContext = createContext<FinancialContextType | undefined>(
   undefined,
 );
@@ -538,39 +775,54 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      const [profileRes, incomeRes, commitmentRes, goalRes, wishlistRes, transactionsRes] =
-        await Promise.all([
-          supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+      const [
+        profileRes,
+        incomeRes,
+        commitmentRes,
+        goalRes,
+        wishlistRes,
+        transactionsRes,
+        analysesRes,
+      ] = await Promise.all([
+        supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+        supabase
+          .from("income_sources")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("is_active", true)
+          .order("next_payment_date", { ascending: true }),
+        supabase
+          .from("commitments")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("is_active", true)
+          .order("next_due_date", { ascending: true }),
+        supabase
+          .from("goals")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("is_active", true)
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("wishlist_items")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("updated_at", { ascending: false }),
+        supabase
+          .from("transactions")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(50),
+        Promise.resolve(
           supabase
-            .from("income_sources")
-            .select("*")
-            .eq("user_id", user.id)
-            .eq("is_active", true)
-            .order("next_payment_date", { ascending: true }),
-          supabase
-            .from("commitments")
-            .select("*")
-            .eq("user_id", user.id)
-            .eq("is_active", true)
-            .order("next_due_date", { ascending: true }),
-          supabase
-            .from("goals")
-            .select("*")
-            .eq("user_id", user.id)
-            .eq("is_active", true)
-            .order("created_at", { ascending: true }),
-          supabase
-            .from("wishlist_items")
-            .select("*")
-            .eq("user_id", user.id)
-            .order("updated_at", { ascending: false }),
-          supabase
-            .from("transactions")
+            .from("purchase_analyses")
             .select("*")
             .eq("user_id", user.id)
             .order("created_at", { ascending: false })
             .limit(50),
-        ]);
+        ).catch(() => ({ data: [], error: null })),
+      ]);
       if (ticket !== requestVersion.current) return;
       for (const result of [
         profileRes,
@@ -582,12 +834,47 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         if (result.error) throw result.error;
       }
 
-      const rows = { profile: profileRes.data, incomeSources: incomeRes.data ?? [], commitments: commitmentRes.data ?? [], goals: goalRes.data ?? [] };
+      const rows = {
+        profile: profileRes.data,
+        incomeSources: incomeRes.data ?? [],
+        commitments: commitmentRes.data ?? [],
+        goals: goalRes.data ?? [],
+      };
       setAccountFinancialProfile(mapSupabaseRecord(rows));
       setAccountVersion(JSON.stringify(rows));
       const p = profileRes.data;
       const nextIncome = incomeRes.data?.[0];
-      const goalRow = goalRes.data?.[0];
+      const mappedGoalsList: FinancialGoal[] = (goalRes.data ?? []).map(
+        (g: Record<string, unknown>) => {
+          const gId = String(g.id ?? "");
+          const storedSubs = readStoredSubGoals(gId);
+          const loc = g.savings_location;
+          const savingsLoc: "incluido" | "separado" | "desconocido" =
+            loc === "incluido" || loc === "separado" || loc === "desconocido"
+              ? loc
+              : Number(g.current_saved ?? 0) > 0
+                ? "separado"
+                : "desconocido";
+          return {
+            id: gId,
+            title: String(g.title ?? "Meta de ahorro"),
+            targetAmount: Number(g.target_amount ?? 0),
+            currentSaved: Number(g.current_saved ?? 0),
+            weeklyContribution: Number(g.weekly_contribution ?? 0),
+            deadlineLabel:
+              typeof g.target_date === "string" && g.target_date
+                ? g.target_date
+                : "Sin fecha definida",
+            savingsLocation: savingsLoc,
+            subGoals: storedSubs,
+          };
+        },
+      );
+      const goalRow = mappedGoalsList[0];
+      const wishlistMeta = readWishlistMetaMap(user.id);
+      const analysesList = Array.isArray(analysesRes?.data)
+        ? (analysesRes.data as Record<string, unknown>[])
+        : [];
       const tags = (p?.lifestyle_tags ?? []).filter((tag: string) =>
         [
           "estudio",
@@ -607,6 +894,27 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
           user.user_metadata?.full_name ||
           user.email?.split("@")[0] ||
           "Tu Perfil",
+        nickname:
+          (typeof p?.nickname === "string" ? p.nickname : undefined) ||
+          (typeof p?.apodo === "string" ? p.apodo : undefined) ||
+          (typeof user.user_metadata?.nickname === "string"
+            ? user.user_metadata.nickname
+            : undefined) ||
+          "",
+        age:
+          typeof p?.age === "number"
+            ? p.age
+            : typeof user.user_metadata?.age === "number"
+              ? user.user_metadata.age
+              : null,
+        dependentsCount:
+          typeof p?.dependents_count === "number"
+            ? p.dependents_count
+            : typeof user.user_metadata?.dependents_count === "number"
+              ? user.user_metadata.dependents_count
+              : tags.includes("dependientes")
+                ? 1
+                : 0,
         email: user.email ?? "",
         roleTag: buildRoleTagFromContext(tags),
         lifeContext: tags,
@@ -623,50 +931,115 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
           dueInDays: daysUntil(item.next_due_date),
           category: item.category,
           frequency: (item.frequency as CommitmentDbFrequency) || "monthly",
-          nextDueDate: item.next_due_date ?? dateStringFromDaysUntil(daysUntil(item.next_due_date)),
+          nextDueDate:
+            item.next_due_date ??
+            dateStringFromDaysUntil(daysUntil(item.next_due_date)),
           isActive: item.is_active !== false,
         })),
-        transactions: (transactionsRes.data ?? []).map((tx: Record<string, unknown>) => ({
-          id: String(tx.id ?? `tx-${Date.now()}`),
-          title: String(tx.title ?? tx.description ?? tx.name ?? "Gasto registrado"),
-          amount: Number(Number(tx.amount ?? 0).toFixed(2)),
-          type: (tx.type === "income" ? "income" : "expense") as "expense" | "income",
-          category: String(tx.category ?? "Imprevistos"),
-          occurredAt: String(tx.occurred_at ?? tx.transaction_date ?? tx.created_at ?? new Date().toISOString()),
-          isUnforeseen: true,
-        })),
-        incomeSources: (incomeRes.data ?? []).map((inc: Record<string, unknown>) => ({
-          id: String(inc.id ?? "income-1"),
-          name: String(inc.name ?? inc.title ?? "Ingreso principal"),
-          amount: Number(Number(inc.amount ?? 0).toFixed(2)),
-          frequency: (inc.frequency as CommitmentDbFrequency) || "biweekly",
-          nextPaymentDate: typeof inc.next_payment_date === "string" ? inc.next_payment_date : undefined,
-        })),
+        transactions: (transactionsRes.data ?? []).map(
+          (tx: Record<string, unknown>) => ({
+            id: String(tx.id ?? `tx-${Date.now()}`),
+            title: String(
+              tx.title ?? tx.description ?? tx.name ?? "Gasto registrado",
+            ),
+            amount: Number(Number(tx.amount ?? 0).toFixed(2)),
+            type: (tx.type === "income" ? "income" : "expense") as
+              | "expense"
+              | "income",
+            category: String(tx.category ?? "Imprevistos"),
+            occurredAt: String(
+              tx.occurred_at ??
+                tx.transaction_date ??
+                tx.created_at ??
+                new Date().toISOString(),
+            ),
+            isUnforeseen: true,
+          }),
+        ),
+        incomeSources: (incomeRes.data ?? []).map(
+          (inc: Record<string, unknown>) => ({
+            id: String(inc.id ?? "income-1"),
+            name: String(inc.name ?? inc.title ?? "Ingreso principal"),
+            amount: Number(Number(inc.amount ?? 0).toFixed(2)),
+            frequency: (inc.frequency as CommitmentDbFrequency) || "biweekly",
+            nextPaymentDate:
+              typeof inc.next_payment_date === "string"
+                ? inc.next_payment_date
+                : undefined,
+          }),
+        ),
         goal: goalRow
-          ? {
-              title: goalRow.title,
-              targetAmount: Number(goalRow.target_amount),
-              currentSaved: Number(goalRow.current_saved),
-              weeklyContribution: Number(goalRow.weekly_contribution),
-              deadlineLabel: goalRow.target_date ?? "Sin fecha definida",
-            }
+          ? goalRow
           : {
               ...EMPTY_NEW_USER_PROFILE.goal,
               currentSaved: 0,
               weeklyContribution: 0,
+              savingsLocation: "separado",
+              subGoals: [],
             },
-        wishlist: (wishlistRes.data ?? []).map((item) => ({
-          id: item.id,
-          name: item.name,
-          price: Number(item.price),
-          savedAt: item.saved_at,
-          plannedWeeklySave:
-            item.planned_weekly_save == null
-              ? undefined
-              : Number(item.planned_weekly_save),
-          cooldownDays: daysUntil(item.hold_until),
-          strategy: item.strategy as "wait" | "microsave",
-        })),
+        goalsList: mappedGoalsList,
+        wishlist: (wishlistRes.data ?? []).map((item) => {
+          const matchedAnalysis = analysesList.find(
+            (a) =>
+              String(a.wishlist_item_id ?? "") === String(item.id) ||
+              String(a.item_name ?? a.name ?? "").toLowerCase() ===
+                String(item.name ?? "").toLowerCase(),
+          );
+          const localMeta = wishlistMeta[String(item.id)] ?? {};
+          const rawDecision =
+            localMeta.decision ??
+            (typeof item.decision === "string" ? item.decision : undefined) ??
+            (typeof item.status === "string" ? item.status : undefined) ??
+            (typeof matchedAnalysis?.decision === "string"
+              ? matchedAnalysis.decision
+              : undefined);
+          const normalizedDecision: WishlistDecisionStatus =
+            rawDecision === "purchased" ||
+            rawDecision === "discarded" ||
+            rawDecision === "microsave" ||
+            rawDecision === "postponed"
+              ? rawDecision
+              : item.strategy === "microsave"
+                ? "microsave"
+                : "postponed";
+
+          return {
+            id: item.id,
+            name: item.name,
+            price: Number(item.price),
+            savedAt: item.saved_at,
+            holdUntil:
+              typeof item.hold_until === "string" ? item.hold_until : undefined,
+            plannedWeeklySave:
+              item.planned_weekly_save == null
+                ? undefined
+                : Number(item.planned_weekly_save),
+            savedAmount:
+              localMeta.savedAmount ??
+              (item.saved_amount != null ? Number(item.saved_amount) : 0),
+            cooldownDays: daysUntil(item.hold_until),
+            strategy: item.strategy as "wait" | "microsave",
+            decision: normalizedDecision,
+            availableBefore:
+              matchedAnalysis?.available_before != null
+                ? Number(matchedAnalysis.available_before)
+                : undefined,
+            availableAfter:
+              matchedAnalysis?.available_after != null
+                ? Number(matchedAnalysis.available_after)
+                : undefined,
+            awardedXp:
+              matchedAnalysis?.awarded_xp != null
+                ? Number(matchedAnalysis.awarded_xp)
+                : item.strategy === "microsave"
+                  ? 100
+                  : 50,
+            explanation:
+              typeof matchedAnalysis?.explanation === "string"
+                ? matchedAnalysis.explanation
+                : undefined,
+          };
+        }),
         wisdomXp: Number(p?.wisdom_xp ?? 0),
         streakCount: Number(p?.streak_count ?? 0),
         isOnboarded: Boolean(p?.onboarding_completed_at),
@@ -1224,6 +1597,624 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const contributeToWishlistItem = async (
+    id: string,
+    amount: number,
+  ): Promise<void> => {
+    const roundedAmount = Number(Number(amount).toFixed(2));
+    if (!Number.isFinite(roundedAmount) || roundedAmount <= 0) {
+      throw new Error("Ingresa un abono válido mayor a cero.");
+    }
+
+    const targetItem = (profile.wishlist ?? []).find((w) => w.id === id);
+    if (!targetItem) {
+      throw new Error("No se encontró el artículo en enfriamiento.");
+    }
+
+    const nextSavedAmount = Math.min(
+      targetItem.price,
+      Number(
+        (
+          (Math.round((targetItem.savedAmount ?? 0) * 100) +
+            Math.round(roundedAmount * 100)) /
+          100
+        ).toFixed(2),
+      ),
+    );
+
+    if (mode === "demo") {
+      const nextWishlist = (profile.wishlist ?? []).map((w) =>
+        w.id === id
+          ? {
+              ...w,
+              savedAmount: nextSavedAmount,
+              strategy: "microsave" as const,
+              decision:
+                w.decision === "purchased" || w.decision === "discarded"
+                  ? w.decision
+                  : ("microsave" as const),
+            }
+          : w,
+      );
+      persistDemo({
+        ...profile,
+        wishlist: nextWishlist,
+        wisdomXp: (profile.wisdomXp ?? 0) + 25,
+      });
+      return;
+    }
+
+    if (mode !== "authenticated") {
+      throw new Error("Debes iniciar sesión para registrar abonos.");
+    }
+
+    const {
+      data: { user },
+      error: authErr,
+    } = await supabase.auth.getUser();
+    if (authErr || !user) {
+      throw new Error("No se pudo verificar el usuario autenticado.");
+    }
+
+    const currentMeta = readWishlistMetaMap(user.id);
+    currentMeta[id] = {
+      ...currentMeta[id],
+      savedAmount: nextSavedAmount,
+      decision: currentMeta[id]?.decision ?? "microsave",
+    };
+    writeWishlistMetaMap(user.id, currentMeta);
+
+    // Best-effort update on wishlist_items if saved_amount column exists
+    await Promise.resolve(
+      supabase
+        .from("wishlist_items")
+        .update({
+          user_id: user.id,
+          saved_amount: nextSavedAmount,
+          strategy: "microsave",
+        })
+        .eq("id", id)
+        .eq("user_id", user.id),
+    ).catch(() => null);
+
+    setProfile((prev) => ({
+      ...prev,
+      wishlist: (prev.wishlist ?? []).map((w) =>
+        w.id === id
+          ? {
+              ...w,
+              savedAmount: nextSavedAmount,
+              strategy: "microsave",
+              decision:
+                w.decision === "purchased" || w.decision === "discarded"
+                  ? w.decision
+                  : "microsave",
+            }
+          : w,
+      ),
+      wisdomXp: (prev.wisdomXp ?? 0) + 25,
+    }));
+  };
+
+  const updateWishlistDecisionStatus = async (
+    id: string,
+    decisionStatus: "purchased" | "discarded",
+  ): Promise<void> => {
+    const targetItem = (profile.wishlist ?? []).find((w) => w.id === id);
+    if (!targetItem) {
+      throw new Error("No se encontró el artículo en enfriamiento.");
+    }
+
+    const bonusXp = decisionStatus === "discarded" ? 75 : 25;
+
+    if (mode === "demo") {
+      const nextBalance =
+        decisionStatus === "purchased"
+          ? Math.max(
+              0,
+              Number(
+                (
+                  (Math.round(profile.currentBalance * 100) -
+                    Math.round(targetItem.price * 100)) /
+                  100
+                ).toFixed(2),
+              ),
+            )
+          : profile.currentBalance;
+
+      const nextWishlist = (profile.wishlist ?? []).map((w) =>
+        w.id === id
+          ? {
+              ...w,
+              decision: decisionStatus,
+              awardedXp: (w.awardedXp ?? 50) + bonusXp,
+            }
+          : w,
+      );
+
+      persistDemo({
+        ...profile,
+        currentBalance: nextBalance,
+        wishlist: nextWishlist,
+        wisdomXp: (profile.wisdomXp ?? 0) + bonusXp,
+        streakCount:
+          decisionStatus === "discarded"
+            ? (profile.streakCount ?? 0) + 1
+            : profile.streakCount,
+      });
+      if (decisionStatus === "discarded") {
+        announceStreak(
+          (profile.streakCount ?? 0) + 1,
+          `¡Compra descartada! Salvaste $${targetItem.price.toLocaleString()} MXN`,
+        );
+      }
+      return;
+    }
+
+    if (mode !== "authenticated") {
+      throw new Error("Debes iniciar sesión para actualizar el estado.");
+    }
+
+    const {
+      data: { user },
+      error: authErr,
+    } = await supabase.auth.getUser();
+    if (authErr || !user) {
+      throw new Error("No se pudo verificar el usuario autenticado.");
+    }
+
+    const currentMeta = readWishlistMetaMap(user.id);
+    currentMeta[id] = {
+      ...currentMeta[id],
+      decision: decisionStatus,
+    };
+    writeWishlistMetaMap(user.id, currentMeta);
+
+    // Best-effort update on wishlist_items / purchase_analyses
+    await Promise.resolve(
+      supabase
+        .from("wishlist_items")
+        .update({
+          user_id: user.id,
+          status: decisionStatus,
+        })
+        .eq("id", id)
+        .eq("user_id", user.id),
+    ).catch(() => null);
+
+    await Promise.resolve(
+      supabase.from("purchase_analyses").insert({
+        user_id: user.id,
+        item_name: targetItem.name,
+        price: Number(targetItem.price.toFixed(2)),
+        decision: decisionStatus,
+        available_before: targetItem.availableBefore ?? profile.currentBalance,
+        available_after:
+          decisionStatus === "purchased"
+            ? Math.max(0, profile.currentBalance - targetItem.price)
+            : (targetItem.availableAfter ?? profile.currentBalance),
+        awarded_xp: bonusXp,
+        explanation:
+          decisionStatus === "discarded"
+            ? `Compra descartada tras enfriamiento: salvaste $${targetItem.price.toLocaleString()} MXN.`
+            : `Compra completada tras evaluación consciente.`,
+      }),
+    ).catch(() => null);
+
+    if (decisionStatus === "purchased") {
+      const nextBalance = Math.max(
+        0,
+        Number(
+          (
+            (Math.round(profile.currentBalance * 100) -
+              Math.round(targetItem.price * 100)) /
+            100
+          ).toFixed(2),
+        ),
+      );
+      await supabase.from("transactions").insert({
+        user_id: user.id,
+        title: targetItem.name,
+        amount: Number(targetItem.price.toFixed(2)),
+        type: "expense",
+        category: "Compras",
+      });
+      await supabase
+        .from("profiles")
+        .update({ current_balance: nextBalance })
+        .eq("id", user.id);
+    }
+
+    setProfile((prev) => ({
+      ...prev,
+      currentBalance:
+        decisionStatus === "purchased"
+          ? Math.max(0, prev.currentBalance - targetItem.price)
+          : prev.currentBalance,
+      wishlist: (prev.wishlist ?? []).map((w) =>
+        w.id === id
+          ? {
+              ...w,
+              decision: decisionStatus,
+              awardedXp: (w.awardedXp ?? 50) + bonusXp,
+            }
+          : w,
+      ),
+      wisdomXp: (prev.wisdomXp ?? 0) + bonusXp,
+    }));
+  };
+
+  const saveGoalWithSubGoals = async (input: {
+    id?: string;
+    title: string;
+    targetAmount: number;
+    currentSaved: number;
+    weeklyContribution: number;
+    savingsLocation: "incluido" | "separado" | "desconocido";
+    deadlineLabel?: string;
+    subGoals: GoalSubStage[];
+  }): Promise<void> => {
+    const cleanTitle = input.title.trim() || "Meta de ahorro";
+    const roundedTarget = Number(
+      Math.max(1, Number(input.targetAmount) || 0).toFixed(2),
+    );
+    const roundedSaved = Number(
+      Math.max(0, Number(input.currentSaved) || 0).toFixed(2),
+    );
+    const roundedWeekly = Number(
+      Math.max(0, Number(input.weeklyContribution) || 0).toFixed(2),
+    );
+    const normalizedSubGoals: GoalSubStage[] = (input.subGoals ?? [])
+      .filter((s) => s.title.trim() && Number(s.targetAmount) > 0)
+      .map((s, idx) => ({
+        id: s.id || `sub-${Date.now()}-${idx}`,
+        title: s.title.trim(),
+        targetAmount: Number(Number(s.targetAmount).toFixed(2)),
+        savedAmount:
+          s.savedAmount !== undefined
+            ? Number(Number(s.savedAmount).toFixed(2))
+            : undefined,
+      }));
+
+    if (mode === "demo") {
+      const goalId = input.id || profile.goal.id || `goal-demo-${Date.now()}`;
+      writeStoredSubGoals(goalId, normalizedSubGoals);
+      const updatedGoal: FinancialGoal = {
+        id: goalId,
+        title: cleanTitle,
+        targetAmount: roundedTarget,
+        currentSaved: roundedSaved,
+        weeklyContribution: roundedWeekly,
+        deadlineLabel:
+          input.deadlineLabel?.trim() ||
+          profile.goal.deadlineLabel ||
+          "Meta activa",
+        savingsLocation: input.savingsLocation,
+        subGoals: normalizedSubGoals,
+      };
+      const existingList = profile.goalsList ?? [profile.goal];
+      const hasExisting = existingList.some((g) => g.id === goalId);
+      const nextList = hasExisting
+        ? existingList.map((g) => (g.id === goalId ? updatedGoal : g))
+        : [...existingList, updatedGoal];
+      persistDemo({
+        ...profile,
+        goal: updatedGoal,
+        goalsList: nextList,
+      });
+      return;
+    }
+
+    if (mode !== "authenticated") {
+      throw new Error("Debes iniciar sesión para guardar tu meta.");
+    }
+
+    const {
+      data: { user },
+      error: authErr,
+    } = await supabase.auth.getUser();
+    if (authErr || !user) {
+      throw new Error("No se pudo verificar el usuario autenticado.");
+    }
+
+    let persistedGoalId = input.id;
+
+    if (persistedGoalId) {
+      const { error } = await supabase
+        .from("goals")
+        .update({
+          user_id: user.id,
+          title: cleanTitle,
+          target_amount: roundedTarget,
+          current_saved: roundedSaved,
+          weekly_contribution: roundedWeekly,
+          savings_location: input.savingsLocation,
+          target_date:
+            input.deadlineLabel && /^\d{4}-\d{2}-\d{2}$/.test(input.deadlineLabel)
+              ? input.deadlineLabel
+              : null,
+          is_active: true,
+        })
+        .eq("id", persistedGoalId)
+        .eq("user_id", user.id);
+      if (error) throw new Error(error.message);
+    } else {
+      const { data, error } = await supabase
+        .from("goals")
+        .insert({
+          user_id: user.id,
+          title: cleanTitle,
+          target_amount: roundedTarget,
+          current_saved: roundedSaved,
+          weekly_contribution: roundedWeekly,
+          savings_location: input.savingsLocation,
+          is_active: true,
+        })
+        .select("id")
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      persistedGoalId = data?.id ? String(data.id) : `goal-${Date.now()}`;
+    }
+
+    if (persistedGoalId) {
+      writeStoredSubGoals(persistedGoalId, normalizedSubGoals);
+    }
+
+    await refreshProfile(true);
+  };
+
+  const selectActiveGoal = (goalId: string) => {
+    const found = (profile.goalsList ?? []).find((g) => g.id === goalId);
+    if (!found) return;
+    const reordered = [
+      found,
+      ...(profile.goalsList ?? []).filter((g) => g.id !== goalId),
+    ];
+    if (mode === "demo") {
+      persistDemo({
+        ...profile,
+        goal: found,
+        goalsList: reordered,
+      });
+    } else {
+      setProfile((prev) => ({
+        ...prev,
+        goal: found,
+        goalsList: reordered,
+      }));
+    }
+  };
+
+  const saveFullProfileSettings = async (input: {
+    displayName: string;
+    nickname?: string;
+    age?: number | null;
+    dependentsCount?: number;
+    lifeContext: LifeContextTag[];
+    currentBalance: number;
+    safetyBuffer: number;
+    dailyEssentialBurn: number;
+  }): Promise<void> => {
+    const cleanName = input.displayName.trim() || "Tu Perfil";
+    const cleanNickname = input.nickname?.trim() || "";
+    const cleanAge =
+      input.age !== undefined &&
+      input.age !== null &&
+      Number.isFinite(Number(input.age)) &&
+      Number(input.age) > 0
+        ? Math.round(Number(input.age))
+        : null;
+    const cleanDependents =
+      input.dependentsCount !== undefined &&
+      Number.isFinite(Number(input.dependentsCount))
+        ? Math.max(0, Math.round(Number(input.dependentsCount)))
+        : 0;
+    const roundedBalance = Number(
+      Math.max(0, Number(input.currentBalance) || 0).toFixed(2),
+    );
+    const roundedBuffer = Number(
+      Math.max(0, Number(input.safetyBuffer) || 0).toFixed(2),
+    );
+    const roundedDailyBurn = Number(
+      Math.max(0, Number(input.dailyEssentialBurn) || 0).toFixed(2),
+    );
+
+    const updatedTags = Array.from(
+      new Set([
+        ...input.lifeContext.filter((t) => t !== "dependientes"),
+        ...(cleanDependents > 0 || input.lifeContext.includes("dependientes")
+          ? (["dependientes"] as LifeContextTag[])
+          : []),
+      ]),
+    );
+
+    if (mode === "demo") {
+      persistDemo({
+        ...profile,
+        name: cleanName,
+        nickname: cleanNickname,
+        age: cleanAge,
+        dependentsCount: cleanDependents,
+        lifeContext: updatedTags,
+        roleTag: buildRoleTagFromContext(updatedTags),
+        currentBalance: roundedBalance,
+        safetyBuffer: roundedBuffer,
+        dailyEssentialBurn: roundedDailyBurn,
+      });
+      return;
+    }
+
+    if (mode !== "authenticated") {
+      throw new Error("Debes iniciar sesión para editar tu perfil.");
+    }
+
+    const {
+      data: { user },
+      error: authErr,
+    } = await supabase.auth.getUser();
+    if (authErr || !user) {
+      throw new Error("No se pudo verificar el usuario autenticado.");
+    }
+
+    // Save core columns in public.profiles
+    const { error: profileErr } = await supabase
+      .from("profiles")
+      .update({
+        display_name: cleanName,
+        current_balance: roundedBalance,
+        safety_buffer: roundedBuffer,
+        daily_essential_budget: roundedDailyBurn,
+        lifestyle_tags: updatedTags,
+      })
+      .eq("id", user.id);
+
+    if (profileErr) throw new Error(profileErr.message);
+
+    // Best-effort update optional columns in public.profiles if schema supports them
+    await Promise.resolve(
+      supabase
+        .from("profiles")
+        .update({
+          nickname: cleanNickname || null,
+          age: cleanAge,
+          dependents_count: cleanDependents,
+        })
+        .eq("id", user.id),
+    ).catch(() => null);
+
+    // Persist nickname, age, dependents_count, display_name in Supabase auth user_metadata (NO gender/sex)
+    await Promise.resolve(
+      supabase.auth.updateUser({
+        data: {
+          display_name: cleanName,
+          full_name: cleanName,
+          nickname: cleanNickname,
+          age: cleanAge,
+          dependents_count: cleanDependents,
+        },
+      }),
+    ).catch(() => null);
+
+    await refreshProfile(true);
+  };
+
+  const upsertIncomeSource = async (input: {
+    id?: string;
+    name: string;
+    amount: number;
+    frequency: CommitmentDbFrequency;
+    nextPaymentDate: string;
+  }): Promise<void> => {
+    const cleanName = input.name.trim() || "Ingreso principal";
+    const roundedAmount = Number(Number(input.amount).toFixed(2));
+    if (!Number.isFinite(roundedAmount) || roundedAmount <= 0) {
+      throw new Error("Ingresa un monto de ingreso válido mayor a cero.");
+    }
+
+    if (mode === "demo") {
+      const existing = profile.incomeSources ?? [];
+      const nextId = input.id || `inc-demo-${Date.now()}`;
+      const record: IncomeSourceRecord = {
+        id: nextId,
+        name: cleanName,
+        amount: roundedAmount,
+        frequency: input.frequency,
+        nextPaymentDate: input.nextPaymentDate,
+      };
+      const hasExisting = existing.some((i) => i.id === nextId);
+      const nextSources = hasExisting
+        ? existing.map((i) => (i.id === nextId ? record : i))
+        : [...existing, record];
+      const primary = nextSources[0];
+      persistDemo({
+        ...profile,
+        incomeSources: nextSources,
+        nextPaydayAmount: primary ? primary.amount : profile.nextPaydayAmount,
+        nextPaydayDays: primary?.nextPaymentDate
+          ? daysUntil(primary.nextPaymentDate)
+          : profile.nextPaydayDays,
+        payFrequency: primary
+          ? toFrequency(primary.frequency)
+          : profile.payFrequency,
+      });
+      return;
+    }
+
+    if (mode !== "authenticated") {
+      throw new Error("Debes iniciar sesión para guardar fuentes de ingreso.");
+    }
+
+    const {
+      data: { user },
+      error: authErr,
+    } = await supabase.auth.getUser();
+    if (authErr || !user) {
+      throw new Error("No se pudo verificar el usuario autenticado.");
+    }
+
+    if (input.id) {
+      const { error } = await supabase
+        .from("income_sources")
+        .update({
+          user_id: user.id,
+          name: cleanName,
+          amount: roundedAmount,
+          frequency: input.frequency,
+          next_payment_date: input.nextPaymentDate,
+          is_active: true,
+        })
+        .eq("id", input.id)
+        .eq("user_id", user.id);
+      if (error) throw new Error(error.message);
+    } else {
+      const { error } = await supabase.from("income_sources").insert({
+        user_id: user.id,
+        name: cleanName,
+        amount: roundedAmount,
+        frequency: input.frequency,
+        next_payment_date: input.nextPaymentDate,
+        is_active: true,
+      });
+      if (error) throw new Error(error.message);
+    }
+
+    await refreshProfile(true);
+  };
+
+  const deleteIncomeSource = async (id: string): Promise<void> => {
+    if (mode === "demo") {
+      const nextSources = (profile.incomeSources ?? []).filter(
+        (i) => i.id !== id,
+      );
+      persistDemo({
+        ...profile,
+        incomeSources: nextSources,
+      });
+      return;
+    }
+
+    if (mode !== "authenticated") {
+      throw new Error("Debes iniciar sesión para eliminar fuentes de ingreso.");
+    }
+
+    const {
+      data: { user },
+      error: authErr,
+    } = await supabase.auth.getUser();
+    if (authErr || !user) {
+      throw new Error("No se pudo verificar el usuario autenticado.");
+    }
+
+    const { error } = await supabase
+      .from("income_sources")
+      .update({ user_id: user.id, is_active: false })
+      .eq("id", id)
+      .eq("user_id", user.id);
+
+    if (error) throw new Error(error.message);
+    await refreshProfile(true);
+  };
+
   const awardWisdomXp = (amount = 50) => {
     if (mode !== "demo") return;
     persistDemo({ ...profile, wisdomXp: (profile.wisdomXp ?? 0) + amount });
@@ -1300,6 +2291,13 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         addExpenseTransaction,
         addPlannedExpense,
         removePlannedExpense,
+        contributeToWishlistItem,
+        updateWishlistDecisionStatus,
+        saveGoalWithSubGoals,
+        selectActiveGoal,
+        saveFullProfileSettings,
+        upsertIncomeSource,
+        deleteIncomeSource,
       }}
     >
       {children}

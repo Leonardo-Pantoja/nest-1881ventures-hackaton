@@ -36,7 +36,7 @@ const NAV_ITEMS: {
   { id: "simulate", label: "Simular Compra", icon: Sparkles },
   { id: "expenses", label: "Plan de Gastos", icon: Receipt },
   { id: "goals", label: "Retos y Metas", icon: Trophy },
-  { id: "profile", label: "Cambiar Perfil", icon: UserCheck },
+  { id: "profile", label: "Editar Perfil", icon: UserCheck },
 ];
 
 export default function AppShell({
