@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
+import React, { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, Flame } from "lucide-react";
@@ -11,14 +11,13 @@ import QuickSnapScanner, {
 } from "@/components/QuickSnapScanner";
 import { type BottomNavTab } from "@/components/BottomNav";
 import { useFinancial } from "@/context/FinancialContext";
-import { playTap, playCoin } from "@/lib/soundEffects";
-import type { EvaluateApiResponse } from "@/app/api/evaluate/route";
+import { playTap } from "@/lib/soundEffects";
+import { useFinancialEvaluation } from "@/hooks/useFinancialEvaluation";
 
 function EvaluateContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const {
-    profile,
     pendingEvaluation,
     setPendingEvaluation,
     incrementStreak,
@@ -26,9 +25,7 @@ function EvaluateContent() {
   } = useFinancial();
 
   const [actionToast, setActionToast] = useState<string | null>(null);
-  const [apiEvaluation, setApiEvaluation] =
-    useState<EvaluateApiResponse | null>(null);
-  const [isLoadingApi, setIsLoadingApi] = useState(false);
+
   const [scannedThumb, setScannedThumb] = useState<string | null>(null);
   const [scannedStore, setScannedStore] = useState<string | null>(null);
 
@@ -37,37 +34,12 @@ function EvaluateContent() {
     pendingEvaluation.name ||
     "Audífonos Inalámbricos Sony";
   const itemPrice =
-    Number(searchParams.get("price")) || pendingEvaluation.price || 2300;
-
-  useEffect(() => {
-    let active = true;
-    const fetchEvaluation = async () => {
-      setIsLoadingApi(true);
-      try {
-        const res = await fetch("/api/evaluate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            itemName,
-            itemPrice,
-            profile,
-          }),
-        });
-        if (res.ok && active) {
-          const data = (await res.json()) as EvaluateApiResponse;
-          setApiEvaluation(data);
-        }
-      } catch {
-        // Automatic deterministic fallback inside PurchaseEvaluationFlow
-      } finally {
-        if (active) setIsLoadingApi(false);
-      }
-    };
-    void fetchEvaluation();
-    return () => {
-      active = false;
-    };
-  }, [itemName, itemPrice, profile]);
+    Number(searchParams.get("price")) || pendingEvaluation.price || 0;
+  const evaluation = useFinancialEvaluation(itemName, itemPrice);
+  const apiEvaluation = evaluation.response;
+  const apiEvaluationError = evaluation.error !== null;
+  const apiErrorMessage = evaluation.error;
+  const isLoadingApi = evaluation.loading;
 
   const handleActionCompleted = (message: string) => {
     setActionToast(message);
@@ -107,18 +79,20 @@ function EvaluateContent() {
       <div className="space-y-4 max-w-xl mx-auto w-full">
         <QuickSnapScanner
           onScanComplete={(scanned: ScannedProductResult) => {
-            playCoin();
+            playTap();
             setPendingEvaluation({
               name: scanned.name,
-              price: scanned.price,
+              price: scanned.price ?? 0,
               imageName: scanned.storeTag,
             });
             setScannedThumb(scanned.thumbnailDataUrl);
             setScannedStore(scanned.storeTag);
-            if (scanned.apiResponse) {
-              setApiEvaluation(scanned.apiResponse);
+            incrementStreak("¡Escaneaste un producto! +1 Racha 🔥");
+            if (scanned.price === null) {
+              setActionToast(
+                "La lectura de imágenes con Gemini está pendiente para Fase 2. Confirma manualmente el precio en el simulador antes de evaluar.",
+              );
             }
-            incrementStreak("¡Escaneaste captura con IA! +1 Racha 🔥");
           }}
         />
 
@@ -129,15 +103,27 @@ function EvaluateContent() {
           className="w-full"
         >
           <PurchaseEvaluationFlow
+            key={evaluation.key}
             itemName={itemName}
             itemPrice={itemPrice}
             thumbnailDataUrl={scannedThumb}
             storeTag={scannedStore}
             apiEvaluation={apiEvaluation}
+            apiEvaluationError={apiEvaluationError}
+            apiErrorMessage={apiErrorMessage}
             isLoadingApi={isLoadingApi}
             isStandalonePage
             onClose={() => router.push("/app")}
             onActionCompleted={handleActionCompleted}
+            onUpdateEvaluatedItem={(nextName, nextPrice, nextThumb, nextTag) => {
+              setPendingEvaluation({
+                name: nextName,
+                price: nextPrice,
+                imageName: nextTag ?? scannedStore,
+              });
+              if (nextThumb !== undefined) setScannedThumb(nextThumb);
+              if (nextTag !== undefined) setScannedStore(nextTag);
+            }}
           />
         </motion.div>
       </div>

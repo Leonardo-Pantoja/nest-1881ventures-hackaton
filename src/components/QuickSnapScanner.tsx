@@ -13,16 +13,13 @@ import {
   Headphones,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { useFinancial } from "@/context/FinancialContext";
-import { playTap, playCoin } from "@/lib/soundEffects";
-import type { EvaluateApiResponse } from "@/app/api/evaluate/route";
+import { playTap } from "@/lib/soundEffects";
 
 export interface ScannedProductResult {
   name: string;
-  price: number;
+  price: number | null;
   thumbnailDataUrl: string;
   storeTag: string;
-  apiResponse?: EvaluateApiResponse | null;
 }
 
 interface QuickSnapScannerProps {
@@ -118,8 +115,6 @@ export default function QuickSnapScanner({
   onScanComplete,
   inlineIconTrigger = false,
 }: QuickSnapScannerProps) {
-  const { profile } = useFinancial();
-
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scanningPreviewUrl, setScanningPreviewUrl] = useState<string | null>(
@@ -131,55 +126,29 @@ export default function QuickSnapScanner({
 
   const executeScanWithLaser = async (params: {
     name: string;
-    price: number;
+    price: number | null;
     previewUrl: string;
     storeTag: string;
-    imageBase64?: string | null;
-    imageMimeType?: string | null;
   }) => {
     setScanningPreviewUrl(params.previewUrl);
-    setScanningLabel(`${params.name} · $${params.price.toLocaleString()} MXN`);
+    setScanningLabel(
+      params.price === null
+        ? `${params.name} · precio por confirmar`
+        : `${params.name} · $${params.price.toLocaleString()} MXN`,
+    );
     setIsScanning(true);
 
-    const startTime = Date.now();
-    let apiData: EvaluateApiResponse | null = null;
-
-    try {
-      const response = await fetch("/api/evaluate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          itemName: params.name,
-          itemPrice: params.price,
-          imageBase64: params.imageBase64 ?? null,
-          imageMimeType: params.imageMimeType ?? null,
-          profile,
-        }),
-      });
-      if (response.ok) {
-        apiData = (await response.json()) as EvaluateApiResponse;
-      }
-    } catch {
-      // Automatic fallback
-    }
-
-    const elapsed = Date.now() - startTime;
-    const remainingWait = Math.max(0, 1500 - elapsed);
-    await new Promise((resolve) => setTimeout(resolve, remainingWait));
-
-    const finalName = apiData?.detectedItemName || params.name;
-    const finalPrice = apiData?.detectedItemPrice || params.price;
+    await new Promise((resolve) => setTimeout(resolve, 1500));
 
     setIsScanning(false);
     setIsPickerOpen(false);
-    playCoin();
+    playTap();
 
     onScanComplete({
-      name: finalName,
-      price: finalPrice,
+      name: params.name,
+      price: params.price,
       thumbnailDataUrl: params.previewUrl,
       storeTag: params.storeTag,
-      apiResponse: apiData,
     });
   };
 
@@ -200,8 +169,6 @@ export default function QuickSnapScanner({
     reader.onload = () => {
       const dataUrl = typeof reader.result === "string" ? reader.result : "";
       const cleanFileName = file.name.replace(/\.[^/.]+$/, "");
-      const numberInFile = cleanFileName.match(/(\d{3,5})/);
-      const fallbackPrice = numberInFile ? Number(numberInFile[1]) : 2450;
       const fallbackName =
         cleanFileName.length > 2
           ? `Captura: ${cleanFileName.slice(0, 24)}`
@@ -209,11 +176,9 @@ export default function QuickSnapScanner({
 
       void executeScanWithLaser({
         name: fallbackName,
-        price: fallbackPrice,
+        price: null,
         previewUrl: dataUrl || PRESET_CAPTURES[0].svgDataUrl,
-        storeTag: "Captura subida · Gemini Vision",
-        imageBase64: dataUrl,
-        imageMimeType: file.type || "image/png",
+        storeTag: "Captura subida · precio por confirmar",
       });
     };
     reader.readAsDataURL(file);
@@ -253,7 +218,7 @@ export default function QuickSnapScanner({
             <span>Escanear producto o captura de tienda</span>
           </div>
           <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full shrink-0">
-            IA Vision
+            Vista previa
           </span>
         </motion.button>
       )}
@@ -334,7 +299,7 @@ export default function QuickSnapScanner({
                             className="w-3 h-3 mr-1"
                             strokeWidth={1.5}
                           />
-                          LECTURA ÓPTICA IA
+                          VISTA PREVIA
                         </Badge>
                         <span className="text-[11px] font-mono text-emerald-300">
                           1.5s
@@ -343,7 +308,7 @@ export default function QuickSnapScanner({
 
                       <div className="space-y-1 text-center">
                         <p className="text-sm font-bold text-white">
-                          Leyendo precio e impacto en tu liquidez...
+                          Preparando la vista previa. El precio debe confirmarse manualmente.
                         </p>
                         <p className="text-xs font-mono text-emerald-300">
                           {scanningLabel}

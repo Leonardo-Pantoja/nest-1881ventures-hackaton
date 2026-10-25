@@ -9,8 +9,6 @@ import {
   SlidersHorizontal,
   UserCheck,
   X,
-  Send,
-  BookmarkCheck,
   Flame,
   Trophy,
   Target,
@@ -27,12 +25,16 @@ import {
   Sun,
   Volume2,
   VolumeX,
-  Link2,
   Snowflake,
-  Home,
-  Loader2,
   ExternalLink,
+  MessageSquare,
+  TrendingUp,
 } from "lucide-react";
+import { useFinancialEvaluation } from "@/hooks/useFinancialEvaluation";
+import PurchaseConfirmationModal from "@/components/PurchaseConfirmationModal";
+import ExpensePlanView from "@/components/ExpensePlanView";
+import GoalsAndCoolingView from "@/components/GoalsAndCoolingView";
+import ProfileEditorPanel from "@/components/ProfileEditorPanel";
 import AppShell from "@/components/AppShell";
 import QuickGuideModal from "@/components/QuickGuideModal";
 import FinancialPlantWidget, {
@@ -50,7 +52,6 @@ import {
 import {
   playTap,
   playCoin,
-  playDamage,
   playLevelUp,
   triggerConfettiBurst,
 } from "@/lib/soundEffects";
@@ -88,37 +89,6 @@ const RPG_SHOP_ITEMS = [
     fullName: "Comida a domicilio",
     price: 350,
     iconBg: "bg-rose-50 border-rose-100",
-  },
-];
-
-// Firecrawl / URL Smart Parser Demo Store Presets
-const STORE_URL_PRESETS = [
-  {
-    url: "https://amazon.com.mx/dp/B0863TXGM3/audifonos-sony-wh1000xm5",
-    domain: "amazon.com.mx",
-    name: "Audífonos Sony WH-1000XM4 ANC",
-    price: 2300,
-    svgThumb: `data:image/svg+xml;utf8,${encodeURIComponent(`
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
-        <rect width="120" height="120" rx="20" fill="#ECFDF5"/>
-        <path d="M34 68 A 26 26 0 0 1 86 68" fill="none" stroke="#0F172A" stroke-width="8" stroke-linecap="round"/>
-        <rect x="26" y="60" width="16" height="28" rx="8" fill="#10B981"/>
-        <rect x="78" y="60" width="16" height="28" rx="8" fill="#10B981"/>
-      </svg>
-    `)}`,
-  },
-  {
-    url: "https://mercadolibre.com.mx/tenis-nike-air-force-1800",
-    domain: "mercadolibre.com.mx",
-    name: "Tenis Nike Air Force 1",
-    price: 1800,
-    svgThumb: `data:image/svg+xml;utf8,${encodeURIComponent(`
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
-        <rect width="120" height="120" rx="20" fill="#FEF3C7"/>
-        <path d="M24 72 L52 50 L68 60 L96 66 L96 82 L24 82 Z" fill="#D97706"/>
-        <rect x="22" y="80" width="76" height="10" rx="5" fill="#FFFFFF" stroke="#0F172A" stroke-width="2"/>
-      </svg>
-    `)}`,
   },
 ];
 
@@ -194,7 +164,6 @@ const FIRST_VISIT_GUIDE_KEY = "antesdegastar_seen_quick_guide_v1";
  * Includes Native Web Speech API (window.speechSynthesis) Voice Button & Auto-Voice Toggle
  */
 function HeroWorldDiorama({
-  userName,
   currentLevel,
   currentLevelName,
   nextPaydayDays,
@@ -205,8 +174,6 @@ function HeroWorldDiorama({
   fixedPct,
   bufferPct,
   freePct,
-  parsedItemName,
-  parsedItemPrice,
   isDeficit,
   missingLiquidity,
   selectedDecision,
@@ -218,19 +185,16 @@ function HeroWorldDiorama({
   onToggleAutoVoice,
   onExploreTree,
 }: {
-  userName: string;
   currentLevel: PlantLevel;
   currentLevelName: string;
-  nextPaydayDays: number;
-  totalBalance: number;
-  fixedAndRentTotal: number;
-  safetyBuffer: number;
-  safeToSpend: number;
+  nextPaydayDays: number | null;
+  totalBalance: number | null;
+  fixedAndRentTotal: number | null;
+  safetyBuffer: number | null;
+  safeToSpend: number | null;
   fixedPct: number;
   bufferPct: number;
   freePct: number;
-  parsedItemName: string;
-  parsedItemPrice: number;
   isDeficit: boolean;
   missingLiquidity: number;
   selectedDecision: "idle" | "wait" | "microsave" | "bought";
@@ -466,7 +430,9 @@ function HeroWorldDiorama({
                   <span>
                     {isCelebrating
                       ? `+${decisionXpBonus} XP`
-                      : `Nómina en ${nextPaydayDays}d`}
+                      : nextPaydayDays === null
+                        ? "Ingreso sin confirmar"
+                        : `Ingreso en ${nextPaydayDays}d`}
                   </span>
                 </>
               )}
@@ -694,25 +660,25 @@ function HeroWorldDiorama({
         <div className="bg-white/90 backdrop-blur-md rounded-2xl p-3 sm:p-3.5 border border-white shadow-xs space-y-2">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <span className="text-xs font-bold font-heading text-slate-600">
-              Disponible para gastar hoy:
+              Margen disponible para este artículo:
             </span>
             <span className="text-lg sm:text-xl font-bold font-heading text-slate-900">
-              ${safeToSpend.toLocaleString()}{" "}
+              {safeToSpend === null ? "—" : `$${safeToSpend.toLocaleString()}`}{" "}
               <span className="text-xs font-semibold text-slate-500">MXN</span>
             </span>
           </div>
 
           <div className="w-full h-2.5 rounded-full bg-slate-200/80 overflow-hidden flex gap-0.5 p-0.5">
             <div
-              style={{ width: `${fixedPct}%` }}
+              style={{ width: `${safeToSpend === null ? 0 : fixedPct}%` }}
               className="h-full rounded-l-full bg-slate-500 transition-all duration-500"
             />
             <div
-              style={{ width: `${bufferPct}%` }}
+              style={{ width: `${safeToSpend === null ? 0 : bufferPct}%` }}
               className="h-full bg-slate-300 transition-all duration-500"
             />
             <div
-              style={{ width: `${freePct}%` }}
+              style={{ width: `${safeToSpend === null ? 0 : freePct}%` }}
               className={`h-full rounded-r-full transition-all duration-500 ${
                 isStormy ? "bg-amber-500" : "bg-[#10B981]"
               }`}
@@ -722,21 +688,25 @@ function HeroWorldDiorama({
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px] sm:text-xs text-slate-700">
             <span>
               <strong className="text-slate-900">
-                Saldo ${totalBalance.toLocaleString()}
+                Saldo {totalBalance === null ? "—" : `$${totalBalance.toLocaleString()}`}
               </strong>
             </span>
             <span className="flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-slate-500" />
-              Apartado renta y pagos fijos: −$
-              {fixedAndRentTotal.toLocaleString()}
+              Compromisos considerados:{" "}
+              {fixedAndRentTotal === null
+                ? "—"
+                : `−$${fixedAndRentTotal.toLocaleString()}`}
             </span>
             <span className="flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-slate-300" />
-              Colchón: −${safetyBuffer.toLocaleString()}
+              Reservas: {safetyBuffer === null ? "—" : `−$${safetyBuffer.toLocaleString()}`}
             </span>
             <span className="flex items-center gap-1 font-bold text-emerald-700">
-              <span className="w-2 h-2 rounded-full bg-[#10B981]" />= Libre hoy:
-              ${safeToSpend.toLocaleString()} MXN
+              <span className="w-2 h-2 rounded-full bg-[#10B981]" />= Margen:
+              {safeToSpend === null
+                ? " sin evaluación"
+                : ` $${safeToSpend.toLocaleString()} MXN`}
             </span>
           </div>
         </div>
@@ -753,11 +723,9 @@ export default function AppDashboardPage() {
     profileError,
     refreshProfile,
     signOut,
-    updateProfile,
     loadPreloadedSandboxProfile,
     setPendingEvaluation,
     addToWishlist,
-    registerPurchaseAnyway,
     streakCelebration,
   } = useFinancial();
 
@@ -770,15 +738,11 @@ export default function AppDashboardPage() {
   const [queryText, setQueryText] = useState("");
   const [parsedItemName, setParsedItemName] = useState("");
   const [parsedItemPrice, setParsedItemPrice] = useState<number>(0);
+
   const [scannedThumbnailUrl, setScannedThumbnailUrl] = useState<string | null>(
     null,
   );
   const [scannedStoreTag, setScannedStoreTag] = useState<string | null>(null);
-
-  // Firecrawl / URL Smart Parser State
-  const [isExtractingUrl, setIsExtractingUrl] = useState(false);
-  const [extractingDomain, setExtractingDomain] = useState("");
-  const [urlPresetIndex, setUrlPresetIndex] = useState(0);
 
   // Native Text-to-Speech (Voz Interactiva para la Planta)
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -789,9 +753,11 @@ export default function AppDashboardPage() {
   >("idle");
   const [decisionXpBonus, setDecisionXpBonus] = useState<number>(50);
 
-  // Quick expense floating game button & toast feedback
-  const [isQuickExpenseOpen, setIsQuickExpenseOpen] = useState(false);
-  const [quickExpenseInput, setQuickExpenseInput] = useState("");
+  const evaluation = useFinancialEvaluation(parsedItemName || "Resumen financiero", parsedItemPrice > 0 ? parsedItemPrice : null);
+  const currentEvaluation = evaluation.loading ? null : evaluation;
+  const [purchaseConfirmation, setPurchaseConfirmation] = useState(false);
+
+  // Toast feedback
   const [toastFeedback, setToastFeedback] = useState<{
     id: number;
     message: string;
@@ -801,8 +767,9 @@ export default function AppDashboardPage() {
     try {
       const hasSeen = localStorage.getItem(FIRST_VISIT_GUIDE_KEY);
       if (!hasSeen) {
-        setShowTourModal(true);
+        const timer = setTimeout(() => setShowTourModal(true), 0);
         localStorage.setItem(FIRST_VISIT_GUIDE_KEY, "true");
+        return () => clearTimeout(timer);
       }
     } catch {
       // Ignore storage access errors
@@ -823,81 +790,57 @@ export default function AppDashboardPage() {
     }, 4200);
   };
 
-  // Financial, 3-Segment Liquidity & Pre-Purchase Real-Life Cost Pills Metrics
+  // Financial, 3-Segment Liquidity & Pre-Purchase Real-Life Cost Pills Metrics (powered by deterministic financialEngine)
   const financialMetrics = useMemo(() => {
-    const commitmentsTotal = profile.commitments
-      .filter((c) => c.dueInDays <= profile.nextPaydayDays)
-      .reduce((acc, c) => acc + c.amount, 0);
+    const evaluation = currentEvaluation?.response ?? null;
+    const evaluationReady =
+      evaluation !== null &&
+      evaluation.status !== "datos_incompletos" &&
+      evaluation.status !== "error_procesamiento" &&
+      evaluation.safeToSpend !== null &&
+      evaluation.remainingAfterBuyToday !== null;
+    const evaluationIncomplete =
+      parsedItemPrice > 0 && !evaluationReady;
+    const evaluationPending =
+      parsedItemPrice > 0 && currentEvaluation === null;
 
-    const essentialLivingCost =
-      profile.dailyEssentialBurn * profile.nextPaydayDays;
-
-    const fixedAndRentTotal = commitmentsTotal + essentialLivingCost;
-
-    const safeToSpend = Math.max(
-      0,
-      profile.currentBalance - fixedAndRentTotal - profile.safetyBuffer,
-    );
-
-    const totalBalance = Math.max(
-      1,
-      profile.currentBalance ||
-        fixedAndRentTotal + profile.safetyBuffer + safeToSpend,
-    );
-
-    const fixedPct = Math.min(
-      82,
-      Math.max(15, Math.round((fixedAndRentTotal / totalBalance) * 100)),
-    );
-    const bufferPct = Math.min(
-      35,
-      Math.max(10, Math.round((profile.safetyBuffer / totalBalance) * 100)),
-    );
-    const freePct = Math.max(8, 100 - fixedPct - bufferPct);
-
-    const netAfterPurchase = safeToSpend - parsedItemPrice;
-    const isDeficit = parsedItemPrice > 0 && netAfterPurchase < 0;
-    const missingLiquidity = isDeficit ? Math.abs(netAfterPurchase) : 0;
-
-    const weeklyGoalContribution = Math.max(
-      300,
-      profile.goal.weeklyContribution || 500,
-    );
-    const weeksGoalDelayed = Math.max(
-      1,
-      Math.ceil(parsedItemPrice / weeklyGoalContribution),
-    );
-
-    // Real-Life Cost Psychology Pills:
-    // 1. Work Hours (assuming ~80 work hours per quincena)
-    const hourlyWage = Math.max(
-      45,
-      Math.round((profile.nextPaydayAmount || 6500) / 80),
-    );
-    const workHoursEquivalent =
-      parsedItemPrice > 0
-        ? Math.max(1, Math.round(parsedItemPrice / hourlyWage))
+    const expenses = evaluationReady ? evaluation.consideredExpenses : null;
+    const totalBalance = expenses?.currentBalance ?? null;
+    const fixedAndRentTotal =
+      expenses?.essentialExpenses !== null &&
+      expenses?.essentialExpenses !== undefined &&
+      expenses.pendingCommitments !== null &&
+      expenses.pendingDebtPayments !== null
+        ? expenses.essentialExpenses +
+          expenses.pendingCommitments +
+          expenses.pendingDebtPayments
+        : null;
+    const safetyBuffer = expenses?.safetyBuffer != null && expenses.protectedSavings != null
+      ? expenses.safetyBuffer + expenses.protectedSavings : null;
+    const safeToSpend =
+      evaluationReady ? (evaluation.safeToSpend ?? null) : null;
+    const fixedPct =
+      totalBalance !== null && totalBalance > 0 && fixedAndRentTotal !== null
+        ? Math.min(100, Math.max(0, Math.round((fixedAndRentTotal / totalBalance) * 100)))
+        : 0;
+    const bufferPct =
+      totalBalance !== null && totalBalance > 0 && safetyBuffer !== null
+        ? Math.min(100 - fixedPct, Math.max(0, Math.round((safetyBuffer / totalBalance) * 100)))
+        : 0;
+    const freePct =
+      totalBalance !== null && totalBalance > 0 && safeToSpend !== null
+        ? Math.min(100 - fixedPct - bufferPct, Math.max(0, Math.round((safeToSpend / totalBalance) * 100)))
         : 0;
 
-    // 2. Percentage of fixed weekly payments
-    const fixedCommitmentsBase = Math.max(1000, fixedAndRentTotal);
-    const fixedPaymentsPct =
-      parsedItemPrice > 0
-        ? Math.round((parsedItemPrice / fixedCommitmentsBase) * 100)
+    const netAfterPurchase = evaluationReady
+      ? (evaluation.remainingAfterBuyToday ?? null)
+      : null;
+    const isDeficit =
+      evaluationReady && evaluation.status === "excede_el_margen";
+    const missingLiquidity =
+      evaluationReady && evaluation.exceedsBy !== null
+        ? evaluation.exceedsBy
         : 0;
-
-    // 3. Days main goal is delayed
-    const dailyGoalRate = Math.max(25, weeklyGoalContribution / 7);
-    const daysGoalDelayed =
-      parsedItemPrice > 0
-        ? Math.max(1, Math.round(parsedItemPrice / dailyGoalRate))
-        : 0;
-
-    const suggestedWeeklySave = 400;
-    const microSaveWeeks = Math.max(
-      1,
-      Math.ceil(parsedItemPrice / suggestedWeeklySave),
-    );
 
     const goalPct =
       profile.goal.targetAmount > 0
@@ -908,6 +851,19 @@ export default function AppDashboardPage() {
             ),
           )
         : 0;
+
+    const purchaseDecision = evaluation?.purchaseDecision ?? null;
+    const purchaseReport = evaluation?.purchaseReport ?? null;
+    const goalImpact =
+      evaluation?.goalImpact ?? purchaseReport?.goalImpact ?? null;
+    const projectionBefore =
+      evaluation?.projection ?? purchaseReport?.projectionBefore ?? null;
+    const projectionAfter =
+      evaluation?.projectionAfter ?? purchaseReport?.projectionAfter ?? null;
+    const projectedBalanceDifference =
+      evaluation?.projectedBalanceDifference ??
+      purchaseReport?.projectedBalanceDifference ??
+      null;
 
     // Total Protected Money in Impulse Freezer ("Compras en Enfriamiento 🧊")
     const totalProtectedMoney = (profile.wishlist || []).reduce(
@@ -921,9 +877,14 @@ export default function AppDashboardPage() {
         ? profile.goal.currentSaved / profile.goal.targetAmount
         : 0;
     const baseXp = profile.wisdomXp ?? 0;
-    if (safeToSpend <= 0) {
+    if (safeToSpend !== null && safeToSpend <= 0) {
       currentLevel = 1;
-    } else if (safeToSpend < profile.safetyBuffer * 1.4 && goalRatio < 0.45) {
+    } else if (
+      safeToSpend !== null &&
+      expenses?.safetyBuffer != null &&
+      safeToSpend < expenses.safetyBuffer * 1.4 &&
+      goalRatio < 0.45
+    ) {
       currentLevel = 2;
     } else if (goalRatio < 0.68 && baseXp < 400) {
       currentLevel = 3;
@@ -943,27 +904,35 @@ export default function AppDashboardPage() {
 
     return {
       safeToSpend,
-      totalBalance: profile.currentBalance,
+      nextPaydayDays: evaluationReady
+        ? evaluation.daysUntilNextIncome
+        : null,
+      evaluation,
+      evaluationReady,
+      evaluationIncomplete,
+      evaluationPending,
+      evaluationError: currentEvaluation?.error ?? null,
+      totalBalance,
       fixedAndRentTotal,
-      safetyBuffer: profile.safetyBuffer,
+      safetyBuffer,
       fixedPct,
       bufferPct,
       freePct,
       netAfterPurchase,
       isDeficit,
       missingLiquidity,
-      weeksGoalDelayed,
-      workHoursEquivalent,
-      fixedPaymentsPct,
-      daysGoalDelayed,
-      suggestedWeeklySave,
-      microSaveWeeks,
       goalPct,
       totalProtectedMoney,
       currentLevel,
       currentLevelName: levelNames[currentLevel],
+      purchaseDecision,
+      purchaseReport,
+      goalImpact,
+      projectionBefore,
+      projectionAfter,
+      projectedBalanceDifference,
     };
-  }, [profile, parsedItemPrice]);
+  }, [currentEvaluation, parsedItemPrice, profile]);
 
   // Build Live RPG Speech Message
   const rpgSpeechMessage = useMemo(() => {
@@ -977,25 +946,35 @@ export default function AppDashboardPage() {
 
     if (isCelebrating) {
       return selectedDecision === "wait"
-        ? `¡Gran jugada ${firstName}! Guardado en el congelador por ${profile.nextPaydayDays} días y ganamos +${decisionXpBonus} XP ☀️`
+        ? `¡Gran jugada ${firstName}! Guardado para reevaluarlo después y ganamos +${decisionXpBonus} XP ☀️`
         : `¡Plan maestro ${firstName}! Con micro-ahorro protegemos tu quincena y ganamos +${decisionXpBonus} XP ✨`;
     }
     if (isStormy) {
       return `¡Cuidado ${firstName}! Con "${parsedItemName}" ($${parsedItemPrice.toLocaleString()}) nos quedaríamos sin para la renta 🌧️`;
     }
     if (parsedItemPrice > 0) {
+      if (financialMetrics.evaluationIncomplete) {
+        return financialMetrics.evaluationPending
+          ? `Estoy verificando los datos financieros de "${parsedItemName}" antes de emitir una recomendación.`
+          : `No puedo recomendar esta compra: la evaluación no se completó con datos financieros suficientes.`;
+      }
+      if (financialMetrics.evaluation?.status === "precaucion") {
+        return `La compra de "${parsedItemName}" cabe con precaución y dejaría menos de la mitad del colchón de seguridad.`;
+      }
       return `¡Sí nos alcanza para "${parsedItemName}"! Aún conservarías $${Math.max(
         0,
-        financialMetrics.safeToSpend - parsedItemPrice,
+        financialMetrics.netAfterPurchase ?? 0,
       ).toLocaleString()} MXN libres ☀️`;
     }
-    return `¡Hola ${firstName}! Tienes $${financialMetrics.safeToSpend.toLocaleString()} MXN libres hoy. ¿Qué evaluamos? 🌱`;
+    return `¡Hola ${firstName}! Elige un artículo para evaluar tu margen con los datos financieros de tu cuenta. 🌱`;
   }, [
     profile.name,
-    profile.nextPaydayDays,
     decisionXpBonus,
     financialMetrics.isDeficit,
-    financialMetrics.safeToSpend,
+    financialMetrics.evaluationIncomplete,
+    financialMetrics.evaluationPending,
+    financialMetrics.evaluation?.status,
+    financialMetrics.netAfterPurchase,
     selectedDecision,
     parsedItemName,
     parsedItemPrice,
@@ -1046,77 +1025,12 @@ export default function AppDashboardPage() {
   // Auto-read when autoVoiceEnabled is active and the speech message updates
   useEffect(() => {
     if (autoVoiceEnabled && rpgSpeechMessage) {
-      speakAdviceText(rpgSpeechMessage);
+      const timer = setTimeout(() => speakAdviceText(rpgSpeechMessage), 0);
+      return () => clearTimeout(timer);
     }
   }, [autoVoiceEnabled, rpgSpeechMessage, speakAdviceText]);
 
-  // Firecrawl / Smart Store URL Parser Simulator
-  const triggerStoreUrlExtraction = async (rawUrl: string) => {
-    playTap();
-    setSelectedDecision("idle");
-
-    let domain = "amazon.com.mx";
-    try {
-      const parsed = new URL(
-        rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`,
-      );
-      domain = parsed.hostname.replace(/^www\./, "");
-    } catch {
-      domain = "tienda online";
-    }
-
-    setExtractingDomain(domain);
-    setIsExtractingUrl(true);
-
-    // 1.25s animated Firecrawl extraction state
-    await new Promise((resolve) => setTimeout(resolve, 1250));
-
-    const lower = rawUrl.toLowerCase();
-    let extractedName = "Audífonos Sony WH-1000XM4 ANC";
-    let extractedPrice = 2300;
-    let thumb = STORE_URL_PRESETS[0].svgThumb;
-
-    if (
-      lower.includes("tenis") ||
-      lower.includes("nike") ||
-      lower.includes("jordan")
-    ) {
-      extractedName = "Tenis Nike Air Force 1";
-      extractedPrice = 1800;
-      thumb = STORE_URL_PRESETS[1].svgThumb;
-    } else if (
-      lower.includes("switch") ||
-      lower.includes("juego") ||
-      lower.includes("gamer")
-    ) {
-      extractedName = "Videojuego Edición Especial";
-      extractedPrice = 1200;
-    } else {
-      const numMatch = rawUrl.match(/(\d{3,5})/);
-      if (numMatch) {
-        extractedPrice = Number(numMatch[1]);
-      }
-    }
-
-    setIsExtractingUrl(false);
-    setParsedItemName(extractedName);
-    setParsedItemPrice(extractedPrice);
-    setScannedThumbnailUrl(thumb);
-    setScannedStoreTag(`Firecrawl · ${domain}`);
-    setPendingEvaluation({
-      name: extractedName,
-      price: extractedPrice,
-      imageName: domain,
-    });
-
-    if (extractedPrice > financialMetrics.safeToSpend) {
-      playDamage();
-    } else {
-      playCoin();
-    }
-  };
-
-  // Real-Time Input Handler (Detects URLs automatically or parses text + price)
+  // Real-Time Input Handler (parses product name + price)
   const handleQueryInputChange = (value: string) => {
     setQueryText(value);
     setSelectedDecision("idle");
@@ -1124,15 +1038,6 @@ export default function AppDashboardPage() {
     if (!value.trim()) {
       setParsedItemName("");
       setParsedItemPrice(0);
-      return;
-    }
-
-    // Detect if user pasted a store link (http://, https://, amazon., mercadolibre.)
-    if (
-      /^https?:\/\//i.test(value.trim()) ||
-      /amazon\.com|mercadolibre\.com|liverpool\.com/i.test(value.trim())
-    ) {
-      void triggerStoreUrlExtraction(value.trim());
       return;
     }
 
@@ -1147,23 +1052,11 @@ export default function AppDashboardPage() {
         .trim();
       setParsedItemName(cleanedName || "Artículo consultado");
 
-      if (price > financialMetrics.safeToSpend) {
-        playDamage();
-      } else {
-        playTap();
-      }
+      playTap();
     } else {
       setParsedItemPrice(0);
       setParsedItemName(value.trim());
     }
-  };
-
-  // Demo Button: "🔗 Probar con link de tienda"
-  const handleDemoStoreLinkClick = () => {
-    const preset = STORE_URL_PRESETS[urlPresetIndex % STORE_URL_PRESETS.length];
-    setUrlPresetIndex((prev) => prev + 1);
-    setQueryText(preset.url);
-    void triggerStoreUrlExtraction(preset.url);
   };
 
   // Select RPG Shop Item Card
@@ -1180,70 +1073,38 @@ export default function AppDashboardPage() {
       imageName: null,
     });
 
-    if (item.price > financialMetrics.safeToSpend) {
-      playDamage();
-    } else {
-      playTap();
-    }
+    playTap();
   };
 
   // Camera / QuickSnapScanner Handler
   const handleScanComplete = (scanned: ScannedProductResult) => {
     setSelectedDecision("idle");
-    setQueryText(`${scanned.name} $${scanned.price.toLocaleString()}`);
+    setQueryText(
+      scanned.price === null
+        ? scanned.name
+        : `${scanned.name} $${scanned.price.toLocaleString()}`,
+    );
     setParsedItemName(scanned.name);
-    setParsedItemPrice(scanned.price);
+    setParsedItemPrice(scanned.price ?? 0);
     setScannedThumbnailUrl(scanned.thumbnailDataUrl);
     setScannedStoreTag(scanned.storeTag);
     setPendingEvaluation({
       name: scanned.name,
-      price: scanned.price,
+      price: scanned.price ?? 0,
       imageName: scanned.storeTag,
     });
 
-    if (scanned.price > financialMetrics.safeToSpend) {
-      playDamage();
+    if (scanned.price === null) {
+      triggerToast(
+        "La lectura de imágenes con Gemini está pendiente para Fase 2. Confirma manualmente el nombre y el precio antes de evaluar.",
+      );
     } else {
-      playCoin();
+      playTap();
     }
   };
 
-  // Decision 1: selecting a scenario is not the same as confirming a real expense.
-  const handleDecisionBuyToday = async () => {
-    if (isSavingDecision || !parsedItemName.trim() || parsedItemPrice <= 0)
-      return;
-    setSelectedDecision("bought");
-
-    if (mode === "authenticated") {
-      const confirmed = window.confirm(
-        `¿Ya realizaste esta compra por $${parsedItemPrice.toLocaleString()} MXN?\n\n` +
-          "Aceptar la registrará como gasto real y descontará tu saldo. " +
-          "Cancelar solo seleccionará esta alternativa para compararla.",
-      );
-      if (!confirmed) {
-        triggerToast("Solo simulación: no se descontó dinero de tu cuenta.");
-        return;
-      }
-    }
-
-    setIsSavingDecision(true);
-    try {
-      await registerPurchaseAnyway(parsedItemName, parsedItemPrice);
-      playDamage();
-      triggerToast(
-        `Compra registrada: −$${parsedItemPrice.toLocaleString()} MXN (${parsedItemName})`,
-      );
-    } catch (error) {
-      setSelectedDecision("idle");
-      console.error("Purchase save failed:", error);
-      triggerToast(
-        error instanceof Error
-          ? error.message
-          : "No se pudo registrar la compra.",
-      );
-    } finally {
-      setIsSavingDecision(false);
-    }
+  const handleDecisionBuyToday = () => {
+    if (!isSavingDecision && parsedItemPrice > 0 && financialMetrics.evaluationReady) setPurchaseConfirmation(true);
   };
 
   // Decision 2: persist a waiting item and show it in Goals.
@@ -1288,7 +1149,6 @@ export default function AppDashboardPage() {
         {
           name: parsedItemName,
           price: parsedItemPrice,
-          plannedWeeklySave: financialMetrics.suggestedWeeklySave,
           cooldownDays: Math.max(1, profile.nextPaydayDays || 7),
           strategy: "microsave",
         },
@@ -1311,35 +1171,6 @@ export default function AppDashboardPage() {
     }
   };
 
-  const handleQuickExpenseSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (mode !== "demo") {
-      triggerToast(
-        "El registro de gastos reales aún requiere una operación en Supabase.",
-      );
-      return;
-    }
-    if (!quickExpenseInput.trim()) return;
-
-    const normalized = quickExpenseInput.replace(/,/g, "");
-    const match = normalized.match(/(\d+(?:\.\d+)?)/);
-    if (!match) return;
-
-    const amount = Math.round(parseFloat(match[1]));
-    if (amount <= 0) return;
-
-    playTap();
-    updateProfile({
-      currentBalance: Math.max(0, profile.currentBalance - amount),
-    });
-
-    triggerToast(
-      `Gasto registrado: −$${amount.toLocaleString()} MXN (${quickExpenseInput.trim()})`,
-    );
-    setQuickExpenseInput("");
-    setIsQuickExpenseOpen(false);
-  };
-
   const plantSimulationState: PlantSimulationState =
     selectedDecision === "wait" || selectedDecision === "microsave"
       ? "recovered"
@@ -1351,8 +1182,23 @@ export default function AppDashboardPage() {
 
   if (mode === "loading") {
     return (
-      <div className="min-h-screen grid place-items-center">
-        Cargando tu perfil financiero...
+      <div
+        className="min-h-screen w-full overflow-x-hidden bg-[#FAF8F5] p-4 sm:p-8 md:pl-72"
+        role="status"
+        aria-live="polite"
+      >
+        <span className="sr-only">Cargando tu perfil financiero...</span>
+        <div className="max-w-5xl mx-auto space-y-5 animate-pulse">
+          <div className="h-16 rounded-3xl bg-slate-200/70" />
+          <div className="h-64 rounded-3xl bg-slate-200/70" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="h-32 rounded-3xl bg-slate-200/70" />
+            <div className="h-32 rounded-3xl bg-slate-200/70" />
+          </div>
+          <p className="text-center text-xs font-semibold text-slate-400">
+            Cargando tu perfil financiero...
+          </p>
+        </div>
       </div>
     );
   }
@@ -1389,6 +1235,7 @@ export default function AppDashboardPage() {
       onSelectTab={(tab) => setActiveBottomTab(tab)}
       onOpenGuide={() => setShowTourModal(true)}
     >
+      {purchaseConfirmation && <PurchaseConfirmationModal itemName={parsedItemName} itemPrice={parsedItemPrice} evaluation={evaluation.response} onCancel={() => setPurchaseConfirmation(false)} onSuccess={() => { setPurchaseConfirmation(false); setSelectedDecision("bought"); triggerToast("Compra registrada correctamente."); }} />}
       {/* Celebratory Streak Popup Banner */}
       <AnimatePresence>
         {streakCelebration && (
@@ -1418,10 +1265,9 @@ export default function AppDashboardPage() {
         <div className="space-y-4">
           {/* 1. HERO WORLD DIORAMA: Panoramic Living Stage with Voice Synthesis */}
           <HeroWorldDiorama
-            userName={profile.name}
             currentLevel={financialMetrics.currentLevel}
             currentLevelName={financialMetrics.currentLevelName}
-            nextPaydayDays={profile.nextPaydayDays}
+            nextPaydayDays={financialMetrics.nextPaydayDays}
             totalBalance={financialMetrics.totalBalance}
             fixedAndRentTotal={financialMetrics.fixedAndRentTotal}
             safetyBuffer={financialMetrics.safetyBuffer}
@@ -1429,8 +1275,6 @@ export default function AppDashboardPage() {
             fixedPct={financialMetrics.fixedPct}
             bufferPct={financialMetrics.bufferPct}
             freePct={financialMetrics.freePct}
-            parsedItemName={parsedItemName}
-            parsedItemPrice={parsedItemPrice}
             isDeficit={financialMetrics.isDeficit}
             missingLiquidity={financialMetrics.missingLiquidity}
             selectedDecision={selectedDecision}
@@ -1456,36 +1300,23 @@ export default function AppDashboardPage() {
             onExploreTree={() => setActiveBottomTab("home")}
           />
 
-          {/* 2. COMPACT SIMULATOR, STORE LINK PARSER & RPG SHOP ITEM CARDS */}
+          {/* 2. COMPACT SIMULATOR & RPG SHOP ITEM CARDS */}
           <motion.section
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.04 }}
             className="bg-white rounded-3xl border-2 border-b-4 border-slate-200 shadow-sm p-4 sm:p-5 space-y-3.5"
           >
-            {/* Header Row + "🔗 Probar con link de tienda" Button */}
+            {/* Header Row */}
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h1 className="text-lg sm:text-xl font-bold font-heading text-slate-900 tracking-tight">
                   ¿Qué estás pensando comprar?
                 </h1>
               </div>
-
-              <motion.button
-                type="button"
-                whileTap={{ scale: 0.96 }}
-                onClick={handleDemoStoreLinkClick}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50 hover:border-emerald-200 text-xs font-bold font-heading text-slate-700 hover:text-emerald-800 transition-colors cursor-pointer"
-              >
-                <Link2
-                  className="w-3.5 h-3.5 text-emerald-600"
-                  strokeWidth={1.5}
-                />
-                <span>🔗 Probar con link de tienda</span>
-              </motion.button>
             </div>
 
-            {/* Clean Search / URL Input Bar with Integrated Camera Button on the Right */}
+            {/* Clean Search Input Bar with Integrated Camera Button on the Right */}
             <div className="relative flex items-center">
               <Search
                 className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none"
@@ -1495,7 +1326,7 @@ export default function AppDashboardPage() {
                 type="text"
                 value={queryText}
                 onChange={(e) => handleQueryInputChange(e.target.value)}
-                placeholder="Escribe ej. Audífonos $2,300 o pega un link de Amazon / MercadoLibre..."
+                placeholder="Escribe ej. Audífonos $2,300 o escanea tu producto..."
                 className="w-full h-12 pl-10 pr-32 rounded-2xl border-2 border-slate-200 bg-slate-50/70 text-sm sm:text-base font-semibold text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-[#10B981] focus:outline-none transition-all"
               />
               <div className="absolute right-1.5 flex items-center gap-1">
@@ -1524,35 +1355,9 @@ export default function AppDashboardPage() {
               </div>
             </div>
 
-            {/* Animated Firecrawl / Store URL Extraction Banner */}
-            <AnimatePresence>
-              {isExtractingUrl && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="rounded-2xl border border-emerald-300 bg-emerald-50/80 px-4 py-3 flex items-center justify-between gap-3"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Loader2
-                      className="w-4 h-4 text-emerald-600 animate-spin shrink-0"
-                      strokeWidth={1.5}
-                    />
-                    <span className="text-xs sm:text-sm font-bold font-heading text-emerald-950">
-                      Extrayendo producto y precio de la tienda online (
-                      {extractingDomain})...
-                    </span>
-                  </div>
-                  <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-full bg-white text-emerald-700 border border-emerald-200">
-                    Firecrawl Parser
-                  </span>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
             {/* Real-Life Cost Psychology Pills (Píldoras de Costo de Vida Real) */}
             <AnimatePresence>
-              {hasSelectedProduct && !isExtractingUrl && (
+              {hasSelectedProduct && (
                 <motion.div
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -1560,28 +1365,13 @@ export default function AppDashboardPage() {
                   className="flex flex-wrap items-center gap-2 pt-0.5"
                 >
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold font-heading bg-slate-100 text-slate-800 border border-slate-200">
-                    <Clock
-                      className="w-3.5 h-3.5 text-emerald-600 shrink-0"
-                      strokeWidth={1.5}
-                    />
+                    <Clock className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                     <span>
-                      ⏱️ Equivale a{" "}
-                      <strong>
-                        {financialMetrics.workHoursEquivalent} horas
-                      </strong>{" "}
-                      de tu trabajo
-                    </span>
-                  </span>
-
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold font-heading bg-slate-100 text-slate-800 border border-slate-200">
-                    <Home
-                      className="w-3.5 h-3.5 text-amber-600 shrink-0"
-                      strokeWidth={1.5}
-                    />
-                    <span>
-                      🏠 Representa el{" "}
-                      <strong>{financialMetrics.fixedPaymentsPct}%</strong> de
-                      tus pagos fijos de esta semana
+                      {financialMetrics.evaluationPending
+                        ? "Evaluando con los datos financieros de tu cuenta..."
+                        : financialMetrics.evaluationIncomplete
+                          ? "Sin veredicto: faltan datos financieros"
+                          : financialMetrics.evaluation?.badgeLabel}
                     </span>
                   </span>
 
@@ -1591,16 +1381,67 @@ export default function AppDashboardPage() {
                       strokeWidth={1.5}
                     />
                     <span>
-                      🎯 Retrasa tu meta principal{" "}
-                      <strong>{financialMetrics.daysGoalDelayed} días</strong>
+                      {financialMetrics.goalImpact
+                        ? `🎯 Ahorro fijo protegido: $${financialMetrics.goalImpact.savedAfter.toLocaleString()} / $${(
+                            financialMetrics.goalImpact.savedAfter +
+                            financialMetrics.goalImpact.remainingAfter
+                          ).toLocaleString()} MXN`
+                        : "🎯 Esta evaluación no retira dinero de tu meta"}
                     </span>
                   </span>
+
+                  {financialMetrics.projectedBalanceDifference !== null && (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold font-heading bg-indigo-50 text-indigo-900 border border-indigo-200">
+                      <TrendingUp
+                        className="w-3.5 h-3.5 text-indigo-600 shrink-0"
+                        strokeWidth={1.5}
+                      />
+                      <span>
+                        6 semanas:{" "}
+                        {financialMetrics.projectedBalanceDifference >= 0
+                          ? "+"
+                          : ""}
+                        ${financialMetrics.projectedBalanceDifference.toLocaleString()}{" "}
+                        MXN (mín. $
+                        {(
+                          financialMetrics.projectionAfter?.lowestBalance ??
+                          financialMetrics.projectionBefore?.lowestBalance ??
+                          0
+                        ).toLocaleString()}
+                        )
+                      </span>
+                    </span>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playTap();
+                      setPendingEvaluation({
+                        name: parsedItemName || "Producto consultado",
+                        price: parsedItemPrice,
+                        imageName: scannedStoreTag,
+                      });
+                      router.push(
+                        `/app/evaluate?name=${encodeURIComponent(
+                          parsedItemName || "Producto consultado",
+                        )}&price=${parsedItemPrice}`,
+                      );
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold font-heading bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 transition-colors cursor-pointer"
+                  >
+                    <MessageSquare
+                      className="w-3.5 h-3.5 text-emerald-600 shrink-0"
+                      strokeWidth={1.5}
+                    />
+                    <span>Abrir Chat con Copiloto Gemini →</span>
+                  </button>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            {/* Scanned / Extracted URL Product Card Preview */}
-            {scannedThumbnailUrl && !isExtractingUrl && (
+            {/* Scanned Product Card Preview */}
+            {scannedThumbnailUrl && (
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-2.5 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
                   <img
@@ -1693,7 +1534,9 @@ export default function AppDashboardPage() {
                   {/* CARTA 1: Comprar hoy */}
                   <motion.div
                     onClick={handleDecisionBuyToday}
-                    aria-disabled={isSavingDecision}
+                    aria-disabled={
+                      isSavingDecision || financialMetrics.evaluationIncomplete
+                    }
                     className={`rounded-3xl bg-white border-2 border-b-4 p-4 sm:p-5 shadow-sm flex flex-col justify-between gap-3.5 transition-all hover:-translate-y-1 active:translate-y-0.5 cursor-pointer ${
                       selectedDecision === "bought"
                         ? "border-amber-400 border-b-amber-600 ring-2 ring-amber-400/20"
@@ -1718,12 +1561,19 @@ export default function AppDashboardPage() {
                         </motion.div>
 
                         <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold font-heading bg-amber-50 text-amber-900 border border-amber-200 text-right">
-                          {financialMetrics.isDeficit
-                            ? `Te faltan $${financialMetrics.missingLiquidity.toLocaleString()} de liquidez libre`
-                            : `Margen: $${Math.max(
-                                0,
-                                financialMetrics.netAfterPurchase,
-                              ).toLocaleString()}`}
+                          {financialMetrics.evaluationIncomplete
+                            ? financialMetrics.evaluationPending
+                              ? "Evaluación en curso"
+                              : "Datos incompletos"
+                            : financialMetrics.isDeficit
+                              ? `Excede el margen por $${financialMetrics.missingLiquidity.toLocaleString()}`
+                              : financialMetrics.evaluation?.status ===
+                                  "precaucion"
+                                ? "Viable con precaución"
+                                : `Margen: $${Math.max(
+                                    0,
+                                    financialMetrics.netAfterPurchase ?? 0,
+                                  ).toLocaleString()}`}
                         </span>
                       </div>
 
@@ -1732,9 +1582,20 @@ export default function AppDashboardPage() {
                           Comprar hoy
                         </h3>
                         <p className="text-xs sm:text-sm text-slate-600 leading-snug mt-1">
-                          {financialMetrics.isDeficit
-                            ? `Tomaría $${financialMetrics.missingLiquidity.toLocaleString()} MXN de tu renta/pagos fijos y retrasaría tu meta ${financialMetrics.weeksGoalDelayed} semanas.`
-                            : `Lo cubres con tu disponible hoy, pero retrasas tu meta "${profile.goal.title}" ${financialMetrics.weeksGoalDelayed} semanas.`}
+                          {financialMetrics.evaluationIncomplete
+                            ? financialMetrics.evaluationPending
+                              ? "Estamos verificando los datos financieros de tu cuenta. No se emitirá una recomendación hasta completar la evaluación."
+                              : financialMetrics.evaluation?.missingInformation
+                                  .slice(0, 2)
+                                  .join(" ") ||
+                                financialMetrics.evaluationError ||
+                                "No fue posible calcular un resultado confiable."
+                            : financialMetrics.isDeficit
+                            ? `La compra supera tu margen libre por $${financialMetrics.missingLiquidity.toLocaleString()} MXN. Esta simulación no retira dinero de tu meta "${profile.goal.title}".`
+                            : financialMetrics.evaluation?.status ===
+                                "precaucion"
+                              ? `La compra cabe en el margen calculado, pero dejaría menos de la mitad del colchón de seguridad libre. Esta simulación no retira dinero de tu meta "${profile.goal.title}".`
+                              : `La compra cabe en el margen calculado. Esta simulación no retira dinero de tu meta "${profile.goal.title}".`}
                         </p>
                       </div>
 
@@ -1742,9 +1603,11 @@ export default function AppDashboardPage() {
                         <div className="flex justify-between text-[10px] font-bold font-heading text-amber-900">
                           <span>Impacto en tu quincena</span>
                           <span>
-                            {financialMetrics.isDeficit
-                              ? "Toma de pagos fijos"
-                              : `−${financialMetrics.weeksGoalDelayed} sem de meta`}
+                            {financialMetrics.evaluationIncomplete
+                              ? "Sin veredicto"
+                              : financialMetrics.isDeficit
+                                ? "Supera el margen libre"
+                                : "Meta principal intacta"}
                           </span>
                         </div>
                         <div className="w-full h-1.5 rounded-full bg-amber-200/70 overflow-hidden">
@@ -1755,9 +1618,14 @@ export default function AppDashboardPage() {
 
                     <button
                       type="button"
+                      disabled={
+                        isSavingDecision || financialMetrics.evaluationIncomplete
+                      }
                       className="w-full h-10 rounded-xl border-2 border-b-4 border-slate-200 border-b-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold font-heading transition-colors cursor-pointer"
                     >
-                      Registrar compra hoy
+                      {financialMetrics.evaluationIncomplete
+                        ? "Evaluación necesaria para comprar"
+                        : "Registrar compra hoy"}
                     </button>
                   </motion.div>
 
@@ -1793,19 +1661,19 @@ export default function AppDashboardPage() {
                             className="w-3 h-3 text-emerald-600"
                             strokeWidth={1.5}
                           />
-                          Decisión recomendada · +50 XP
+                          Alternativa · +50 XP
                         </span>
                       </div>
 
                       <div>
                         <h3 className="text-base sm:text-lg font-bold font-heading text-slate-900">
-                          Esperar a tu nómina (en {profile.nextPaydayDays} días)
+                          Guardar y reevaluar después
                         </h3>
                         <p className="text-xs sm:text-sm text-slate-600 leading-snug mt-1">
-                          En {profile.nextPaydayDays} días cobras $
-                          {profile.nextPaydayAmount.toLocaleString()} MXN y lo
-                          compras sin tocar el dinero de tu renta ni pagos
-                          fijos.
+                          Esperar no garantiza que la compra sea viable. Guarda
+                          el artículo y vuelve a evaluarlo cuando el próximo
+                          ingreso esté confirmado, considerando también las
+                          obligaciones de ese periodo.
                         </p>
                       </div>
 
@@ -1813,7 +1681,7 @@ export default function AppDashboardPage() {
                         <div className="flex justify-between text-[10px] font-bold font-heading text-emerald-900">
                           <span>Congelador de compras 🧊</span>
                           <span>
-                            Protege ${parsedItemPrice.toLocaleString()}
+                            Guardado: ${parsedItemPrice.toLocaleString()}
                           </span>
                         </div>
                         <div className="w-full h-1.5 rounded-full bg-emerald-200/70 overflow-hidden">
@@ -1828,7 +1696,7 @@ export default function AppDashboardPage() {
                     >
                       <Snowflake className="w-3.5 h-3.5" strokeWidth={1.5} />
                       <span>
-                        Congelar {profile.nextPaydayDays} días (+50 XP)
+                        Guardar para reevaluar (+50 XP)
                       </span>
                       <ArrowRight className="w-3.5 h-3.5" strokeWidth={1.5} />
                     </button>
@@ -1876,26 +1744,15 @@ export default function AppDashboardPage() {
                           Plan de Micro-ahorro
                         </h3>
                         <p className="text-xs sm:text-sm text-slate-600 leading-snug mt-1">
-                          Aparta{" "}
-                          <strong className="text-slate-900">
-                            ${financialMetrics.suggestedWeeklySave}/semana
-                          </strong>{" "}
-                          y cómpralo en{" "}
-                          <strong className="text-slate-900">
-                            {financialMetrics.microSaveWeeks} semanas
-                          </strong>{" "}
-                          sin afectar tu colchón ni tu meta.
+                          Elige cuánto puedes apartar cada semana y guarda un
+                          plan sin descontarlo de tu saldo ni de tu meta.
                         </p>
                       </div>
 
                       <div className="p-2.5 rounded-2xl bg-indigo-50/70 border border-indigo-200/80 space-y-1">
                         <div className="flex justify-between text-[10px] font-bold font-heading text-indigo-900">
-                          <span>
-                            Meta en {financialMetrics.microSaveWeeks} sem
-                          </span>
-                          <span>
-                            ${financialMetrics.suggestedWeeklySave}/sem
-                          </span>
+                          <span>Tu ritmo, tu decisión</span>
+                          <span>Sin monto sugerido</span>
                         </div>
                         <div className="w-full h-1.5 rounded-full bg-indigo-200/70 overflow-hidden">
                           <div className="h-full w-4/5 bg-indigo-500 rounded-full" />
@@ -1907,8 +1764,7 @@ export default function AppDashboardPage() {
                       type="button"
                       className="w-full h-10 rounded-xl border-2 border-b-4 border-indigo-200 border-b-indigo-300 bg-indigo-50/60 hover:bg-indigo-100/80 text-indigo-950 text-xs font-bold font-heading transition-colors cursor-pointer"
                     >
-                      Apartar ${financialMetrics.suggestedWeeklySave}/sem (+100
-                      XP)
+                      Crear plan de micro-ahorro (+100 XP)
                     </button>
                   </motion.div>
                 </div>
@@ -1932,6 +1788,7 @@ export default function AppDashboardPage() {
             previewDamagePrice={0}
             recoveredXpBonus={decisionXpBonus}
             allowLevelPreview
+            financialEvaluation={financialMetrics.evaluation}
           />
 
           <section className="bg-white rounded-3xl border-2 border-b-4 border-slate-200 shadow-sm p-6 sm:p-8 space-y-5">
@@ -2040,392 +1897,33 @@ export default function AppDashboardPage() {
       )}
 
       {/* =====================================================================
-          VIEW 3: "RETOS Y METAS" (El Congelador de Compras Impulsivas 🧊 + Dinero Protegido + Medallas)
+          VIEW 2.5: "PLAN DE GASTOS" (3 Bloques Interactivos + Registro Rápido + Desglose Mensual)
          ===================================================================== */}
-      {activeBottomTab === "goals" && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-6"
-        >
-          {/* 1. Large Hero Counter: Dinero Protegido de Compras Impulsivas */}
-          <div className="bg-gradient-to-br from-emerald-50 via-white to-sky-50/70 rounded-3xl border-2 border-b-4 border-emerald-300 border-b-emerald-500 shadow-sm p-6 sm:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
-            <div className="space-y-2">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold font-heading bg-white text-emerald-800 border border-emerald-200 shadow-2xs">
-                <Snowflake
-                  className="w-3.5 h-3.5 text-sky-500"
-                  strokeWidth={1.5}
-                />
-                El Congelador de Compras Impulsivas 🧊
-              </span>
-              <h2 className="text-xl sm:text-2xl font-bold font-heading text-slate-900">
-                Dinero Protegido de Compras Impulsivas:
-              </h2>
-              <p className="text-3xl sm:text-4xl font-bold font-heading text-emerald-600 tracking-tight">
-                ${financialMetrics.totalProtectedMoney.toLocaleString()}{" "}
-                <span className="text-base font-semibold text-slate-500">
-                  MXN
-                </span>
-              </p>
-            </div>
-
-            <motion.button
-              type="button"
-              whileTap={{ scale: 0.96 }}
-              onClick={() => playLevelUp()}
-              className="px-5 py-3 rounded-2xl bg-[#10B981] hover:bg-emerald-600 text-white text-xs sm:text-sm font-bold font-heading border-2 border-emerald-600 border-b-4 border-b-emerald-800 shadow-sm cursor-pointer shrink-0"
-            >
-              Celebrar logro 🎉
-            </motion.button>
-          </div>
-
-          {/* 2. Compras en Enfriamiento 🧊 (Tarjetas con barra de cuenta regresiva) */}
-          <div className="bg-white rounded-3xl border-2 border-b-4 border-slate-200 shadow-sm p-6 sm:p-8 space-y-5">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-2xl bg-sky-50 border border-sky-200 flex items-center justify-center">
-                  <Snowflake
-                    className="w-5 h-5 text-sky-600"
-                    strokeWidth={1.5}
-                  />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold font-heading text-slate-900">
-                    Compras en Enfriamiento 🧊
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    Artículos pausados inteligentemente hasta tu próxima nómina
-                  </p>
-                </div>
-              </div>
-
-              <span className="text-xs font-bold font-heading px-3 py-1 rounded-full bg-sky-50 text-sky-900 border border-sky-200">
-                {(profile.wishlist || []).length} en espera
-              </span>
-            </div>
-
-            {profile.wishlist && profile.wishlist.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {profile.wishlist.map((item) => {
-                  const daysWait = item.cooldownDays ?? profile.nextPaydayDays;
-                  return (
-                    <div
-                      key={item.id}
-                      className="p-4 rounded-2xl border-2 border-b-4 border-sky-200 border-b-sky-300 bg-gradient-to-b from-white to-sky-50/40 space-y-3"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <span className="text-[10px] font-bold font-heading uppercase tracking-wider text-sky-700 block">
-                            {item.strategy === "microsave"
-                              ? `Plan Micro-ahorro ($${item.plannedWeeklySave ?? 400}/sem)`
-                              : "Congelado hasta nómina"}
-                          </span>
-                          <p className="text-base font-bold font-heading text-slate-900 mt-0.5">
-                            {item.name}
-                          </p>
-                        </div>
-                        <span className="text-sm font-bold font-heading text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-xl shrink-0">
-                          ${item.price.toLocaleString()} MXN
-                        </span>
-                      </div>
-
-                      {/* Countdown Progress Bar */}
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
-                          <span className="flex items-center gap-1">
-                            <Clock
-                              className="w-3.5 h-3.5 text-sky-600"
-                              strokeWidth={1.5}
-                            />
-                            Faltan {daysWait} días para reevaluar con tu nómina
-                          </span>
-                          <span className="text-[11px] font-bold text-sky-700">
-                            En enfriamiento
-                          </span>
-                        </div>
-                        <div className="w-full h-2.5 rounded-full bg-sky-100 overflow-hidden p-0.5 border border-sky-200">
-                          <div className="h-full w-2/3 rounded-full bg-gradient-to-r from-sky-400 to-emerald-400" />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="p-6 rounded-2xl border border-dashed border-slate-300 text-center space-y-2">
-                <p className="text-sm font-bold font-heading text-slate-700">
-                  Tu congelador está vacío por ahora
-                </p>
-                <p className="text-xs text-slate-500">
-                  Cuando simules una compra y elijas “Esperar a tu nómina” o
-                  “Plan de Micro-ahorro”, aparecerá aquí.
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* 3. Progreso de tu Meta Principal + Medallas Desbloqueadas */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Active Goal Card */}
-            <div className="p-6 rounded-3xl border-2 border-b-4 border-slate-200 bg-white space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center">
-                    <Target
-                      className="w-4 h-4 text-emerald-600"
-                      strokeWidth={1.5}
-                    />
-                  </div>
-                  <div>
-                    <span className="text-xs text-slate-500 block">
-                      Meta principal
-                    </span>
-                    <span className="text-base font-bold font-heading text-slate-900">
-                      {profile.goal.title}
-                    </span>
-                  </div>
-                </div>
-                <span className="text-lg font-bold font-heading text-emerald-600">
-                  {financialMetrics.goalPct}%
-                </span>
-              </div>
-
-              <div className="h-3 w-full rounded-full bg-slate-100 overflow-hidden p-0.5 border border-slate-200">
-                <div
-                  style={{ width: `${financialMetrics.goalPct}%` }}
-                  className="h-full rounded-full bg-[#10B981]"
-                />
-              </div>
-
-              <div className="flex justify-between text-xs font-semibold text-slate-600">
-                <span>
-                  Ahorrado: ${profile.goal.currentSaved.toLocaleString()} MXN
-                </span>
-                <span>
-                  Objetivo: ${profile.goal.targetAmount.toLocaleString()} MXN
-                </span>
-              </div>
-            </div>
-
-            {/* Unlocked Medals */}
-            <div className="p-6 rounded-3xl border-2 border-b-4 border-slate-200 bg-white space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-base font-bold font-heading text-slate-900">
-                  Medallas Desbloqueadas
-                </span>
-                <Trophy className="w-4 h-4 text-amber-500" strokeWidth={1.5} />
-              </div>
-
-              <div className="space-y-2">
-                {UNLOCKED_MEDALS.map((medal) => (
-                  <div
-                    key={medal.id}
-                    className="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center gap-3"
-                  >
-                    <span className="text-2xl">{medal.emoji}</span>
-                    <div>
-                      <p className="text-xs font-bold font-heading text-slate-900">
-                        {medal.title}
-                      </p>
-                      <p className="text-[11px] text-slate-500">{medal.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </motion.div>
+      {activeBottomTab === "expenses" && (
+        <ExpensePlanView onShowToast={(msg) => triggerToast(msg)} />
       )}
 
       {/* =====================================================================
-          VIEW 4: "CAMBIAR PERFIL"
+          VIEW 3: "RETOS Y METAS" (Tarjetas en Enfriamiento Rediseñadas + Metas por Proyecto con Sub-metas)
          ===================================================================== */}
-      {activeBottomTab === "profile" && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-6"
-        >
-          <div className="bg-white rounded-3xl border-2 border-b-4 border-slate-200 shadow-sm p-6 sm:p-8 space-y-6">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center">
-                <UserCheck
-                  className="w-5 h-5 text-emerald-600"
-                  strokeWidth={1.5}
-                />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold font-heading text-slate-900">
-                  {mode === "demo"
-                    ? "Cambiar Perfil de Simulación"
-                    : "Mi cuenta"}
-                </h2>
-                <p className="text-sm text-slate-500">
-                  {mode === "demo"
-                    ? "Elige un perfil precargado o configura tus datos desde cero"
-                    : "Consulta tu perfil financiero autenticado"}
-                </p>
-              </div>
-            </div>
-
-            {mode === "demo" ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {(["carlos", "mateo"] as const).map((key) => {
-                  const item = PRELOADED_SANDBOX_PROFILES[key];
-                  const isCurrent = profile.id === item.id;
-                  return (
-                    <motion.button
-                      key={key}
-                      type="button"
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => {
-                        playCoin();
-                        loadPreloadedSandboxProfile(key);
-                        setActiveBottomTab("simulate");
-                        triggerToast(`Perfil cargado: ${item.name}`);
-                      }}
-                      className={`text-left p-5 rounded-2xl border-2 border-b-4 transition-all flex items-center justify-between cursor-pointer ${
-                        isCurrent
-                          ? "bg-emerald-50/50 border-[#10B981] border-b-emerald-600 shadow-2xs"
-                          : "bg-white border-slate-200 border-b-slate-300 hover:border-slate-300"
-                      }`}
-                    >
-                      <div className="space-y-1">
-                        <p className="text-base font-bold font-heading text-slate-900">
-                          {item.name}
-                        </p>
-                        <p className="text-xs text-slate-600">
-                          Saldo: ${item.currentBalance.toLocaleString()} MXN ·{" "}
-                          {item.commitments.length} compromisos fijos
-                        </p>
-                        <p className="text-[11px] text-slate-400">
-                          Meta: {item.goal.title} ($
-                          {item.goal.targetAmount.toLocaleString()})
-                        </p>
-                      </div>
-                      {isCurrent && (
-                        <CheckCircle2
-                          className="w-5 h-5 text-[#10B981] shrink-0"
-                          strokeWidth={1.5}
-                        />
-                      )}
-                    </motion.button>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm space-y-2">
-                <p>
-                  <strong>Cuenta:</strong> {profile.email}
-                </p>
-                <p>
-                  <strong>Perfil:</strong> {profile.roleTag}
-                </p>
-                <p>
-                  Tu información se obtiene de Supabase. No puedes sustituirla
-                  por usuarios demo.
-                </p>
-              </div>
-            )}
-
-            {mode === "demo" && (
-              <motion.button
-                type="button"
-                whileTap={{ scale: 0.98 }}
-                onClick={() => {
-                  playTap();
-                  router.push("/onboarding?demo=1");
-                }}
-                className="w-full h-12 rounded-2xl border-2 border-b-4 border-slate-200 border-b-slate-300 bg-slate-50 hover:bg-slate-100 text-sm font-bold font-heading text-slate-800 flex items-center justify-center gap-2 cursor-pointer transition-colors"
-              >
-                <SlidersHorizontal className="w-4 h-4" strokeWidth={1.5} />
-                <span>Personalizar perfil desde cero (Onboarding)</span>
-              </motion.button>
-            )}
-
-            {mode === "authenticated" && (
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    await signOut();
-                    router.replace("/auth");
-                  } catch (error) {
-                    console.error("Logout failed:", error);
-                  }
-                }}
-                className="w-full h-12 rounded-xl border border-slate-300 bg-white text-slate-800 font-semibold"
-              >
-                Cerrar sesión
-              </button>
-            )}
-          </div>
-        </motion.div>
+      {activeBottomTab === "goals" && (
+        <GoalsAndCoolingView
+          onShowToast={(msg) => triggerToast(msg)}
+          totalProtectedMoney={financialMetrics.totalProtectedMoney}
+          goalPct={financialMetrics.goalPct}
+          unlockedMedals={UNLOCKED_MEDALS}
+        />
       )}
 
-      {/* 5. Game-Style Action Button: "Registrar gasto rápido" with Golden Lightning Icon */}
-      <div className="fixed bottom-20 md:bottom-6 right-4 z-30 pointer-events-auto">
-        <AnimatePresence mode="wait">
-          {!isQuickExpenseOpen ? (
-            <motion.button
-              key="collapsed-quick-expense"
-              type="button"
-              whileTap={{ scale: 0.96 }}
-              onClick={() => {
-                playTap();
-                setIsQuickExpenseOpen(true);
-              }}
-              className="bg-slate-900 text-white border-b-4 border-slate-950 rounded-2xl px-5 py-3 shadow-xl hover:scale-105 transition flex items-center gap-2.5 text-xs sm:text-sm font-bold font-heading cursor-pointer"
-            >
-              <Zap
-                className="w-4 h-4 text-amber-400 fill-amber-400 shrink-0"
-                strokeWidth={1.5}
-              />
-              <span>Registrar gasto rápido</span>
-            </motion.button>
-          ) : (
-            <motion.form
-              key="expanded-quick-expense"
-              initial={{ opacity: 0, y: 10, scale: 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 8, scale: 0.96 }}
-              onSubmit={handleQuickExpenseSubmit}
-              className="w-80 sm:w-96 rounded-2xl bg-slate-900 text-white border-2 border-b-4 border-slate-950 shadow-2xl p-2.5 flex items-center gap-2"
-            >
-              <Zap
-                className="w-4 h-4 text-amber-400 fill-amber-400 ml-2 shrink-0"
-                strokeWidth={1.5}
-              />
-              <input
-                type="text"
-                autoFocus
-                value={quickExpenseInput}
-                onChange={(e) => setQuickExpenseInput(e.target.value)}
-                placeholder='Ej. "Gasté 150 en comida"'
-                className="flex-1 h-9 px-2 text-xs sm:text-sm font-medium text-white placeholder:text-slate-400 bg-transparent focus:outline-none"
-              />
-              <motion.button
-                type="submit"
-                whileTap={{ scale: 0.96 }}
-                className="h-9 px-3.5 rounded-xl bg-[#10B981] hover:bg-emerald-600 text-white text-xs font-bold font-heading flex items-center gap-1 cursor-pointer shrink-0"
-              >
-                <Send className="w-3.5 h-3.5" strokeWidth={1.5} />
-                <span>Guardar</span>
-              </motion.button>
-              <button
-                type="button"
-                onClick={() => {
-                  playTap();
-                  setIsQuickExpenseOpen(false);
-                }}
-                className="p-1.5 rounded-xl text-slate-400 hover:text-white cursor-pointer"
-              >
-                <X className="w-4 h-4" strokeWidth={1.5} />
-              </button>
-            </motion.form>
-          )}
-        </AnimatePresence>
-      </div>
+      {/* =====================================================================
+          VIEW 4: "EDITAR PERFIL" (Edición completa de Usuario y Datos Financieros en Supabase)
+         ===================================================================== */}
+      {activeBottomTab === "profile" && (
+        <ProfileEditorPanel
+          onShowToast={(msg) => triggerToast(msg)}
+          onNavigateToSimulate={() => setActiveBottomTab("simulate")}
+        />
+      )}
 
       {/* Toast Visual Feedback */}
       <AnimatePresence>
