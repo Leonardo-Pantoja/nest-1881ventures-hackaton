@@ -18,7 +18,7 @@ Module._load = function(name, ...args) {
 const { extractProduct, GEMINI_TIMEOUT_MS } = require('../src/lib/ai/gemini.ts');
 Module._load = oldLoad;
 const options = { source: 'text', prompt: 'private-product-text' };
-const reset = () => { queue = []; params = []; sleeps = []; logs = []; process.env.GEMINI_API_KEY = 'secret-test-key'; process.env.GEMINI_MODEL = 'gemini-3.8-flash'; };
+const reset = () => { delete process.env.GEMINI_FALLBACK_MODEL; queue = []; params = []; sleeps = []; logs = []; process.env.GEMINI_API_KEY = 'secret-test-key'; process.env.GEMINI_MODEL = 'gemini-3.8-flash'; };
 test('uses configured model, low thinking, bounded timeout and no hidden SDK retries', async () => {
   reset(); await extractProduct(options);
   assert.equal(params[0].model, 'gemini-3.8-flash');
@@ -56,4 +56,26 @@ test('logs operational metadata without credentials prompt image contents or pro
 test('does not call provider after request cancellation', async () => {
   reset(); const controller = new AbortController(); controller.abort();
   await assert.rejects(extractProduct({ ...options, signal: controller.signal }), error => error.code === 'request_cancelled'); assert.equal(params.length, 0);
+});
+
+test('uses configured fallback only on transient provider failures, with two total calls', async () => {
+  for (const status of [503, 504]) {
+    reset(); process.env.GEMINI_FALLBACK_MODEL = 'gemini-3.1-flash-lite';
+    queue = [{ status }, '{"name":"Monitor","price":100,"currency":"MXN"}'];
+    assert.equal((await extractProduct(options)).price, 100);
+    assert.deepEqual(params.map(p => p.model), ['gemini-3.8-flash', 'gemini-3.1-flash-lite']);
+    assert.deepEqual(params[1].config.thinkingConfig, { thinkingLevel: 'LOW' });
+    assert.deepEqual(sleeps, [750]);
+    reset(); process.env.GEMINI_FALLBACK_MODEL = 'gemini-3.1-flash-lite';
+    queue = [{ status }, { status }];
+    await assert.rejects(extractProduct(options), e => e.code === `gemini_upstream_${status}`);
+    assert.equal(params.length, 2);
+  }
+  for (const failure of [{ status: 400 }, { status: 401 }, { status: 403 }, { status: 429 }, 'not-json', Object.assign(new Error('timeout'), { name: 'TimeoutError' })]) {
+    reset(); process.env.GEMINI_FALLBACK_MODEL = 'gemini-3.1-flash-lite'; queue = [failure];
+    await assert.rejects(extractProduct(options)); assert.equal(params.length, 1);
+  }
+  reset(); process.env.GEMINI_FALLBACK_MODEL = 'gemini-3.1-flash-lite';
+  await extractProduct(options); assert.equal(params.length, 1); assert.equal(params[0].model, 'gemini-3.8-flash');
+  reset();
 });

@@ -21,24 +21,26 @@ export function productAIErrorResponse(error: unknown) {
   });
 }
 
-/** One application retry, sharing a single deadline; SDK retries are disabled. */
+/** At most two provider calls share one deadline; transient failures may use a configured fallback. */
 export async function extractProduct(options: {
   source: "text" | "image";
   prompt: string;
   image?: { bytes: Buffer; originalBytes: number; mimeType: string };
   signal?: AbortSignal;
 }): Promise<RecognizedProduct> {
-  const model = process.env.GEMINI_MODEL;
-  if (!model || !process.env.GEMINI_API_KEY) throw new ProductAIError("gemini_unavailable", "El reconocimiento no está disponible temporalmente.", 503);
+  const primaryModel = process.env.GEMINI_MODEL?.trim();
+  const fallbackModel = process.env.GEMINI_FALLBACK_MODEL?.trim();
+  if (!primaryModel || !process.env.GEMINI_API_KEY) throw new ProductAIError("gemini_unavailable", "El reconocimiento no está disponible temporalmente.", 503);
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   const started = Date.now();
   const deadline = AbortSignal.timeout(GEMINI_TIMEOUT_MS);
   const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
   const parts: Part[] = [{ text: options.prompt }];
   if (options.image) parts.push({ inlineData: { mimeType: options.image.mimeType, data: options.image.bytes.toString("base64") } });
-  const thinkingConfig = /^gemini-3(?:\.|-)/.test(model) ? { thinkingLevel: ThinkingLevel.LOW }
-    : /^gemini-2\.5-flash/.test(model) ? { thinkingBudget: 0 } : undefined;
   for (let attempt = 1; attempt <= 2; attempt++) {
+    const model = attempt === 2 && fallbackModel ? fallbackModel : primaryModel;
+    const thinkingConfig = /^gemini-3(?:\.|-)/.test(model) ? { thinkingLevel: ThinkingLevel.LOW }
+      : /^gemini-2\.5-flash/.test(model) ? { thinkingBudget: 0 } : undefined;
     const attemptStarted = Date.now();
     let code = "ok";
     let status = 200;
