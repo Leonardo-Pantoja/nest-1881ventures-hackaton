@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
+import React, { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, Flame } from "lucide-react";
@@ -12,36 +12,12 @@ import QuickSnapScanner, {
 import { type BottomNavTab } from "@/components/BottomNav";
 import { useFinancial } from "@/context/FinancialContext";
 import { playTap } from "@/lib/soundEffects";
-import type { EvaluateApiResponse } from "@/app/api/evaluate/route";
-
-interface EvaluationState {
-  key: string;
-  response: EvaluateApiResponse | null;
-  error: string | null;
-}
-
-function isEvaluationResponse(value: unknown): value is EvaluateApiResponse {
-  if (typeof value !== "object" || value === null) return false;
-  const response = value as Partial<EvaluateApiResponse>;
-  return (
-    (response.status === "dentro_del_margen" ||
-      response.status === "excede_el_margen" ||
-      response.status === "precaucion" ||
-      response.status === "datos_incompletos" ||
-      response.status === "error_procesamiento") &&
-    typeof response.detectedItemName === "string" &&
-    typeof response.detectedItemPrice === "number" &&
-    Number.isFinite(response.detectedItemPrice) &&
-    response.source === "deterministic"
-  );
-}
+import { useFinancialEvaluation } from "@/hooks/useFinancialEvaluation";
 
 function EvaluateContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const {
-    profile,
-    mode,
     pendingEvaluation,
     setPendingEvaluation,
     incrementStreak,
@@ -49,8 +25,7 @@ function EvaluateContent() {
   } = useFinancial();
 
   const [actionToast, setActionToast] = useState<string | null>(null);
-  const [evaluationState, setEvaluationState] =
-    useState<EvaluationState | null>(null);
+
   const [scannedThumb, setScannedThumb] = useState<string | null>(null);
   const [scannedStore, setScannedStore] = useState<string | null>(null);
 
@@ -60,84 +35,11 @@ function EvaluateContent() {
     "Audífonos Inalámbricos Sony";
   const itemPrice =
     Number(searchParams.get("price")) || pendingEvaluation.price || 0;
-  const evaluationKey = JSON.stringify([
-    mode,
-    profile.id,
-    itemName,
-    itemPrice,
-  ]);
-  const currentEvaluation =
-    evaluationState?.key === evaluationKey ? evaluationState : null;
-  const apiEvaluation = currentEvaluation?.response ?? null;
-  const apiEvaluationError =
-    currentEvaluation !== null && currentEvaluation.error !== null;
-  const apiErrorMessage = currentEvaluation?.error ?? null;
-  const isLoadingApi =
-    itemPrice > 0 &&
-    (mode === "demo" || mode === "authenticated") &&
-    currentEvaluation === null;
-
-  useEffect(() => {
-    if (
-      itemPrice <= 0 ||
-      !itemName.trim() ||
-      (mode !== "demo" && mode !== "authenticated")
-    ) {
-      return;
-    }
-
-    let active = true;
-    const fetchEvaluation = async () => {
-      try {
-        const res = await fetch("/api/evaluate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            itemName,
-            itemPrice,
-            mode: mode === "demo" ? "demo" : "account",
-            demoProfileId: mode === "demo" ? profile.id : undefined,
-          }),
-        });
-        const body: unknown = await res.json();
-        if (!res.ok) {
-          const message =
-            typeof body === "object" &&
-            body !== null &&
-            "error" in body &&
-            typeof body.error === "string"
-              ? body.error
-              : "No se pudo validar la sesión o los datos financieros.";
-          throw new Error(message);
-        }
-        if (!isEvaluationResponse(body)) {
-          throw new Error("El servicio devolvió una evaluación no válida.");
-        }
-        if (active) {
-          setEvaluationState({
-            key: evaluationKey,
-            response: body,
-            error: null,
-          });
-        }
-      } catch (error) {
-        if (active) {
-          setEvaluationState({
-            key: evaluationKey,
-            response: null,
-            error:
-              error instanceof Error
-                ? error.message
-                : "No se pudo conectar con el servicio financiero.",
-          });
-        }
-      }
-    };
-    void fetchEvaluation();
-    return () => {
-      active = false;
-    };
-  }, [evaluationKey, itemName, itemPrice, profile.id, mode]);
+  const evaluation = useFinancialEvaluation(itemName, itemPrice);
+  const apiEvaluation = evaluation.response;
+  const apiEvaluationError = evaluation.error !== null;
+  const apiErrorMessage = evaluation.error;
+  const isLoadingApi = evaluation.loading;
 
   const handleActionCompleted = (message: string) => {
     setActionToast(message);
@@ -201,6 +103,7 @@ function EvaluateContent() {
           className="w-full"
         >
           <PurchaseEvaluationFlow
+          key={evaluation.key}
             itemName={itemName}
             itemPrice={itemPrice}
             thumbnailDataUrl={scannedThumb}

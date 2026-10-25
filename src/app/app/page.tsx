@@ -30,6 +30,8 @@ import {
   Snowflake,
   ExternalLink,
 } from "lucide-react";
+import { useFinancialEvaluation } from "@/hooks/useFinancialEvaluation";
+import PurchaseConfirmationModal from "@/components/PurchaseConfirmationModal";
 import AppShell from "@/components/AppShell";
 import QuickGuideModal from "@/components/QuickGuideModal";
 import FinancialPlantWidget, {
@@ -39,7 +41,6 @@ import FinancialPlantWidget, {
 import QuickSnapScanner, {
   type ScannedProductResult,
 } from "@/components/QuickSnapScanner";
-import type { EvaluateApiResponse } from "@/app/api/evaluate/route";
 import { type BottomNavTab } from "@/components/BottomNav";
 import {
   useFinancial,
@@ -48,7 +49,6 @@ import {
 import {
   playTap,
   playCoin,
-  playDamage,
   playLevelUp,
   triggerConfettiBurst,
 } from "@/lib/soundEffects";
@@ -186,32 +186,6 @@ const UNLOCKED_MEDALS = [
 ];
 
 const FIRST_VISIT_GUIDE_KEY = "antesdegastar_seen_quick_guide_v1";
-
-interface PurchaseEvaluationState {
-  key: string;
-  response: EvaluateApiResponse | null;
-  error: string | null;
-}
-
-function isEvaluateApiResponse(value: unknown): value is EvaluateApiResponse {
-  if (typeof value !== "object" || value === null) return false;
-  const response = value as Partial<EvaluateApiResponse>;
-  return (
-    (response.status === "dentro_del_margen" ||
-      response.status === "excede_el_margen" ||
-      response.status === "precaucion" ||
-      response.status === "datos_incompletos" ||
-      response.status === "error_procesamiento") &&
-    typeof response.detectedItemName === "string" &&
-    typeof response.detectedItemPrice === "number" &&
-    Number.isFinite(response.detectedItemPrice) &&
-    Array.isArray(response.missingInformation) &&
-    response.missingInformation.every(
-      (item) => typeof item === "string",
-    ) &&
-    response.source === "deterministic"
-  );
-}
 
 /**
  * Hero World: Panoramic Living Illustrated Diorama (Optimized height for Zero-Scroll on Desktop)
@@ -754,7 +728,7 @@ function HeroWorldDiorama({
             </span>
             <span className="flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-slate-300" />
-              Colchón: {safetyBuffer === null ? "—" : `−$${safetyBuffer.toLocaleString()}`}
+              Reservas: {safetyBuffer === null ? "—" : `−$${safetyBuffer.toLocaleString()}`}
             </span>
             <span className="flex items-center gap-1 font-bold text-emerald-700">
               <span className="w-2 h-2 rounded-full bg-[#10B981]" />= Margen:
@@ -781,7 +755,6 @@ export default function AppDashboardPage() {
     loadPreloadedSandboxProfile,
     setPendingEvaluation,
     addToWishlist,
-    registerPurchaseAnyway,
     streakCelebration,
   } = useFinancial();
 
@@ -794,8 +767,7 @@ export default function AppDashboardPage() {
   const [queryText, setQueryText] = useState("");
   const [parsedItemName, setParsedItemName] = useState("");
   const [parsedItemPrice, setParsedItemPrice] = useState<number>(0);
-  const [purchaseEvaluation, setPurchaseEvaluation] =
-    useState<PurchaseEvaluationState | null>(null);
+
   const [scannedThumbnailUrl, setScannedThumbnailUrl] = useState<string | null>(
     null,
   );
@@ -812,82 +784,9 @@ export default function AppDashboardPage() {
   >("idle");
   const [decisionXpBonus, setDecisionXpBonus] = useState<number>(50);
 
-  const evaluationKey = JSON.stringify([
-    mode,
-    profile.id,
-    parsedItemName,
-    parsedItemPrice,
-  ]);
-  const currentEvaluation =
-    purchaseEvaluation?.key === evaluationKey ? purchaseEvaluation : null;
-
-  useEffect(() => {
-    if (
-      parsedItemPrice <= 0 ||
-      !parsedItemName.trim() ||
-      (mode !== "demo" && mode !== "authenticated")
-    ) {
-      return;
-    }
-
-    let active = true;
-    void (async () => {
-      try {
-        const response = await fetch("/api/evaluate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            itemName: parsedItemName,
-            itemPrice: parsedItemPrice,
-            mode: mode === "demo" ? "demo" : "account",
-            demoProfileId: mode === "demo" ? profile.id : undefined,
-          }),
-        });
-        const body: unknown = await response.json();
-        if (!response.ok) {
-          const message =
-            typeof body === "object" &&
-            body !== null &&
-            "error" in body &&
-            typeof body.error === "string"
-              ? body.error
-              : "No se pudo completar la evaluación financiera.";
-          throw new Error(message);
-        }
-        if (!isEvaluateApiResponse(body)) {
-          throw new Error("El servicio devolvió una evaluación no válida.");
-        }
-        if (active) {
-          setPurchaseEvaluation({
-            key: evaluationKey,
-            response: body,
-            error: null,
-          });
-        }
-      } catch (error) {
-        if (active) {
-          setPurchaseEvaluation({
-            key: evaluationKey,
-            response: null,
-            error:
-              error instanceof Error
-                ? error.message
-                : "No se pudo completar la evaluación financiera.",
-          });
-        }
-      }
-    })();
-
-    return () => {
-      active = false;
-    };
-  }, [
-    evaluationKey,
-    mode,
-    parsedItemName,
-    parsedItemPrice,
-    profile.id,
-  ]);
+  const evaluation = useFinancialEvaluation(parsedItemName || "Resumen financiero", parsedItemPrice > 0 ? parsedItemPrice : null);
+  const currentEvaluation = evaluation.loading ? null : evaluation;
+  const [purchaseConfirmation, setPurchaseConfirmation] = useState(false);
 
   // Quick expense floating game button & toast feedback
   const [isQuickExpenseOpen, setIsQuickExpenseOpen] = useState(false);
@@ -901,8 +800,9 @@ export default function AppDashboardPage() {
     try {
       const hasSeen = localStorage.getItem(FIRST_VISIT_GUIDE_KEY);
       if (!hasSeen) {
-        setShowTourModal(true);
+        const timer = setTimeout(() => setShowTourModal(true), 0);
         localStorage.setItem(FIRST_VISIT_GUIDE_KEY, "true");
+        return () => clearTimeout(timer);
       }
     } catch {
       // Ignore storage access errors
@@ -948,7 +848,8 @@ export default function AppDashboardPage() {
           expenses.pendingCommitments +
           expenses.pendingDebtPayments
         : null;
-    const safetyBuffer = expenses?.safetyBuffer ?? null;
+    const safetyBuffer = expenses?.safetyBuffer != null && expenses.protectedSavings != null
+      ? expenses.safetyBuffer + expenses.protectedSavings : null;
     const safeToSpend =
       evaluationReady ? (evaluation.safeToSpend ?? null) : null;
     const fixedPct =
@@ -1000,8 +901,8 @@ export default function AppDashboardPage() {
       currentLevel = 1;
     } else if (
       safeToSpend !== null &&
-      safetyBuffer !== null &&
-      safeToSpend < safetyBuffer * 1.4 &&
+      expenses?.safetyBuffer != null &&
+      safeToSpend < expenses.safetyBuffer * 1.4 &&
       goalRatio < 0.45
     ) {
       currentLevel = 2;
@@ -1138,7 +1039,8 @@ export default function AppDashboardPage() {
   // Auto-read when autoVoiceEnabled is active and the speech message updates
   useEffect(() => {
     if (autoVoiceEnabled && rpgSpeechMessage) {
-      speakAdviceText(rpgSpeechMessage);
+      const timer = setTimeout(() => speakAdviceText(rpgSpeechMessage), 0);
+      return () => clearTimeout(timer);
     }
   }, [autoVoiceEnabled, rpgSpeechMessage, speakAdviceText]);
 
@@ -1269,49 +1171,8 @@ export default function AppDashboardPage() {
     }
   };
 
-  // Decision 1: selecting a scenario is not the same as confirming a real expense.
-  const handleDecisionBuyToday = async () => {
-    if (isSavingDecision || !parsedItemName.trim() || parsedItemPrice <= 0)
-      return;
-    if (financialMetrics.evaluationIncomplete) {
-      triggerToast(
-        financialMetrics.evaluationError ??
-          "No se puede registrar esta compra sin una evaluación financiera completa.",
-      );
-      return;
-    }
-    setSelectedDecision("bought");
-
-    if (mode === "authenticated") {
-      const confirmed = window.confirm(
-        `¿Ya realizaste esta compra por $${parsedItemPrice.toLocaleString()} MXN?\n\n` +
-          "Aceptar la registrará como gasto real y descontará tu saldo. " +
-          "Cancelar solo seleccionará esta alternativa para compararla.",
-      );
-      if (!confirmed) {
-        triggerToast("Solo simulación: no se descontó dinero de tu cuenta.");
-        return;
-      }
-    }
-
-    setIsSavingDecision(true);
-    try {
-      await registerPurchaseAnyway(parsedItemName, parsedItemPrice);
-      playDamage();
-      triggerToast(
-        `Compra registrada: −$${parsedItemPrice.toLocaleString()} MXN (${parsedItemName})`,
-      );
-    } catch (error) {
-      setSelectedDecision("idle");
-      console.error("Purchase save failed:", error);
-      triggerToast(
-        error instanceof Error
-          ? error.message
-          : "No se pudo registrar la compra.",
-      );
-    } finally {
-      setIsSavingDecision(false);
-    }
+  const handleDecisionBuyToday = () => {
+    if (!isSavingDecision && parsedItemPrice > 0 && financialMetrics.evaluationReady) setPurchaseConfirmation(true);
   };
 
   // Decision 2: persist a waiting item and show it in Goals.
@@ -1456,6 +1317,7 @@ export default function AppDashboardPage() {
       onSelectTab={(tab) => setActiveBottomTab(tab)}
       onOpenGuide={() => setShowTourModal(true)}
     >
+      {purchaseConfirmation && <PurchaseConfirmationModal itemName={parsedItemName} itemPrice={parsedItemPrice} evaluation={evaluation.response} onCancel={() => setPurchaseConfirmation(false)} onSuccess={() => { setPurchaseConfirmation(false); setSelectedDecision("bought"); triggerToast("Compra registrada correctamente."); }} />}
       {/* Celebratory Streak Popup Banner */}
       <AnimatePresence>
         {streakCelebration && (
