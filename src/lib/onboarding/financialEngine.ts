@@ -1,3 +1,4 @@
+import { protectedSavingsCents } from "./protectedFunds";
 
 /**
  * ANTES DE GASTAR
@@ -18,12 +19,12 @@ import type {
 
 export interface SafeToSpendResult {
   status: "calculado" | "datos_incompletos";
-  currentBalance: number;
-  essentialExpenses: number;
-  pendingCommitments: number;
-  pendingDebtPayments: number;
-  safetyBuffer: number;
-  protectedSavings: number;
+  currentBalance: number | null;
+  essentialExpenses: number | null;
+  pendingCommitments: number | null;
+  pendingDebtPayments: number | null;
+  safetyBuffer: number | null;
+  protectedSavings: number | null;
   safeToSpend: number | null;
   shortfall: number | null;
 }
@@ -47,11 +48,13 @@ function toCents(amount: number): number {
 // Determina cuántas veces vence un pago
 // dentro del periodo analizado.
 function contarPagos(
-  dueInDays: number,
-  frequency: CommitmentFrequency,
+  dueInDays: number | null,
+  frequency: CommitmentFrequency | null,
   days: number
 ): number | null {
   if (
+    dueInDays === null ||
+    frequency === null ||
     !Number.isInteger(dueInDays) ||
     dueInDays < 0
   ) {
@@ -99,17 +102,15 @@ function contarPagos(
 export function calculateSafeToSpend(
   profile: OnboardingProfile
 ): SafeToSpendResult {
-  const balance = toCents(profile.currentBalance);
-  const buffer = toCents(profile.safetyBuffer);
-
   const incomplete: SafeToSpendResult = {
     status: "datos_incompletos",
-    currentBalance: balance / 100,
-    essentialExpenses: 0,
-    pendingCommitments: 0,
-    pendingDebtPayments: 0,
-    safetyBuffer: buffer / 100,
-    protectedSavings: 0,
+    currentBalance:
+      profile.currentBalance === null ? null : profile.currentBalance,
+    essentialExpenses: null,
+    pendingCommitments: null,
+    pendingDebtPayments: null,
+    safetyBuffer: profile.safetyBuffer,
+    protectedSavings: null,
     safeToSpend: null,
     shortfall: null,
   };
@@ -120,6 +121,15 @@ export function calculateSafeToSpend(
   // ni con un onboarding incompleto.
   if (
     !profile.isOnboarded ||
+    profile.currentBalance === null ||
+    profile.dailyEssentialBurn === null ||
+    profile.safetyBuffer === null ||
+    !Number.isFinite(profile.currentBalance) ||
+    !Number.isFinite(profile.dailyEssentialBurn) ||
+    !Number.isFinite(profile.safetyBuffer) ||
+    profile.currentBalance < 0 ||
+    profile.dailyEssentialBurn < 0 ||
+    profile.safetyBuffer < 0 ||
     days === null ||
     !Number.isInteger(days) ||
     days < 0
@@ -127,15 +137,11 @@ export function calculateSafeToSpend(
     return incomplete;
   }
 
-  const goal = profile.primaryGoal;
+  const balance = toCents(profile.currentBalance);
+  const buffer = toCents(profile.safetyBuffer);
 
-  if (
-    goal &&
-    goal.currentSaved > 0 &&
-    goal.savingsLocation === "desconocido"
-  ) {
-    return incomplete;
-  }
+  const protectedSavings = protectedSavingsCents(profile);
+  if (protectedSavings === null) return incomplete;
 
   // Evitamos contar deudas en ambas listas.
   // Las deudas se registran únicamente en debts.
@@ -161,7 +167,7 @@ export function calculateSafeToSpend(
   let pendingCommitments = 0;
 
   for (const item of profile.commitments) {
-    if (item.isConfirmed === false) {
+    if (item.isConfirmed === false || item.amount === null) {
       return incomplete;
     }
 
@@ -186,6 +192,10 @@ export function calculateSafeToSpend(
   let pendingDebtPayments = 0;
 
   for (const debt of profile.debts) {
+    if (debt.nextPayment === null) {
+      return incomplete;
+    }
+
     const paymentCount = contarPagos(
       debt.dueInDays,
       debt.frequency,
@@ -203,24 +213,6 @@ export function calculateSafeToSpend(
   // ========================================
   // AHORROS PROTEGIDOS
   // ========================================
-
-  let protectedSavings = 0;
-
-  if (goal?.savingsLocation === "incluido") {
-    const saved = toCents(goal.currentSaved);
-
-    // Conservamos la regla inicial:
-    // se supone que un fondo de emergencia
-    // comparte dinero con el safetyBuffer.
-    if (goal.category === "emergencia") {
-      protectedSavings = Math.max(
-        0,
-        saved - buffer
-      );
-    } else {
-      protectedSavings = saved;
-    }
-  }
 
   // ========================================
   // RESULTADO FINAL

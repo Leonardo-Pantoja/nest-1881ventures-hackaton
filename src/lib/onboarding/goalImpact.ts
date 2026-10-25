@@ -32,14 +32,14 @@ function toCents(amount: number): number {
 // Semanas necesarias para alcanzar una meta
 function calculateWeeks(
   remaining: number,
-  weeklyContribution: number | undefined
+  weeklyContribution: number | null | undefined
 ): number | null {
   if (remaining <= 0) {
     return 0;
   }
 
   if (
-    weeklyContribution === undefined ||
+    weeklyContribution == null ||
     weeklyContribution <= 0
   ) {
     return null;
@@ -58,6 +58,9 @@ export function calculateGoalImpact(
   goal: FinancialGoal,
   amountFromGoal: number
 ): GoalImpactResult {
+  if (goal.targetAmount === null || goal.currentSaved === null) {
+    throw new Error("Los datos de la meta están incompletos.");
+  }
   const target = toCents(goal.targetAmount);
   const saved = toCents(goal.currentSaved);
   const withdrawal = toCents(amountFromGoal);
@@ -68,7 +71,7 @@ export function calculateGoalImpact(
     );
   }
 
-  if (goal.weeklyContribution !== undefined) {
+  if (goal.weeklyContribution != null) {
     toCents(goal.weeklyContribution);
   }
 
