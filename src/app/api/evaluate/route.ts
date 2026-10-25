@@ -21,6 +21,7 @@ interface EvaluateRequestPayload {
   imageMimeType?: unknown;
   chatMessages?: unknown;
   userQuestion?: unknown;
+  financialContext?: unknown;
 }
 
 function buildLocalChatFallback(
@@ -108,6 +109,44 @@ function buildLocalChatFallback(
     aiExplanation,
     chatReply: `${baseDiagnosis}${projectionNote} Puedes elegir: 1) Comprar hoy, 2) Guardar y reevaluar en ${nextPaydayDays} días (+50 XP), o 3) Crear un plan de Micro-ahorro (+100 XP).`,
   };
+}
+
+function buildContextChatReply(
+  rawContext: unknown,
+  itemName: string,
+  itemPrice: number | null,
+  question: string,
+): string {
+  const ctx = (rawContext && typeof rawContext === "object" ? rawContext : {}) as Record<string, unknown>;
+  const num = (v: unknown, d = 0) => (typeof v === "number" && Number.isFinite(v) ? v : d);
+  const balance = num(ctx.currentBalance);
+  const buffer = num(ctx.safetyBuffer);
+  const safe = typeof ctx.safeToSpend === "number" ? ctx.safeToSpend : Math.max(0, balance - buffer);
+  const price = itemPrice ?? num(ctx.itemPrice);
+  const name = itemName || "este producto";
+  const days = num(ctx.nextPaydayDays, 7);
+  const money = (n: number) => `$${Math.round(n).toLocaleString("es-MX")} MXN`;
+  const remaining = safe - price;
+  const goals = Array.isArray(ctx.goals) ? (ctx.goals as Record<string, unknown>[]) : [];
+  const goalNote = goals[0]
+    ? ` Tu ahorro de ${money(num(goals[0].currentSaved))} en "${String(goals[0].title ?? "tu meta")}" no se toca.`
+    : "";
+  const verdict =
+    remaining >= 0
+      ? `"${name}" (${money(price)}) cabe en tu margen seguro de ${money(safe)} y te dejaría ${money(remaining)} libres.`
+      : `"${name}" (${money(price)}) supera tu margen seguro de ${money(safe)} por ${money(Math.abs(remaining))}.`;
+  const q = question.toLowerCase();
+  if (q.includes("esper") || q.includes("quincena")) {
+    return `Si esperas ${days} días a tu próximo ingreso no descuentas nada hoy. ${verdict}${goalNote}`;
+  }
+  if (q.includes("micro") || q.includes("ahorro")) {
+    return `Podrías apartar ~${money(Math.max(100, Math.ceil(price / 4)))} por semana durante 4 semanas sin afectar tu liquidez.${goalNote}`;
+  }
+  if (q.includes("alternativ") || q.includes("mitad")) {
+    const alt = Math.round(price / 2);
+    return `Con una alternativa de ${money(alt)} te quedarían ${money(safe - alt)} en tu margen.${goalNote}`;
+  }
+  return `${verdict}${goalNote} Puedes comprar hoy, guardarla para reevaluar en ${days} días o crear un plan de micro-ahorro.`;
 }
 
 export async function POST(request: Request) {
@@ -201,6 +240,11 @@ export async function POST(request: Request) {
     } catch {
       // Continue with deterministic validation
     }
+  }
+
+  if (userQuestion && !summary && (!itemName || typeof itemPrice !== "number" || !validPurchasePrice(itemPrice))) {
+    itemName = itemName || "Producto consultado";
+    itemPrice = typeof itemPrice === "number" && validPurchasePrice(itemPrice) ? itemPrice : 500;
   }
 
   if (
@@ -298,14 +342,16 @@ Devuelve un JSON estricto con:
                 temperature: 0.25,
               },
             }),
-            signal: AbortSignal.timeout(4000),
+            signal: AbortSignal.timeout(8000),
           },
         );
 
         if (geminiRes.ok) {
           const geminiData = await geminiRes.json();
           const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-          const parsed = JSON.parse(rawText);
+          const parsed = JSON.parse(
+            String(rawText).replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim(),
+          );
           if (typeof parsed?.aiExplanation === "string" && parsed.aiExplanation.trim()) {
             aiExplanation = parsed.aiExplanation.trim();
           }
@@ -325,6 +371,12 @@ Devuelve un JSON estricto con:
       financialRevision: revision,
     });
   } catch (error) {
+    if (error instanceof EvaluationRequestError && userQuestion && !summary) {
+      return NextResponse.json({
+        chatReply: buildContextChatReply(body.financialContext, itemName, itemPrice, userQuestion),
+        fallback: true,
+      });
+    }
     if (error instanceof EvaluationRequestError) {
       return NextResponse.json(
         {
@@ -340,6 +392,13 @@ Devuelve un JSON estricto con:
     }
 
     console.error("Purchase evaluation failed:", error);
+    if (userQuestion && !summary) {
+      // El chat nunca debe fallar: respuesta contextual con las cifras del cliente
+      return NextResponse.json({
+        chatReply: buildContextChatReply(body.financialContext, itemName, itemPrice, userQuestion),
+        fallback: true,
+      });
+    }
     return NextResponse.json(
       {
         status: "error_procesamiento",

@@ -1,5 +1,7 @@
 "use client";
 
+import { calculateSafeToSpend } from "@/lib/onboarding/financialEngine";
+import type { OnboardingProfile } from "@/lib/onboarding/financialTypes";
 import React, { useState, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import {
@@ -69,7 +71,7 @@ export default function PurchaseEvaluationFlow({
   isStandalonePage = false,
   onUpdateEvaluatedItem,
 }: PurchaseEvaluationFlowProps) {
-  const { profile, mode, addToWishlist } = useFinancial();
+  const { profile, mode, addToWishlist, financialProfile } = useFinancial();
 
   const [selectedDecision, setSelectedDecision] = useState<
     "idle" | "wait" | "microsave" | "bought"
@@ -192,6 +194,76 @@ export default function PurchaseEvaluationFlow({
     void saveAlternative("microsave");
   };
 
+  // Respuesta contextual local (basada en financialEngine) cuando Gemini/API no responde
+  const buildLocalChatReply = (
+    question: string,
+    name: string,
+    price: number,
+  ): string => {
+    let safe: number;
+    try {
+      safe = Number(
+        calculateSafeToSpend(
+          financialProfile ?? ({
+            id: profile.id,
+            name: profile.name,
+            lifeContext: [],
+            currentBalance: profile.currentBalance,
+            payFrequency: profile.payFrequency,
+            nextPaydayAmount: profile.nextPaydayAmount,
+            nextPaydayDays: profile.nextPaydayDays,
+            dailyEssentialBurn: profile.dailyEssentialBurn,
+            safetyBuffer: profile.safetyBuffer,
+            commitments: [],
+            debts: [],
+            primaryGoal: null,
+            isOnboarded: true,
+          } as unknown as OnboardingProfile),
+        ).safeToSpend ?? 0,
+      );
+    } catch {
+      safe = Math.max(0, profile.currentBalance - profile.safetyBuffer);
+    }
+    if (activeEvaluation?.safeToSpend != null) safe = activeEvaluation.safeToSpend;
+    const money = (n: number) => `$${Math.round(n).toLocaleString("es-MX")} MXN`;
+    const remaining = safe - price;
+    const days = profile.nextPaydayDays ?? 7;
+    const goal = profile.goal;
+    const q = question.toLowerCase();
+    const verdict =
+      remaining >= 0
+        ? `"${name}" (${money(price)}) cabe en tu margen seguro de ${money(safe)} y te dejaría ${money(remaining)} libres.`
+        : `"${name}" (${money(price)}) supera tu margen seguro de ${money(safe)} por ${money(Math.abs(remaining))}.`;
+    const protectedNote = `Tu ahorro de ${money(goal.currentSaved)} en "${goal.title}" no se toca.`;
+
+    const nums = (question.replace(/,/g, "").match(/\d+(?:\.\d+)?/g) ?? [])
+      .map(Number)
+      .filter((n) => n > 0 && n !== price);
+    if ((q.includes("mitad") || nums.length > 0) && q.includes("alternativ")) {
+      const alt = nums[0] ?? Math.round(price / 2);
+      const altRemaining = safe - alt;
+      return altRemaining >= 0
+        ? `Con una alternativa de ${money(alt)} te quedarían ${money(altRemaining)} libres y ahorrarías ${money(Math.max(0, price - alt))}. ${protectedNote}`
+        : `Incluso con ${money(alt)} superarías tu margen (${money(safe)}) por ${money(Math.abs(altRemaining))}. Te conviene esperar o hacer un plan de micro-ahorro.`;
+    }
+    if (q.includes("esper") || q.includes("quincena") || q.includes("nómina") || q.includes("nomina")) {
+      return `Si esperas ${days} días hasta tu próximo ingreso (${money(profile.nextPaydayAmount ?? 0)}), no descuentas nada hoy y proteges tu colchón de ${money(profile.safetyBuffer)}. ${verdict}`;
+    }
+    if (q.includes("semana") || q.includes("proyecc") || q.includes("saldo")) {
+      const low = activeEvaluation?.projection?.lowestBalance;
+      return `${verdict} ${
+        low != null
+          ? `En la proyección a 6 semanas tu punto más bajo sería ${money(low)}.`
+          : `Tu saldo actual es ${money(profile.currentBalance)}.`
+      }`;
+    }
+    if (q.includes("micro") || q.includes("ahorro") || q.includes("meta")) {
+      const weekly = Math.max(100, Math.ceil(price / 4));
+      return `Con un plan de micro-ahorro podrías apartar ~${money(weekly)} por semana durante 4 semanas sin tocar tu liquidez. ${protectedNote}`;
+    }
+    return `${verdict} ${protectedNote} Puedes comprar hoy, guardarla para reevaluar en ${days} días (+50 XP) o crear un plan de micro-ahorro (+100 XP).`;
+  };
+
   // Conversational Chat Handler -> calls /api/evaluate with text or image + follow-up question
   const handleSendChatMessage = async (customPrompt?: string) => {
     const questionText = (customPrompt ?? chatInput).trim();
@@ -225,10 +297,20 @@ export default function PurchaseEvaluationFlow({
       }
     }
 
+    const fallbackReply = () =>
+      buildLocalChatReply(
+        questionText,
+        targetName || "este producto",
+        targetPrice > 0 ? targetPrice : itemPrice,
+      );
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
     try {
       const res = await fetch("/api/evaluate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           itemName: targetName || "Producto consultado",
           itemPrice: targetPrice > 0 ? targetPrice : 500,
@@ -241,51 +323,76 @@ export default function PurchaseEvaluationFlow({
               : undefined,
           imageBase64: chatImageBase64,
           imageMimeType: chatImageMime,
-          chatMessages: nextHistory,
+          chatMessages: nextHistory.slice(-8),
           userQuestion: userDisplayMessage,
+          financialContext: {
+            currentBalance: profile.currentBalance,
+            safeToSpend: activeEvaluation?.safeToSpend ?? null,
+            itemName: targetName,
+            itemPrice: targetPrice,
+            safetyBuffer: profile.safetyBuffer,
+            nextPaydayDays: profile.nextPaydayDays,
+            commitments: profile.commitments.slice(0, 15).map((c) => ({
+              title: c.title,
+              amount: c.amount,
+              dueInDays: c.dueInDays,
+            })),
+            goals: [
+              {
+                title: profile.goal.title,
+                targetAmount: profile.goal.targetAmount,
+                currentSaved: profile.goal.currentSaved,
+              },
+            ],
+          },
         }),
       });
 
-      const data = (await res.json()) as EvaluateApiResponse & { error?: string };
-      if (!res.ok) {
-        throw new Error(data.error || "No se pudo consultar al copiloto.");
+      let data: (EvaluateApiResponse & { error?: string }) | null = null;
+      try {
+        data = (await res.json()) as EvaluateApiResponse & { error?: string };
+      } catch {
+        data = null;
       }
 
-      if (
-        data.detectedItemName &&
-        data.detectedItemPrice > 0 &&
-        (data.detectedItemName !== itemName || data.detectedItemPrice !== itemPrice)
-      ) {
-        onUpdateEvaluatedItem?.(
-          data.detectedItemName,
-          data.detectedItemPrice,
-          chatImageBase64 || thumbnailDataUrl,
-          storeTag || "Escaneado con Gemini",
-        );
+      let replyText = "";
+      if (res.ok && data && typeof data === "object") {
+        if (
+          typeof data.detectedItemName === "string" &&
+          typeof data.detectedItemPrice === "number" &&
+          data.detectedItemPrice > 0 &&
+          (data.detectedItemName !== itemName ||
+            data.detectedItemPrice !== itemPrice)
+        ) {
+          onUpdateEvaluatedItem?.(
+            data.detectedItemName,
+            data.detectedItemPrice,
+            chatImageBase64 || thumbnailDataUrl,
+            storeTag || "Escaneado con Gemini",
+          );
+        }
+        if (typeof data.status === "string" && data.safeToSpend !== undefined) {
+          setLatestEvaluationOverride({ key: overrideKey, data });
+        }
+        replyText = (
+          (typeof data.chatReply === "string" && data.chatReply) ||
+          (typeof data.aiExplanation === "string" && data.aiExplanation) ||
+          ""
+        ).trim();
       }
-
-      setLatestEvaluationOverride({ key: overrideKey, data });
-      const replyText =
-        data.chatReply ||
-        data.aiExplanation ||
-        `${data.headlineLine1} ${data.headlineLine2}`;
 
       setChatMessages((prev) => [
         ...prev,
-        { role: "assistant", content: replyText },
+        { role: "assistant", content: replyText || fallbackReply() },
       ]);
-    } catch (err) {
+    } catch {
+      // Timeout, red caída o formato inesperado: respuesta local con cálculos reales
       setChatMessages((prev) => [
         ...prev,
-        {
-          role: "assistant",
-          content:
-            err instanceof Error
-              ? err.message
-              : "No pude procesar esa consulta en este momento.",
-        },
+        { role: "assistant", content: fallbackReply() },
       ]);
     } finally {
+      clearTimeout(timeoutId);
       setIsSendingChat(false);
       setChatImageBase64(null);
       setChatImageMime(null);
@@ -653,7 +760,7 @@ export default function PurchaseEvaluationFlow({
           </div>
 
           {/* 4. The 3 Collectible 3D Path Cards with 56x56 Animated Medallions */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="w-full max-w-none grid grid-cols-1 xl:grid-cols-3 gap-6">
             {/* Carta 1: Comprar hoy */}
             <motion.div
               onClick={handleDecisionBuyToday}
@@ -664,7 +771,7 @@ export default function PurchaseEvaluationFlow({
               }`}
             >
               <div className="space-y-4">
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <motion.div
                     animate={{ y: [0, -4, 0] }}
                     transition={{
@@ -672,7 +779,7 @@ export default function PurchaseEvaluationFlow({
                       repeat: Infinity,
                       ease: "easeInOut",
                     }}
-                    className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-100 to-orange-100 border-2 border-amber-300 flex items-center justify-center shrink-0 shadow-xs"
+                    className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-100 to-orange-100 border-2 border-amber-300 flex items-center justify-center shrink-0 shadow-xs"
                   >
                     <Zap
                       className="w-7 h-7 text-amber-600 fill-amber-400"
@@ -680,7 +787,7 @@ export default function PurchaseEvaluationFlow({
                     />
                   </motion.div>
 
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold font-heading bg-amber-50 text-amber-900 border border-amber-200 text-right">
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold font-heading bg-amber-50 text-amber-900 border border-amber-200 text-left max-w-full">
                     {metrics.evaluationIncomplete
                       ? itemPrice <= 0
                         ? "Precio por confirmar"
@@ -715,7 +822,7 @@ export default function PurchaseEvaluationFlow({
                 </div>
 
                 <div className="p-3 rounded-2xl bg-amber-50/70 border border-amber-200/80 space-y-1.5">
-                  <div className="flex justify-between text-[11px] font-bold font-heading text-amber-900">
+                  <div className="flex flex-col gap-1 text-left text-[11px] font-bold font-heading text-amber-900">
                     <span>Impacto en tu quincena</span>
                     <span>
                       {metrics.evaluationIncomplete
@@ -734,7 +841,7 @@ export default function PurchaseEvaluationFlow({
               <button
                 type="button"
                 disabled={metrics.evaluationIncomplete}
-                className="w-full h-11 rounded-xl border-2 border-b-4 border-slate-200 border-b-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold font-heading transition-colors cursor-pointer"
+                className="w-full py-3 px-4 h-auto whitespace-normal text-center leading-snug rounded-xl border-2 border-b-4 border-slate-200 border-b-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold font-heading transition-colors cursor-pointer"
               >
                 {metrics.evaluationIncomplete
                   ? "Verifica tus datos financieros"
@@ -753,7 +860,7 @@ export default function PurchaseEvaluationFlow({
               }`}
             >
               <div className="space-y-4">
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <motion.div
                     animate={{ y: [0, -5, 0] }}
                     transition={{
@@ -761,7 +868,7 @@ export default function PurchaseEvaluationFlow({
                       repeat: Infinity,
                       ease: "easeInOut",
                     }}
-                    className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-100 border-2 border-emerald-400 flex items-center justify-center shrink-0 shadow-xs"
+                    className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-100 border-2 border-emerald-400 flex items-center justify-center shrink-0 shadow-xs"
                   >
                     <Shield
                       className="w-7 h-7 text-emerald-600 fill-emerald-400/40"
@@ -791,7 +898,7 @@ export default function PurchaseEvaluationFlow({
                 </div>
 
                 <div className="p-3 rounded-2xl bg-emerald-50/70 border border-emerald-200/80 space-y-1.5">
-                  <div className="flex justify-between text-[11px] font-bold font-heading text-emerald-900">
+                  <div className="flex flex-col gap-1 text-left text-[11px] font-bold font-heading text-emerald-900">
                     <span>Sin retiro de ahorros</span>
                     <span>Solo guardar</span>
                   </div>
@@ -804,7 +911,7 @@ export default function PurchaseEvaluationFlow({
               <button
                 type="button"
                 disabled={itemPrice <= 0}
-                className="w-full h-11 rounded-xl bg-[#10B981] hover:bg-emerald-600 border-2 border-emerald-600 border-b-4 border-b-emerald-800 text-white text-xs font-bold font-heading shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                className="w-full py-3 px-4 h-auto whitespace-normal text-center leading-snug rounded-xl bg-[#10B981] hover:bg-emerald-600 border-2 border-emerald-600 border-b-4 border-b-emerald-800 text-white text-xs font-bold font-heading shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Clock className="w-4 h-4" strokeWidth={1.5} />
                 <span>Guardar para reevaluar (+50 XP)</span>
@@ -823,7 +930,7 @@ export default function PurchaseEvaluationFlow({
               }`}
             >
               <div className="space-y-4">
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <motion.div
                     animate={{ y: [0, -4, 0] }}
                     transition={{
@@ -832,7 +939,7 @@ export default function PurchaseEvaluationFlow({
                       repeat: Infinity,
                       ease: "easeInOut",
                     }}
-                    className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-100 to-violet-100 border-2 border-indigo-300 flex items-center justify-center shrink-0 shadow-xs"
+                    className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-100 to-violet-100 border-2 border-indigo-300 flex items-center justify-center shrink-0 shadow-xs"
                   >
                     <PiggyBank
                       className="w-7 h-7 text-indigo-600 fill-indigo-300/40"
@@ -860,7 +967,7 @@ export default function PurchaseEvaluationFlow({
                 </div>
 
                 <div className="p-3 rounded-2xl bg-indigo-50/70 border border-indigo-200/80 space-y-1.5">
-                  <div className="flex justify-between text-[11px] font-bold font-heading text-indigo-900">
+                  <div className="flex flex-col gap-1 text-left text-[11px] font-bold font-heading text-indigo-900">
                     <span>Tu ritmo, tu decisión</span>
                     <span>Sin monto sugerido</span>
                   </div>
@@ -873,7 +980,7 @@ export default function PurchaseEvaluationFlow({
               <button
                 type="button"
                 disabled={itemPrice <= 0}
-                className="w-full h-11 rounded-xl border-2 border-b-4 border-indigo-200 border-b-indigo-300 bg-indigo-50/60 hover:bg-indigo-100/80 text-indigo-950 text-xs font-bold font-heading transition-colors cursor-pointer"
+                className="w-full py-3 px-4 h-auto whitespace-normal text-center leading-snug rounded-xl border-2 border-b-4 border-indigo-200 border-b-indigo-300 bg-indigo-50/60 hover:bg-indigo-100/80 text-indigo-950 text-xs font-bold font-heading transition-colors cursor-pointer"
               >
                 Crear plan de micro-ahorro (+100 XP)
               </button>
