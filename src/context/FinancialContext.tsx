@@ -16,6 +16,7 @@ import { isMissingSupabaseSessionError } from "@/lib/finance/evaluationProfile";
 import type { OnboardingProfile } from "@/lib/onboarding/financialTypes";
 import { validPurchasePrice } from "@/lib/finance/money";
 import { createClient } from "@/lib/supabase/client";
+import { wishlistPlanSchema, wishlistProductKey } from "@/lib/finance/wishlistPlan";
 
 export type LifeContextTag =
   | "estudio"
@@ -100,6 +101,7 @@ export interface WishlistItem {
   price: number;
   savedAt: string;
   plannedWeeklySave?: number;
+  planWeeks?: number;
   cooldownDays?: number;
   strategy?: "wait" | "microsave";
   decision?: WishlistDecisionStatus;
@@ -757,6 +759,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
   const [accountFinancialProfile, setAccountFinancialProfile] = useState<OnboardingProfile | null>(null);
   const [accountVersion, setAccountVersion] = useState("");
   const pendingPurchases = useRef(new Map<string, Promise<void>>());
+  const pendingWishlist = useRef(new Map<string, { signature: string; operation: Promise<number> }>());
   const completedPurchases = useRef(new Set<string>());
   const [pendingEvaluation, setPendingEvaluationState] =
     useState<PendingPurchaseEvaluation>({
@@ -882,7 +885,6 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         },
       );
       const goalRow = mappedGoalsList[0];
-      const wishlistMeta = readWishlistMetaMap(user.id);
       const analysesList = Array.isArray(analysesRes?.data)
         ? (analysesRes.data as Record<string, unknown>[])
         : [];
@@ -994,22 +996,17 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
           const matchedAnalysis = analysesList.find(
             (a) =>
               String(a.wishlist_item_id ?? "") === String(item.id) ||
-              String(a.item_name ?? a.name ?? "").toLowerCase() ===
-                String(item.name ?? "").toLowerCase(),
+              (String(a.item_name ?? a.name ?? "").toLowerCase() ===
+                String(item.name ?? "").toLowerCase() && Number(a.price) === Number(item.price)),
           );
-          const localMeta = wishlistMeta[String(item.id)] ?? {};
           const rawDecision =
-            localMeta.decision ??
             (typeof item.decision === "string" ? item.decision : undefined) ??
             (typeof item.status === "string" ? item.status : undefined) ??
             (typeof matchedAnalysis?.decision === "string"
               ? matchedAnalysis.decision
               : undefined);
           const normalizedDecision: WishlistDecisionStatus =
-            rawDecision === "purchased" ||
-            rawDecision === "discarded" ||
-            rawDecision === "microsave" ||
-            rawDecision === "postponed"
+            rawDecision === "purchased" || rawDecision === "discarded"
               ? rawDecision
               : item.strategy === "microsave"
                 ? "microsave"
@@ -1026,8 +1023,8 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
               item.planned_weekly_save == null
                 ? undefined
                 : Number(item.planned_weekly_save),
+            planWeeks: item.plan_weeks == null ? undefined : Number(item.plan_weeks),
             savedAmount:
-              localMeta.savedAmount ??
               (item.saved_amount != null ? Number(item.saved_amount) : 0),
             cooldownDays: daysUntil(item.hold_until),
             strategy: item.strategy as "wait" | "microsave",
@@ -1246,82 +1243,62 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
-  const addToWishlist = async (
+  const addToWishlist = (
     item: Omit<WishlistItem, "id" | "savedAt">,
     xpReward = 50,
   ): Promise<number> => {
-    if (mode === "demo") {
-      const next = {
-        ...profile,
-        wisdomXp: (profile.wisdomXp ?? 0) + xpReward,
-        streakCount: (profile.streakCount ?? 0) + 1,
-        wishlist: [
-          {
-            ...item,
-            id: `wish-${Date.now()}`,
-            savedAt: new Date().toISOString(),
-          },
-          ...(profile.wishlist || []).filter((w) => w.name !== item.name),
-        ],
-      };
-      persistDemo(next);
-      announceStreak(next.streakCount, `¡Enfriamiento activo! +${xpReward} XP`);
-      return xpReward;
-    }
-
-    if (mode !== "authenticated") {
-      throw new Error("Debes iniciar sesión para guardar compras.");
-    }
-    if (!item.name.trim() || !Number.isFinite(item.price) || item.price <= 0) {
-      throw new Error("Selecciona un producto con precio válido.");
-    }
-
-    const { data, error } = await supabase.rpc("save_wishlist_item", {
-      p_name: item.name.trim(),
-      p_price: item.price,
-      p_strategy: item.strategy ?? "wait",
-      p_cooldown_days: Math.min(365, Math.max(1, item.cooldownDays ?? 7)),
-      p_planned_weekly_save:
-        item.strategy === "microsave" ? (item.plannedWeeklySave ?? 400) : null,
+    const validated = wishlistPlanSchema.safeParse({ name: item.name, price: item.price, strategy: item.strategy ?? "wait",
+      ...(item.plannedWeeklySave !== undefined ? { plannedWeeklySave: item.plannedWeeklySave } : {}),
+      ...(item.planWeeks !== undefined ? { planWeeks: item.planWeeks } : {}),
+      ...(item.cooldownDays !== undefined ? { cooldownDays: Math.min(365, Math.max(1, Math.ceil(item.cooldownDays))) } : {}),
     });
-    if (error) throw new Error(error.message);
-    if (!data) throw new Error("Supabase no devolvió la compra guardada.");
-
-    const saved = data as {
-      id: string;
-      name: string;
-      price: number;
-      saved_at: string;
-      hold_until: string;
-      planned_weekly_save: number | null;
-      strategy: "wait" | "microsave";
-      wisdom_xp: number;
-      streak_count: number;
-      xp_awarded: number;
-    };
-    setProfile((prev) => prev.id !== profile.id ? prev : ({
-      ...prev,
-      wishlist: [
-        {
-          id: saved.id,
-          name: saved.name,
-          price: Number(saved.price),
-          savedAt: saved.saved_at,
-          cooldownDays: daysUntil(saved.hold_until),
-          plannedWeeklySave:
-            saved.planned_weekly_save == null
-              ? undefined
-              : Number(saved.planned_weekly_save),
-          strategy: saved.strategy,
-        },
-        ...(prev.wishlist || []).filter(
-          (w) => w.id !== saved.id && w.name !== saved.name,
-        ),
-      ],
-      wisdomXp: Number(saved.wisdom_xp),
-      streakCount: Number(saved.streak_count),
-    }));
-    return Number(saved.xp_awarded);
+    if (!validated.success) return Promise.reject(new Error("Confirma el nombre, precio y aportación del plan."));
+    const plan = validated.data;
+    if (mode !== "demo" && mode !== "authenticated") return Promise.reject(new Error("Debes iniciar sesión para guardar el plan."));
+    const identity = wishlistProductKey(plan);
+    const accountKey = JSON.stringify([mode, profile.id, identity]);
+    const signature = JSON.stringify(plan);
+    const pending = pendingWishlist.current.get(accountKey);
+    if (pending) return pending.signature === signature ? pending.operation
+      : Promise.reject(new Error("Espera a que termine el guardado de este producto."));
+    const operation = (async () => {
+      if (mode === "demo") {
+        const existing = (profile.wishlist ?? []).find(wish => wishlistProductKey(wish) === identity);
+        if (existing?.decision === "purchased" || existing?.decision === "discarded") throw new Error("Este producto ya está cerrado. Consúltalo en Retos y Metas.");
+        const awarded = existing ? 0 : xpReward;
+        const saved: WishlistItem = { ...existing, ...plan,
+          plannedWeeklySave: plan.plannedWeeklySave, planWeeks: plan.planWeeks,
+          id: existing?.id ?? `wish-${crypto.randomUUID()}`, savedAt: existing?.savedAt ?? new Date().toISOString(),
+          savedAmount: existing?.savedAmount ?? 0, decision: plan.strategy === "microsave" ? "microsave" : "postponed",
+          awardedXp: existing?.awardedXp ?? awarded,
+        };
+        persistDemo({ ...profile, wishlist: [saved, ...(profile.wishlist ?? []).filter(w => w.id !== saved.id)],
+          wisdomXp: (profile.wisdomXp ?? 0) + awarded, streakCount: (profile.streakCount ?? 0) + (existing ? 0 : 1) });
+        if (awarded) announceStreak((profile.streakCount ?? 0) + 1, `¡Wishlist guardada! +${awarded} XP`);
+        return awarded;
+      }
+      const response = await fetch("/api/wishlist", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountId: profile.id, item: plan }), signal: AbortSignal.timeout(20000) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "No se pudo guardar el plan en Supabase.");
+      if (authenticatedAccount.current !== profile.id) throw new Error("La cuenta cambió. Consulta el plan al volver a esta cuenta.");
+      const row = result.item;
+      if (!row || typeof row.id !== "string" || row.user_id !== profile.id || wishlistProductKey(row) !== identity)
+        throw new Error("Supabase no confirmó el producto guardado.");
+      const saved: WishlistItem = { id: row.id, name: row.name, price: Number(row.price), savedAt: row.saved_at,
+        strategy: row.strategy, decision: row.strategy === "microsave" ? "microsave" : "postponed",
+        plannedWeeklySave: row.planned_weekly_save == null ? undefined : Number(row.planned_weekly_save),
+        planWeeks: row.plan_weeks == null ? undefined : Number(row.plan_weeks), savedAmount: Number(row.saved_amount ?? 0),
+        holdUntil: row.hold_until ?? undefined, cooldownDays: daysUntil(row.hold_until), awardedXp: Number(result.xpAwarded ?? 0) };
+      setProfile(prev => prev.id !== profile.id ? prev : { ...prev,
+        wishlist: [saved, ...(prev.wishlist ?? []).filter(w => w.id !== saved.id)],
+        wisdomXp: Number.isFinite(result.wisdomXp) ? result.wisdomXp : prev.wisdomXp,
+        streakCount: Number.isFinite(result.streakCount) ? result.streakCount : prev.streakCount });
+      return Number(result.xpAwarded ?? 0);
+    })();
+    pendingWishlist.current.set(accountKey, { signature, operation });
+    void operation.finally(() => { if (pendingWishlist.current.get(accountKey)?.operation === operation) pendingWishlist.current.delete(accountKey); }).catch(() => {});
+    return operation;
   };
 
   const registerPurchaseAnyway = (name: string, price: number, operationId: string, revision?: string): Promise<void> => {
@@ -1338,7 +1315,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         persistDemo({
           ...profile,
           currentBalance: (Math.round(profile.currentBalance * 100) - Math.round(roundedPrice * 100)) / 100,
-          wishlist: (profile.wishlist ?? []).filter((w) => w.name !== name),
+          wishlist: (profile.wishlist ?? []).filter(w => wishlistProductKey(w) !== wishlistProductKey({ name, price })),
           transactions: [
             {
               id: `tx-${Date.now()}`,
@@ -1360,7 +1337,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
       if (!response.ok) throw new Error(result.error ?? "No se pudo registrar la compra.");
       if (ticket !== requestVersion.current) { await refreshProfile(true); return; }
       if (typeof result.currentBalance !== "number" || !Number.isFinite(result.currentBalance)) throw new Error("El servidor no confirmó el saldo.");
-      setProfile(prev => prev.id === profile.id ? { ...prev, currentBalance: result.currentBalance, wishlist: (prev.wishlist ?? []).filter(w => w.name !== name) } : prev);
+      setProfile(prev => prev.id === profile.id ? { ...prev, currentBalance: result.currentBalance, wishlist: (prev.wishlist ?? []).filter(w => wishlistProductKey(w) !== wishlistProductKey({ name, price })) } : prev);
       setAccountFinancialProfile(prev => prev?.id === profile.id ? { ...prev, currentBalance: result.currentBalance } : prev);
       await refreshProfile(true);
     })();
@@ -2439,7 +2416,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
     document.addEventListener("visibilitychange", onVisibility);
     const timer = setInterval(reload, 30_000);
     let channel = supabase.channel("financial-profile-" + profile.id);
-    for (const table of ["profiles", "income_sources", "commitments", "goals", "transactions"]) {
+    for (const table of ["profiles", "income_sources", "commitments", "goals", "transactions", "wishlist_items"]) {
       channel = channel.on("postgres_changes", { event: "*", schema: "public", table, filter: (table === "profiles" ? "id" : "user_id") + "=eq." + profile.id }, reload);
     }
     channel.subscribe();

@@ -1,0 +1,125 @@
+{
+  "evaluatedAt": "2026-10-25T19:17:15.135Z",
+  "engine": "PGlite PostgreSQL",
+  "postgresVersion": "18.6",
+  "syntheticDataOnly": true,
+  "supabaseRead": false,
+  "supabaseWrites": false,
+  "migrationSHA256": "d657ae07ac7d8fe494c3fa8c31552936472d793d2b9e80879881c39968d969b4",
+  "checks": 28,
+  "passed": 28,
+  "results": [
+    {
+      "name": "incremental columns preserve original records",
+      "passed": true
+    },
+    {
+      "name": "real SQL persists the configured micro-saving plan",
+      "passed": true
+    },
+    {
+      "name": "XP awarded only on first insertion",
+      "passed": true
+    },
+    {
+      "name": "repeated confirmations reuse a single product and do not repeat XP",
+      "passed": true
+    },
+    {
+      "name": "database contains one plan after duplicate saves",
+      "passed": true
+    },
+    {
+      "name": "editing uses remaining product savings without touching the amount already saved",
+      "passed": true
+    },
+    {
+      "name": "an impossible configured deadline is rejected",
+      "passed": true
+    },
+    {
+      "name": "non-cent prices are rejected",
+      "passed": true
+    },
+    {
+      "name": "non-positive contributions are rejected",
+      "passed": true
+    },
+    {
+      "name": "NaN monetary values are rejected",
+      "passed": true
+    },
+    {
+      "name": "same name at a different price is a separate product",
+      "passed": true
+    },
+    {
+      "name": "waiting retains its independent strategy",
+      "passed": true
+    },
+    {
+      "name": "waiting product can become micro-saving without duplicate record or XP",
+      "passed": true
+    },
+    {
+      "name": "direct duplicate inserts are blocked by the unique index",
+      "passed": true
+    },
+    {
+      "name": "RLS hides the other account plans",
+      "passed": true
+    },
+    {
+      "name": "RLS rejects inserting for another account",
+      "passed": true
+    },
+    {
+      "name": "another account can save its own independent plan",
+      "passed": true
+    },
+    {
+      "name": "RLS prevents changing a foreign plan",
+      "passed": true
+    },
+    {
+      "name": "anonymous users cannot execute the save RPC",
+      "passed": true
+    },
+    {
+      "name": "saving and editing never debit account balances",
+      "passed": true
+    },
+    {
+      "name": "other goal savings remain exactly unchanged",
+      "passed": true
+    },
+    {
+      "name": "creating a plan never creates an expense",
+      "passed": true
+    },
+    {
+      "name": "closed products cannot be silently reopened as new plans",
+      "passed": true
+    },
+    {
+      "name": "migration can be reapplied without losing plans",
+      "passed": true
+    },
+    {
+      "name": "duplicate legacy rows stop migration without being removed",
+      "passed": true
+    },
+    {
+      "name": "failed migration preserves both original rows",
+      "passed": true
+    },
+    {
+      "name": "name-only legacy uniqueness must be reviewed before migration",
+      "passed": true
+    },
+    {
+      "name": "legacy uniqueness review preserves existing products",
+      "passed": true
+    }
+  ]
+}

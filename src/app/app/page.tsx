@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -39,6 +39,7 @@ import FinancialPlantWidget, {
 } from "@/components/FinancialPlantWidget";
 import FinancialChat from "@/components/FinancialChat";
 import FinancialDataStatus from "@/components/FinancialDataStatus";
+import MicroSavingsPlanModal from "@/components/MicroSavingsPlanModal";
 import { type BottomNavTab } from "@/components/BottomNav";
 import {
   useFinancial,
@@ -730,9 +731,14 @@ function DashboardContent() {
   const [profileStartTab, setProfileStartTab] = useState<"perfil" | "ingresos">("perfil");
   const [showTourModal, setShowTourModal] = useState(false);
   const [isSavingDecision, setIsSavingDecision] = useState(false);
+  const [microPlanOpen, setMicroPlanOpen] = useState(false);
+  const decisionLock = useRef(false);
 
   useEffect(() => {
-    const openIncomeEditor = () => { if (window.location.hash === "#ingresos") { setProfileStartTab("ingresos"); setActiveBottomTab("profile"); } };
+    const openIncomeEditor = () => {
+      if (window.location.hash === "#ingresos") { setProfileStartTab("ingresos"); setActiveBottomTab("profile"); }
+      if (window.location.hash === "#metas") setActiveBottomTab("goals");
+    };
     const timer = setTimeout(openIncomeEditor, 0);
     window.addEventListener("hashchange", openIncomeEditor);
     return () => { clearTimeout(timer); window.removeEventListener("hashchange", openIncomeEditor); };
@@ -950,7 +956,7 @@ function DashboardContent() {
     if (isCelebrating) {
       return selectedDecision === "wait"
         ? `¡Gran jugada ${firstName}! Guardado para reevaluarlo después y ganamos +${decisionXpBonus} XP ☀️`
-        : `¡Plan maestro ${firstName}! Con micro-ahorro protegemos tu quincena y ganamos +${decisionXpBonus} XP ✨`;
+        : `¡Plan guardado ${firstName}! Tu objetivo de micro-ahorro está en Wishlist, sin descontar saldo.${decisionXpBonus ? ` +${decisionXpBonus} XP` : ""}`;
     }
     if (isStormy) {
       return `La compra de "${parsedItemName}" supera el margen calculado y podría afectar gastos o reservas registradas.`;
@@ -1056,8 +1062,9 @@ function DashboardContent() {
 
   // Decision 2: persist a waiting item and show it in Goals.
   const handleDecisionWaitPayroll = async () => {
-    if (isSavingDecision || !parsedItemName.trim() || parsedItemPrice <= 0)
+    if (decisionLock.current || isSavingDecision || !parsedItemName.trim() || parsedItemPrice <= 0)
       return;
+    decisionLock.current = true;
     setIsSavingDecision(true);
     try {
       const earnedXp = await addToWishlist(
@@ -1082,13 +1089,13 @@ function DashboardContent() {
           : "No se pudo guardar la compra.",
       );
     } finally {
+      decisionLock.current = false;
       setIsSavingDecision(false);
     }
   };
 
   const handleDecisionMicroSave = () => {
-    setChatSuggestion({ text: `¿Cuánto tendría que ahorrar para comprar ${parsedItemName} de $${parsedItemPrice} MXN?`, id: Date.now() });
-    document.getElementById("dashboard-financial-chat")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (!decisionLock.current && parsedItemName.trim() && parsedItemPrice > 0) setMicroPlanOpen(true);
   };
 
   const plantSimulationState: PlantSimulationState =
@@ -1155,6 +1162,11 @@ function DashboardContent() {
       onSelectTab={(tab) => setActiveBottomTab(tab)}
       onOpenGuide={() => setShowTourModal(true)}
     >
+      {microPlanOpen && <MicroSavingsPlanModal itemName={parsedItemName} itemPrice={parsedItemPrice}
+        onClose={() => setMicroPlanOpen(false)}
+        onSaved={xp => { setDecisionXpBonus(xp); setSelectedDecision("microsave"); triggerToast("Plan guardado en Wishlist. No se descontó dinero."); }}
+        onViewWishlist={() => { setMicroPlanOpen(false); setActiveBottomTab("goals"); }}
+        onConsultGemini={() => { setMicroPlanOpen(false); setChatSuggestion({ text: `¿Cuánto podría ahorrar para comprar ${parsedItemName} de $${parsedItemPrice} MXN sin afectar mis compromisos?`, id: Date.now() }); document.getElementById("dashboard-financial-chat")?.scrollIntoView({ behavior: "smooth", block: "center" }); }} />}
       {purchaseConfirmation && <PurchaseConfirmationModal itemName={parsedItemName} itemPrice={parsedItemPrice} evaluation={evaluation.response} onCancel={() => setPurchaseConfirmation(false)} onSuccess={() => { setPurchaseConfirmation(false); setSelectedDecision("bought"); triggerToast("Compra registrada correctamente."); }} />}
       {/* Celebratory Streak Popup Banner */}
       <AnimatePresence>
@@ -1640,7 +1652,7 @@ function DashboardContent() {
                             className="w-3 h-3 text-indigo-600"
                             strokeWidth={1.5}
                           />
-                          Sin estrés · +100 XP
+                          Guardar un objetivo
                         </span>
                       </div>
 
@@ -1669,7 +1681,7 @@ function DashboardContent() {
                       type="button"
                       className="w-full h-10 rounded-xl border-2 border-b-4 border-indigo-200 border-b-indigo-300 bg-indigo-50/60 hover:bg-indigo-100/80 text-indigo-950 text-xs font-bold font-heading transition-colors cursor-pointer"
                     >
-                      Calcular plan de ahorro
+                      Configurar plan de ahorro
                     </button>
                   </motion.div>
                 </div>
@@ -1813,6 +1825,7 @@ function DashboardContent() {
          ===================================================================== */}
       {activeBottomTab === "goals" && (
         <GoalsAndCoolingView
+          onConsultPlan={item => { setParsedItemName(item.name); setParsedItemPrice(item.price); setScannerRevision(value => value + 1); setChatSuggestion({ text: `¿Cuánto podría ahorrar para comprar ${item.name} de $${item.price} MXN sin afectar mis compromisos?`, id: Date.now() }); setActiveBottomTab("simulate"); }}
           onShowToast={(msg) => triggerToast(msg)}
           totalProtectedMoney={financialMetrics.totalProtectedMoney}
           goalPct={financialMetrics.goalPct}

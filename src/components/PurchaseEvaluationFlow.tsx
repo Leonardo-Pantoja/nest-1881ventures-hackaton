@@ -29,6 +29,7 @@ import PurchaseConfirmationModal from "./PurchaseConfirmationModal";
 import type { EvaluateApiResponse } from "@/lib/finance/evaluation";
 import FinancialChat from "./FinancialChat";
 import FinancialDataStatus from "./FinancialDataStatus";
+import MicroSavingsPlanModal from "./MicroSavingsPlanModal";
 
 interface PurchaseEvaluationFlowProps {
   itemName: string;
@@ -67,6 +68,7 @@ export default function PurchaseEvaluationFlow({
   const [decisionXpBonus, setDecisionXpBonus] = useState<number>(50);
 
   const [confirming, setConfirming] = useState(false);
+  const [microPlanOpen, setMicroPlanOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const actionLock = useRef(false);
@@ -163,8 +165,7 @@ export default function PurchaseEvaluationFlow({
     void saveAlternative("wait");
   };
   const handleDecisionMicroSave = () => {
-    if (itemPrice <= 0) return;
-    setChatSuggestion({ text: `¿Cuánto tendría que ahorrar para comprar ${itemName} de $${itemPrice} MXN?`, id: Date.now() });
+    if (itemPrice > 0 && itemName.trim() && !actionLock.current) setMicroPlanOpen(true);
   };
 
   const plantSimulationState: PlantSimulationState =
@@ -176,6 +177,10 @@ export default function PurchaseEvaluationFlow({
 
   return (
     <div className="w-full max-w-6xl mx-auto space-y-6">
+      {microPlanOpen && <MicroSavingsPlanModal itemName={itemName} itemPrice={itemPrice}
+        onClose={() => setMicroPlanOpen(false)}
+        onSaved={xp => { setDecisionXpBonus(xp); setSelectedDecision("microsave"); }}
+        onConsultGemini={() => { setMicroPlanOpen(false); setChatSuggestion({ text: `¿Cuánto podría ahorrar para comprar ${itemName} de $${itemPrice} MXN sin afectar mis compromisos?`, id: Date.now() }); }} />}
       {confirming && (
         <PurchaseConfirmationModal
           itemName={itemName}
@@ -546,7 +551,7 @@ export default function PurchaseEvaluationFlow({
                       className="w-3.5 h-3.5 text-indigo-600"
                       strokeWidth={1.5}
                     />
-                    Sin estrés · +100 XP
+                    Guardar un objetivo
                   </span>
                 </div>
 
@@ -576,7 +581,7 @@ export default function PurchaseEvaluationFlow({
                 disabled={itemPrice <= 0}
                 className="w-full py-3 px-4 h-auto whitespace-normal text-center leading-snug rounded-xl border-2 border-b-4 border-indigo-200 border-b-indigo-300 bg-indigo-50/60 hover:bg-indigo-100/80 text-indigo-950 text-xs font-bold font-heading transition-colors cursor-pointer"
               >
-                Calcular plan de ahorro
+                Configurar plan de ahorro
               </button>
             </motion.div>
           </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Snowflake,
@@ -29,6 +30,8 @@ import {
 } from "@/context/FinancialContext";
 import { calculateGoalImpact } from "@/lib/onboarding/goalImpact";
 import { buildPurchaseReport } from "@/lib/onboarding/purchaseReport";
+import MicroSavingsPlanModal from "./MicroSavingsPlanModal";
+import { validPurchasePrice } from "@/lib/finance/money";
 import {
   playTap,
   playCoin,
@@ -37,6 +40,7 @@ import {
 } from "@/lib/soundEffects";
 
 interface GoalsAndCoolingViewProps {
+  onConsultPlan?: (item: WishlistItem) => void;
   onShowToast: (message: string) => void;
   totalProtectedMoney: number;
   goalPct: number;
@@ -52,14 +56,15 @@ interface GoalsAndCoolingViewProps {
 type CoolingFilterTab = "all" | "postponed" | "microsave" | "purchased" | "discarded";
 
 export default function GoalsAndCoolingView({
+  onConsultPlan,
   onShowToast,
   totalProtectedMoney,
   unlockedMedals,
 }: GoalsAndCoolingViewProps) {
+  const router = useRouter();
   const {
     profile,
     financialProfile,
-    contributeToWishlistItem,
     contributeToGoal,
     updateWishlistDecisionStatus,
     saveGoalWithSubGoals,
@@ -67,9 +72,7 @@ export default function GoalsAndCoolingView({
   } = useFinancial();
 
   const [activeFilter, setActiveFilter] = useState<CoolingFilterTab>("all");
-  const [contributionInputs, setContributionInputs] = useState<
-    Record<string, string>
-  >({});
+  const [editingPlan, setEditingPlan] = useState<WishlistItem | null>(null);
   const [busyItemId, setBusyItemId] = useState<string | null>(null);
 
   // Quick "Abonar ahorro" panel state
@@ -208,7 +211,7 @@ export default function GoalsAndCoolingView({
         explanation:
           explanation ||
           (item.strategy === "microsave"
-            ? `Plan de micro-ahorro fijo de $${(item.plannedWeeklySave ?? 400).toLocaleString()} MXN/semana para comprar sin descapitalizarte.`
+            ? "Objetivo matemático de ahorro; sostenibilidad pendiente de validar con tus compromisos e ingresos."
             : `En espera activa por ${item.cooldownDays ?? 6} días para proteger tus compromisos fijos antes de decidir.`),
       };
     });
@@ -356,35 +359,14 @@ export default function GoalsAndCoolingView({
     await runGoalContribution(amount, contribDeduct, contribSubGoalId, options);
   };
 
-  const handleContribute = async (item: WishlistItem) => {
-    const rawVal =
-      contributionInputs[item.id] ?? String(item.plannedWeeklySave ?? 400);
-    const amount = Number(rawVal);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      onShowToast("Ingresa un monto válido para abonar a tu micro-ahorro.");
-      return;
-    }
-    setBusyItemId(item.id);
-    try {
-      await contributeToWishlistItem(item.id, amount);
-      playCoin();
-      setContributionInputs((prev) => ({ ...prev, [item.id]: "" }));
-      onShowToast(
-        `¡Abonaste $${Number(amount.toFixed(2)).toLocaleString()} MXN al plan de "${item.name}"! (+25 XP)`,
-      );
-    } catch (err) {
-      onShowToast(
-        err instanceof Error ? err.message : "Error al registrar abono",
-      );
-    } finally {
-      setBusyItemId(null);
-    }
-  };
-
   const handleDecisionChange = async (
     item: WishlistItem,
     decisionStatus: "purchased" | "discarded",
   ) => {
+    if (decisionStatus === "purchased") {
+      router.push(`/app/evaluate?name=${encodeURIComponent(item.name)}&price=${item.price}`);
+      return;
+    }
     setBusyItemId(item.id);
     try {
       await updateWishlistDecisionStatus(item.id, decisionStatus);
@@ -494,6 +476,11 @@ export default function GoalsAndCoolingView({
       animate={{ opacity: 1, y: 0 }}
       className="space-y-6"
     >
+      {editingPlan && <MicroSavingsPlanModal itemName={editingPlan.name} itemPrice={editingPlan.price}
+        onClose={() => setEditingPlan(null)}
+        onSaved={() => onShowToast("Plan actualizado en Wishlist. Tu ahorro se conserva.")}
+        onViewWishlist={() => setEditingPlan(null)}
+        {...(onConsultPlan ? { onConsultGemini: () => { const item = editingPlan; setEditingPlan(null); onConsultPlan(item); } } : {})} />}
       {/* =====================================================================
           1. HERO BANNER: DINERO PROTEGIDO & TOTAL SALVADO EN DESCARTADAS
          ===================================================================== */}
@@ -711,11 +698,11 @@ export default function GoalsAndCoolingView({
                   item.price > 0
                     ? Math.min(100, Math.round((savedForItem / item.price) * 100))
                     : 0;
-                const weeklySave = Math.max(1, item.plannedWeeklySave ?? 400);
+                const weeklySave = validPurchasePrice(item.plannedWeeklySave) ? item.plannedWeeklySave : null;
                 const weeksLeft =
                   missingForItem <= 0
                     ? 0
-                    : Math.ceil(missingForItem / weeklySave);
+                    : weeklySave === null ? null : Math.ceil(Math.round(missingForItem * 100) / Math.round(weeklySave * 100));
 
                 return (
                   <div
@@ -732,9 +719,8 @@ export default function GoalsAndCoolingView({
                               Plan Micro-ahorro
                             </span>
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold font-heading bg-amber-100 text-amber-900 border border-amber-300">
-                              <Coins className="w-3 h-3 text-amber-600" />$
-                              {weeklySave.toLocaleString()}/sem fijo · +
-                              {item.awardedXp ?? 100} XP
+                              <Coins className="w-3 h-3 text-amber-600" />
+                              {weeklySave === null ? "Aportación por configurar" : `$${weeklySave.toLocaleString()} MXN/sem objetivo`}
                             </span>
                           </div>
                           <h4 className="text-base sm:text-lg font-bold font-heading text-slate-900">
@@ -774,8 +760,9 @@ export default function GoalsAndCoolingView({
                         <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600 font-semibold pt-0.5">
                           <span>
                             {weeksLeft === 0
-                              ? "Listo para comprar sin afectar tu liquidez"
-                              : `${weeksLeft} semana(s) restantes con ahorro fijo de $${weeklySave.toLocaleString()}/sem`}
+                              ? "Objetivo reunido; evalúa la compra antes de decidir"
+                              : weeksLeft === null ? "Tiempo pendiente de configurar"
+                              : `${weeksLeft} semana(s) aritméticas con aportaciones constantes`}
                           </span>
                           <span className="text-violet-800 bg-violet-50 px-2 py-0.5 rounded-md border border-violet-200">
                             Meta global intacta: $
@@ -784,36 +771,11 @@ export default function GoalsAndCoolingView({
                         </div>
                       </div>
 
-                      {/* Contribute Input Row */}
-                      <div className="flex items-center gap-2">
-                        <div className="relative flex-1">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
-                            $
-                          </span>
-                          <input
-                            type="number"
-                            min="1"
-                            step="0.01"
-                            placeholder={`Abonar ej. ${weeklySave}`}
-                            value={contributionInputs[item.id] ?? ""}
-                            onChange={(e) =>
-                              setContributionInputs((prev) => ({
-                                ...prev,
-                                [item.id]: e.target.value,
-                              }))
-                            }
-                            className="w-full h-9 pl-6 pr-3 rounded-xl border border-violet-200 bg-white text-xs font-bold text-slate-900 focus:outline-none focus:border-violet-500"
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          disabled={isBusy}
-                          onClick={() => void handleContribute(item)}
-                          className="h-9 px-3.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold font-heading border-b-2 border-violet-900 cursor-pointer shrink-0 transition-all disabled:opacity-50"
-                        >
-                          ➕ Abonar a este artículo
-                        </button>
-                      </div>
+                      <p className="text-xs text-slate-600">{item.planWeeks ? `Plazo configurado: ${item.planWeeks} semanas. ` : ""}Objetivo matemático; aportación sostenible sin validar. El ahorro de otras metas no cuenta como progreso de este producto.</p>
+
+                      <button type="button" disabled={isBusy} onClick={() => setEditingPlan(item)}
+                        className="w-full rounded-2xl border-2 border-b-4 border-emerald-200 border-b-emerald-500 bg-white p-2 text-sm font-heading font-bold text-emerald-900">Editar plan de ahorro</button>
+
                     </div>
 
                     {/* Bottom Action Buttons */}
@@ -827,8 +789,8 @@ export default function GoalsAndCoolingView({
                         <ShoppingBag className="w-3.5 h-3.5 shrink-0" />
                         <span>
                           {missingForItem <= 0
-                            ? "¡Autorizar compra completada!"
-                            : "Autorizar compra ahora"}
+                            ? "Evaluar compra con objetivo reunido"
+                            : "Evaluar compra ahora"}
                         </span>
                       </button>
                       <button
