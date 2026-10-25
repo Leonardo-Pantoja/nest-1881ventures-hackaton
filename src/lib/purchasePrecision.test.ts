@@ -1,6 +1,6 @@
 
-import { evaluatePurchase } from "./purchaseDecision";
-import type { OnboardingProfile } from "./financialTypes";
+import { evaluatePurchase } from "./onboarding/purchaseDecision";
+import type { OnboardingProfile } from "./onboarding/financialTypes";
 
 const perfil: OnboardingProfile = {
   id: "test-precision",

@@ -4,21 +4,16 @@ import React, { useState, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
-  Sparkles,
   X,
+  Sparkles,
   Loader2,
   Clock,
   ArrowRight,
   Zap,
   Shield,
   PiggyBank,
-  MessageSquare,
-  Send,
-  Camera,
   TrendingUp,
   Target,
-  Bot,
-  User,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import FinancialPlantWidget, {
@@ -31,7 +26,8 @@ import {
   triggerConfettiBurst,
 } from "@/lib/soundEffects";
 import PurchaseConfirmationModal from "./PurchaseConfirmationModal";
-import type { EvaluateApiResponse, ChatTurnMessage } from "@/app/api/evaluate/route";
+import type { EvaluateApiResponse } from "@/lib/finance/evaluation";
+import FinancialChat from "./FinancialChat";
 
 interface PurchaseEvaluationFlowProps {
   itemName: string;
@@ -48,13 +44,6 @@ interface PurchaseEvaluationFlowProps {
   onUpdateEvaluatedItem?: (name: string, price: number, thumb?: string | null, tag?: string | null) => void;
 }
 
-const FOLLOW_UP_SUGGESTIONS = [
-  "¿Qué pasa si espero a mi próxima quincena?",
-  "¿Cómo queda mi saldo en las próximas 6 semanas?",
-  "¿Y si busco una alternativa a mitad de precio?",
-  "¿Cómo funcionaría un plan de micro-ahorro?",
-];
-
 export default function PurchaseEvaluationFlow({
   itemName,
   itemPrice,
@@ -69,7 +58,7 @@ export default function PurchaseEvaluationFlow({
   isStandalonePage = false,
   onUpdateEvaluatedItem,
 }: PurchaseEvaluationFlowProps) {
-  const { profile, mode, addToWishlist } = useFinancial();
+  const { profile, addToWishlist } = useFinancial();
 
   const [selectedDecision, setSelectedDecision] = useState<
     "idle" | "wait" | "microsave" | "bought"
@@ -81,21 +70,8 @@ export default function PurchaseEvaluationFlow({
   const [actionError, setActionError] = useState<string | null>(null);
   const actionLock = useRef(false);
 
-  // Conversational Chat State (/api/evaluate + Gemini)
-  const [chatMessages, setChatMessages] = useState<ChatTurnMessage[]>([]);
-  const [chatInput, setChatInput] = useState("");
-  const [isSendingChat, setIsSendingChat] = useState(false);
-  const [chatImageBase64, setChatImageBase64] = useState<string | null>(null);
-  const [chatImageMime, setChatImageMime] = useState<string | null>(null);
-  const [latestEvaluationOverride, setLatestEvaluationOverride] =
-    useState<{ key: string; data: EvaluateApiResponse } | null>(null);
-  const chatImageInputRef = useRef<HTMLInputElement | null>(null);
-
-  const overrideKey = `${itemName}:${itemPrice}:${apiEvaluation?.financialRevision ?? ""}`;
-  const activeEvaluation =
-    latestEvaluationOverride?.key === overrideKey
-      ? latestEvaluationOverride.data
-      : apiEvaluation;
+  const [chatSuggestion, setChatSuggestion] = useState<{ text: string; id: number } | undefined>();
+  const activeEvaluation = apiEvaluation;
 
   // Core Deterministic Financial Engine (purchaseDecision, purchaseReport, goalImpact, weeklyProjection)
   const metrics = useMemo(() => {
@@ -152,7 +128,7 @@ export default function PurchaseEvaluationFlow({
   const handleDecisionBuyToday = () => {
     if (!metrics.evaluationIncomplete && !saving && itemPrice > 0) setConfirming(true);
   };
-  const saveAlternative = async (strategy: "wait" | "microsave") => {
+  const saveAlternative = async (strategy: "wait") => {
     if (actionLock.current || itemPrice <= 0 || !itemName.trim()) return;
     actionLock.current = true;
     setSaving(true);
@@ -164,12 +140,8 @@ export default function PurchaseEvaluationFlow({
           price: itemPrice,
           cooldownDays: profile.nextPaydayDays,
           strategy,
-          plannedWeeklySave:
-            strategy === "microsave"
-              ? Math.max(100, Math.ceil(itemPrice / 4))
-              : undefined,
         },
-        strategy === "wait" ? 50 : 100,
+        50,
       );
       setDecisionXpBonus(xp);
       setSelectedDecision(strategy);
@@ -189,120 +161,7 @@ export default function PurchaseEvaluationFlow({
     void saveAlternative("wait");
   };
   const handleDecisionMicroSave = () => {
-    void saveAlternative("microsave");
-  };
-
-  // Conversational Chat Handler -> calls /api/evaluate with text or image + follow-up question
-  const handleSendChatMessage = async (customPrompt?: string) => {
-    const questionText = (customPrompt ?? chatInput).trim();
-    if ((!questionText && !chatImageBase64) || isSendingChat) return;
-
-    playTap();
-    const userDisplayMessage =
-      questionText || "📸 Evaluar captura de producto subida";
-    const nextHistory: ChatTurnMessage[] = [
-      ...chatMessages,
-      { role: "user", content: userDisplayMessage },
-    ];
-    setChatMessages(nextHistory);
-    if (!customPrompt) setChatInput("");
-    setIsSendingChat(true);
-
-    // Check if the user typed a new product + price in the chat (e.g., "Tenis $1800")
-    let targetName = itemName;
-    let targetPrice = itemPrice;
-    const priceMatch = questionText.replace(/,/g, "").match(/\$\s*(\d+(?:\.\d+)?)/);
-    if (priceMatch && questionText.length < 45 && !questionText.includes("?")) {
-      const detectedPrice = Math.round(Number(priceMatch[1]));
-      const cleaned = questionText
-        .replace(/\$\s*\d[\d,.]*/g, "")
-        .replace(/\bevalua\b|\bevalúa\b|\bcomprar\b|\bpor\b|\bde\b|\bmxn\b/gi, "")
-        .trim();
-      if (detectedPrice > 0 && cleaned.length >= 2) {
-        targetName = cleaned;
-        targetPrice = detectedPrice;
-        onUpdateEvaluatedItem?.(targetName, targetPrice);
-      }
-    }
-
-    try {
-      const res = await fetch("/api/evaluate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          itemName: targetName || "Producto consultado",
-          itemPrice: targetPrice > 0 ? targetPrice : 500,
-          mode: mode === "demo" ? "demo" : "account",
-          demoProfileId:
-            mode === "demo"
-              ? profile.id === "mateo"
-                ? "mateo"
-                : "carlos"
-              : undefined,
-          imageBase64: chatImageBase64,
-          imageMimeType: chatImageMime,
-          chatMessages: nextHistory,
-          userQuestion: userDisplayMessage,
-        }),
-      });
-
-      const data = (await res.json()) as EvaluateApiResponse & { error?: string };
-      if (!res.ok) {
-        throw new Error(data.error || "No se pudo consultar al copiloto.");
-      }
-
-      if (
-        data.detectedItemName &&
-        data.detectedItemPrice > 0 &&
-        (data.detectedItemName !== itemName || data.detectedItemPrice !== itemPrice)
-      ) {
-        onUpdateEvaluatedItem?.(
-          data.detectedItemName,
-          data.detectedItemPrice,
-          chatImageBase64 || thumbnailDataUrl,
-          storeTag || "Escaneado con Gemini",
-        );
-      }
-
-      setLatestEvaluationOverride({ key: overrideKey, data });
-      const replyText =
-        data.chatReply ||
-        data.aiExplanation ||
-        `${data.headlineLine1} ${data.headlineLine2}`;
-
-      setChatMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: replyText },
-      ]);
-    } catch (err) {
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content:
-            err instanceof Error
-              ? err.message
-              : "No pude procesar esa consulta en este momento.",
-        },
-      ]);
-    } finally {
-      setIsSendingChat(false);
-      setChatImageBase64(null);
-      setChatImageMime(null);
-    }
-  };
-
-  const handleChatImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setChatImageBase64(reader.result);
-        setChatImageMime(file.type || "image/png");
-      }
-    };
-    reader.readAsDataURL(file);
+    setChatSuggestion({ text: `¿Cuánto tendría que ahorrar para comprar ${itemName} de $${itemPrice} MXN?`, id: Date.now() });
   };
 
   const plantSimulationState: PlantSimulationState =
@@ -311,14 +170,6 @@ export default function PurchaseEvaluationFlow({
       : metrics.isDeficit
       ? "danger"
       : "normal";
-
-  const initialCopilotDiagnosis = useMemo(() => {
-    if (!activeEvaluation) return null;
-    if (activeEvaluation.aiExplanation) return activeEvaluation.aiExplanation;
-    const decisionExp =
-      metrics.purchaseDecision?.explanation || activeEvaluation.headlineLine2;
-    return `${activeEvaluation.headlineLine1} ${decisionExp}`;
-  }, [activeEvaluation, metrics.purchaseDecision]);
 
   return (
     <div className="w-full max-w-4xl mx-auto">
@@ -449,7 +300,7 @@ export default function PurchaseEvaluationFlow({
                 </p>
                 <p className="text-[11px] text-emerald-800 leading-snug">
                   {metrics.goalImpact?.delayedByWeeks === 0
-                    ? `Intacto (0 semanas de retraso en "${metrics.goalImpact.goalTitle}")`
+                    ? `No se retiran ahorros de "${metrics.goalImpact.goalTitle}"`
                     : `Protegido · no se retira dinero de "${
                         profile.goal?.title ?? "tu meta"
                       }"`}
@@ -486,170 +337,10 @@ export default function PurchaseEvaluationFlow({
             </div>
           )}
 
-          {/* 3. Conversational Gemini Copilot Window (/api/evaluate) */}
-          <div className="rounded-3xl border-2 border-b-4 border-slate-200 bg-[#FAF8F5] p-4 sm:p-5 space-y-3.5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-2xs">
-                  <MessageSquare className="w-4 h-4" strokeWidth={1.5} />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold font-heading text-slate-900">
-                    Chat con tu Copiloto Financiero
-                  </h3>
-                  <p className="text-[11px] text-slate-500">
-                    Evalúa por texto o imagen y compara escenarios antes de decidir
-                  </p>
-                </div>
-              </div>
-              <span className="text-[10px] font-bold font-heading uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-200">
-                Ahorro fijo protegido
-              </span>
-            </div>
-
-            {/* Messages Thread */}
-            <div className="max-h-60 overflow-y-auto space-y-2.5 pr-1">
-              {initialCopilotDiagnosis && (
-                <div className="flex items-start gap-2.5">
-                  <div className="w-7 h-7 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-800 flex items-center justify-center shrink-0 mt-0.5">
-                    <Bot className="w-4 h-4" strokeWidth={1.5} />
-                  </div>
-                  <div className="rounded-2xl rounded-tl-xs bg-white border border-slate-200 px-3.5 py-2.5 text-xs sm:text-sm text-slate-800 shadow-2xs leading-relaxed">
-                    <p className="font-semibold text-emerald-800 text-[11px] mb-0.5">
-                      Diagnóstico de tu Copiloto
-                    </p>
-                    <p>{initialCopilotDiagnosis}</p>
-                  </div>
-                </div>
-              )}
-
-              {chatMessages.map((msg, index) => (
-                <div
-                  key={index}
-                  className={`flex items-start gap-2.5 ${
-                    msg.role === "user" ? "justify-end" : "justify-start"
-                  }`}
-                >
-                  {msg.role === "assistant" && (
-                    <div className="w-7 h-7 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-800 flex items-center justify-center shrink-0 mt-0.5">
-                      <Bot className="w-4 h-4" strokeWidth={1.5} />
-                    </div>
-                  )}
-                  <div
-                    className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm leading-relaxed shadow-2xs ${
-                      msg.role === "user"
-                        ? "rounded-tr-xs bg-slate-900 text-white"
-                        : "rounded-tl-xs bg-white border border-slate-200 text-slate-800"
-                    }`}
-                  >
-                    {msg.content}
-                  </div>
-                  {msg.role === "user" && (
-                    <div className="w-7 h-7 rounded-xl bg-slate-200 text-slate-700 flex items-center justify-center shrink-0 mt-0.5">
-                      <User className="w-4 h-4" strokeWidth={1.5} />
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              {isSendingChat && (
-                <div
-                  className="flex items-center gap-2 text-xs text-slate-600 px-3 py-2 rounded-2xl rounded-tl-xs bg-white border border-slate-200 w-fit max-w-full"
-                  role="status"
-                  aria-live="polite"
-                >
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600 shrink-0" />
-                  <span>Tu copiloto está pensando</span>
-                  <span className="flex gap-0.5" aria-hidden="true">
-                    <span className="w-1 h-1 rounded-full bg-emerald-500 animate-bounce [animation-delay:-0.3s]" />
-                    <span className="w-1 h-1 rounded-full bg-emerald-500 animate-bounce [animation-delay:-0.15s]" />
-                    <span className="w-1 h-1 rounded-full bg-emerald-500 animate-bounce" />
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Quick Follow-Up Scenario Chips */}
-            <div className="flex flex-wrap gap-1.5">
-              {FOLLOW_UP_SUGGESTIONS.map((suggestion) => (
-                <button
-                  key={suggestion}
-                  type="button"
-                  disabled={isSendingChat}
-                  onClick={() => void handleSendChatMessage(suggestion)}
-                  className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border border-slate-200 hover:border-emerald-300 transition-colors cursor-pointer disabled:opacity-50"
-                >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
-
-            {/* Attached Image Preview in Chat */}
-            {chatImageBase64 && (
-              <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900">
-                <div className="flex items-center gap-2">
-                  <img
-                    src={chatImageBase64}
-                    alt="Adjunto"
-                    className="w-8 h-8 rounded-lg object-cover border border-emerald-300"
-                  />
-                  <span className="font-semibold">
-                    Imagen lista para evaluar con Gemini Vision
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setChatImageBase64(null);
-                    setChatImageMime(null);
-                  }}
-                  className="p-1 text-slate-500 hover:text-slate-800 cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
-
-            {/* Chat Input Form */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                void handleSendChatMessage();
-              }}
-              className="flex items-center gap-2"
-            >
-              <input
-                ref={chatImageInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleChatImageSelect}
-                className="hidden"
-              />
-              <button
-                type="button"
-                onClick={() => chatImageInputRef.current?.click()}
-                className="h-10 px-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 flex items-center gap-1.5 text-xs font-semibold shrink-0 cursor-pointer"
-                title="Subir imagen o captura para evaluar"
-              >
-                <Camera className="w-4 h-4 text-emerald-600" strokeWidth={1.5} />
-                <span className="hidden sm:inline">Imagen</span>
-              </button>
-              <input
-                type="text"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Pregunta sobre alternativas, plazos o escribe otro precio..."
-                className="flex-1 h-10 px-3.5 rounded-xl border border-slate-200 bg-white text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#10B981] focus:outline-none"
-              />
-              <button
-                type="submit"
-                disabled={isSendingChat || (!chatInput.trim() && !chatImageBase64)}
-                className="h-10 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white text-xs font-bold font-heading flex items-center gap-1.5 shrink-0 cursor-pointer transition-colors"
-              >
-                <span>Enviar</span>
-                <Send className="w-3.5 h-3.5" strokeWidth={1.5} />
-              </button>
-            </form>
+          <div className="rounded-3xl border-2 border-b-4 border-slate-200 p-4">
+            <h3 className="font-heading font-bold text-slate-900 mb-3">Chat con tu Copiloto Financiero</h3>
+            <FinancialChat product={itemPrice > 0 ? { name: itemName, price: itemPrice } : null} suggestion={chatSuggestion}
+              onProduct={(product, image) => { setSelectedDecision("idle"); onUpdateEvaluatedItem?.(product.name, product.price, image?.thumbnailDataUrl, image?.storeTag); }} />
           </div>
 
           {/* 4. The 3 Collectible 3D Path Cards with 56x56 Animated Medallions */}
@@ -688,7 +379,7 @@ export default function PurchaseEvaluationFlow({
                       : metrics.isDeficit
                       ? `Te faltan $${metrics.missingLiquidity.toLocaleString()} libres`
                       : activeEvaluation?.status === "precaucion"
-                      ? "Viable con precaución"
+                      ? activeEvaluation.badgeLabel
                       : `Margen: $${Math.max(
                           0,
                           metrics.netAfterPurchase
@@ -709,7 +400,7 @@ export default function PurchaseEvaluationFlow({
                       : metrics.isDeficit
                       ? `La compra supera tu margen por $${metrics.missingLiquidity.toLocaleString()} MXN. Esta simulación no retira dinero de tus reservas ni de tu meta.`
                       : activeEvaluation?.status === "precaucion"
-                      ? `La compra cabe en el margen calculado, pero dejaría menos de la mitad del colchón de seguridad. Esta simulación no retira dinero de tu meta.`
+                      ? activeEvaluation.headlineLine1
                       : `Cubres el gasto con tu dinero libre hoy; esta simulación no retira dinero de tu meta "${profile.goal.title}".`}
                   </p>
                 </div>
@@ -875,7 +566,7 @@ export default function PurchaseEvaluationFlow({
                 disabled={itemPrice <= 0}
                 className="w-full h-11 rounded-xl border-2 border-b-4 border-indigo-200 border-b-indigo-300 bg-indigo-50/60 hover:bg-indigo-100/80 text-indigo-950 text-xs font-bold font-heading transition-colors cursor-pointer"
               >
-                Crear plan de micro-ahorro (+100 XP)
+                Calcular plan de ahorro
               </button>
             </motion.div>
           </div>

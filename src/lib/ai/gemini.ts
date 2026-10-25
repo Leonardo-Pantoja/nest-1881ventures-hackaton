@@ -28,6 +28,18 @@ export async function extractProduct(options: {
   image?: { bytes: Buffer; originalBytes: number; mimeType: string };
   signal?: AbortSignal;
 }): Promise<RecognizedProduct> {
+  return generateStructured({ ...options, schema: productSchema });
+}
+
+/** Shared SDK transport for recognition and the read-only financial assistant. */
+export async function generateStructured<T>(options: {
+  source: "text" | "image" | "chat-intent" | "chat-explanation";
+  prompt: string;
+  systemInstruction?: string;
+  schema: z.ZodType<T>;
+  image?: { bytes: Buffer; originalBytes: number; mimeType: string };
+  signal?: AbortSignal;
+}): Promise<T> {
   const primaryModel = process.env.GEMINI_MODEL?.trim();
   const fallbackModel = process.env.GEMINI_FALLBACK_MODEL?.trim();
   if (!primaryModel || !process.env.GEMINI_API_KEY) throw new ProductAIError("gemini_unavailable", "El reconocimiento no está disponible temporalmente.", 503);
@@ -51,11 +63,12 @@ export async function extractProduct(options: {
         abortSignal: signal,
         httpOptions: { timeout: Math.max(1, GEMINI_TIMEOUT_MS - (Date.now() - started)), retryOptions: { attempts: 1 } },
         thinkingConfig, automaticContinuation: false, maxOutputTokens: 2048, responseMimeType: "application/json",
-        responseJsonSchema: { type: "object", properties: { name: { type: ["string", "null"] }, price: { type: ["number", "null"] }, currency: { type: ["string", "null"] } }, required: ["name", "price", "currency"], additionalProperties: false },
+        systemInstruction: options.systemInstruction,
+        responseJsonSchema: z.toJSONSchema(options.schema),
       } });
       let value: unknown;
       try { value = JSON.parse(result.text || "null"); } catch { throw new ProductAIError("gemini_validation", "Gemini devolvió una respuesta inválida. Puedes reintentar.", 422); }
-      const parsed = productSchema.safeParse(value);
+      const parsed = options.schema.safeParse(value);
       if (!parsed.success) throw new ProductAIError("gemini_validation", "Gemini devolvió datos inválidos. Puedes reintentar.", 422);
       return parsed.data;
     } catch (error) {
@@ -63,7 +76,8 @@ export async function extractProduct(options: {
       providerStatus = Number.isFinite(upstreamStatus) && upstreamStatus > 0 ? upstreamStatus : null;
       const name = error instanceof Error ? error.name : "";
       let mapped: ProductAIError;
-      if (options.signal?.aborted) mapped = new ProductAIError("request_cancelled", "El análisis fue cancelado.", 499);
+      if (options.signal?.aborted && options.signal.reason?.name === "TimeoutError") mapped = new ProductAIError("gemini_local_timeout", "Se agotó el tiempo de espera de Gemini. Puedes reintentar.", 504);
+      else if (options.signal?.aborted) mapped = new ProductAIError("request_cancelled", "El análisis fue cancelado.", 499);
       else if (deadline.aborted || name === "TimeoutError" || name === "AbortError") mapped = new ProductAIError("gemini_local_timeout", "Se agotó el tiempo de espera local de Gemini. Puedes reintentar.", 504);
       else if (error instanceof ProductAIError) mapped = error;
       else if (upstreamStatus === 504) mapped = new ProductAIError("gemini_upstream_504", "Gemini devolvió un error 504 y no terminó el análisis. Puedes reintentar.", 504);
@@ -82,7 +96,7 @@ export async function extractProduct(options: {
       throw mapped;
     } finally {
       // Never log prompts, image contents, provider messages, credentials or financial data.
-      console.info("product_ai", { model, source: options.source, attempt, code, status, providerStatus,
+      console.info(options.source.startsWith("chat-") ? "financial_ai" : "product_ai", { model, source: options.source, attempt, code, status, providerStatus,
         durationMs: Date.now() - attemptStarted, totalDurationMs: Date.now() - started,
         imageBytes: options.image?.bytes.length ?? 0, originalImageBytes: options.image?.originalBytes ?? 0 });
     }

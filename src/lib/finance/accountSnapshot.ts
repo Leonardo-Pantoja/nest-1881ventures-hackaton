@@ -35,8 +35,8 @@ export async function loadAccountSnapshot() {
   let supabase;
   try {
     supabase = await createServerSupabaseClient();
-  } catch (error) {
-    console.error("Supabase client initialization failed:", error);
+  } catch {
+    console.error("Supabase client initialization failed.");
     throw new EvaluationRequestError(
       "No se pudo conectar con el servicio financiero.",
       503,
@@ -54,7 +54,7 @@ export async function loadAccountSnapshot() {
         "authentication_required",
       );
     }
-    console.error("Supabase authentication lookup failed:", authError.message);
+    console.error("Supabase authentication lookup failed.");
     throw new EvaluationRequestError(
       "No se pudo verificar la sesión. Inténtalo de nuevo.",
       503,
@@ -97,7 +97,7 @@ export async function loadAccountSnapshot() {
     goalResult.error,
   ].find((error) => error !== null);
   if (queryError) {
-    console.error("Financial account query failed:", queryError.message);
+    console.error("Financial account query failed.");
     throw new EvaluationRequestError(
       "No fue posible cargar todos tus datos financieros.",
       503,

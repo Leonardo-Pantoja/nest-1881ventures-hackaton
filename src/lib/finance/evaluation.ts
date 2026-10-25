@@ -20,6 +20,8 @@ export interface EvaluateApiResponse {
   badgeLabel:
     | "Compra viable hoy"
     | "Viable con precaución"
+    | "Riesgo en la proyección"
+    | "Proyección por confirmar"
     | "Compromete tu quincena"
     | "Datos financieros incompletos";
   headlineLine1: string;
@@ -84,6 +86,9 @@ export function buildDeterministicEvaluation(
   const projectionAfter = report?.projectionAfter ?? null;
   const projectedBalanceDifference = report?.projectedBalanceDifference ?? null;
   const goalImpact = report?.goalImpact ?? null;
+  const riskWeeks = projectionAfter?.weeks.filter(week => week.belowProtectedFunds).map(week => week.week) ?? [];
+  const futureRisk = riskWeeks.length > 0;
+  const projectionIncomplete = projectionBefore.status === "datos_incompletos" || projectionAfter?.status === "datos_incompletos";
   const isComplete =
     profile.isOnboarded &&
     safe.status === "calculado" &&
@@ -138,7 +143,7 @@ export function buildDeterministicEvaluation(
     isComplete &&
     purchase.remainingSafeToSpend !== null &&
     safe.safetyBuffer !== null &&
-    purchase.remainingSafeToSpend < safe.safetyBuffer * 0.5
+    (futureRisk || projectionIncomplete || purchase.remainingSafeToSpend < safe.safetyBuffer * 0.5)
   ) {
     status = "precaucion";
   } else if (isComplete) {
@@ -159,7 +164,7 @@ export function buildDeterministicEvaluation(
       : status === "excede_el_margen"
         ? "Compromete tu quincena"
         : status === "precaucion"
-          ? "Viable con precaución"
+          ? futureRisk ? "Riesgo en la proyección" : projectionIncomplete ? "Proyección por confirmar" : "Viable con precaución"
           : "Compra viable hoy";
 
   const remaining = purchase.remainingSafeToSpend;
@@ -181,7 +186,11 @@ export function buildDeterministicEvaluation(
           ? `"${itemName}" supera tu margen calculado por $${purchase.exceedsBy.toLocaleString()} MXN.`
           : `"${itemName}" supera tu margen calculado.`
         : status === "precaucion"
-          ? `"${itemName}" cabe en tu margen, pero dejaría menos de la mitad de tu colchón de seguridad disponible.`
+          ? futureRisk
+            ? `"${itemName}" cabe en el margen inmediato, pero la simulación muestra riesgo de tocar fondos protegidos en las semanas ${riskWeeks.join(", ")}.`
+            : projectionIncomplete
+              ? `"${itemName}" cabe en el margen inmediato; la proyección futura está incompleta y no confirma su viabilidad.`
+              : `"${itemName}" cabe en tu margen, pero dejaría poco dinero libre adicional.`
           : `"${itemName}" está dentro de tu margen calculado.`;
 
   return {

@@ -742,6 +742,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profile, setProfile] = useState<FinancialProfile>(cleanProfile);
   const requestVersion = useRef(0);
+  const authenticatedAccount = useRef<string | null>(null);
   const [accountFinancialProfile, setAccountFinancialProfile] = useState<OnboardingProfile | null>(null);
   const [accountVersion, setAccountVersion] = useState("");
   const pendingPurchases = useRef(new Map<string, Promise<void>>());
@@ -775,6 +776,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      authenticatedAccount.current = user.id;
       const [
         profileRes,
         incomeRes,
@@ -1048,7 +1050,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
       setMode("authenticated");
     } catch (error) {
       if (ticket !== requestVersion.current) return;
-      console.error("Financial profile loading failed:", error);
+      console.error("Financial profile loading failed.");
       setProfileError(
         error instanceof Error ? error.message : "Error al cargar el perfil",
       );
@@ -1088,12 +1090,16 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_OUT") {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT" || event === "SIGNED_IN" && session?.user.id !== authenticatedAccount.current) {
+        authenticatedAccount.current = event === "SIGNED_OUT" ? null : session?.user.id ?? null;
         ++requestVersion.current;
+        setAccountFinancialProfile(null); setAccountVersion("");
+        setPendingEvaluationState({ name: "", price: 0, imageName: null });
+        sessionStorage.removeItem(EVAL_STORAGE_KEY);
         sessionStorage.removeItem(DEMO_STORAGE_KEY);
         setProfile(cleanProfile());
-        setMode("anonymous");
+        setMode(event === "SIGNED_OUT" ? "anonymous" : "loading");
         setProfileError(null);
       }
       // Defer Supabase calls outside the auth callback.

@@ -1,0 +1,210 @@
+{
+  "evaluatedAt": "2026-10-25T16:32:01.098Z",
+  "model": "gemini-3.5-flash-lite",
+  "syntheticDataOnly": true,
+  "expectedCases": 10,
+  "completedCases": 10,
+  "approved": 10,
+  "results": [
+    {
+      "case": 1,
+      "source": "live-gemini",
+      "intent": {
+        "operation": "purchase",
+        "productName": "producto",
+        "price": 200,
+        "alternativePrice": null,
+        "weeks": null,
+        "weeklyContribution": null,
+        "upfrontAmount": null,
+        "reserveAmount": null,
+        "goalQuery": null
+      },
+      "reply": "La compra de $200.00 MXN está dentro del margen inmediato calculado. Quedarían $900.00 MXN de dinero libre estimado.\n\nLa simulación de seis semanas no muestra fondos por debajo de las reservas registradas. No garantiza que los ingresos lleguen ni incluye gastos no registrados.\n\nEsta simulación paga con saldo corriente y no retira ahorros de tus metas. La proyección base no descuenta automáticamente sus aportaciones futuras.\n\nSon estimaciones con tus datos registrados, no una garantía de solvencia ni asesoría financiera profesional. Puedes esperar, comparar o actualizar tus datos; la decisión es tuya.\n\n¿Quieres revisar un plan de ahorro con las aportaciones que ya tienes comprometidas?",
+      "quality": {
+        "score": 10,
+        "verdict": "aprobada"
+      }
+    },
+    {
+      "case": 2,
+      "source": "live-gemini",
+      "intent": {
+        "operation": "purchase",
+        "productName": "producto",
+        "price": 400,
+        "alternativePrice": null,
+        "weeks": null,
+        "weeklyContribution": null,
+        "upfrontAmount": null,
+        "reserveAmount": null,
+        "goalQuery": null
+      },
+      "reply": "La compra de $400.00 MXN está dentro del margen inmediato calculado. Quedarían $700.00 MXN de dinero libre estimado.\n\nLa simulación de seis semanas no muestra fondos por debajo de las reservas registradas. No garantiza que los ingresos lleguen ni incluye gastos no registrados.\n\nEsta simulación paga con saldo corriente y no retira ahorros de tus metas. La proyección base no descuenta automáticamente sus aportaciones futuras.\n\nSon estimaciones con tus datos registrados, no una garantía de solvencia ni asesoría financiera profesional. Puedes esperar, comparar o actualizar tus datos; la decisión es tuya.\n\n¿Quieres revisar un plan de ahorro con las aportaciones que ya tienes comprometidas?",
+      "quality": {
+        "score": 10,
+        "verdict": "aprobada"
+      }
+    },
+    {
+      "case": 3,
+      "source": "live-gemini",
+      "intent": {
+        "operation": "purchase",
+        "productName": null,
+        "price": 600,
+        "alternativePrice": null,
+        "weeks": null,
+        "weeklyContribution": null,
+        "upfrontAmount": null,
+        "reserveAmount": null,
+        "goalQuery": null
+      },
+      "reply": "La compra de $600.00 MXN está dentro del margen inmediato calculado. Quedarían $500.00 MXN de dinero libre estimado.\n\nLa simulación de seis semanas no muestra fondos por debajo de las reservas registradas. No garantiza que los ingresos lleguen ni incluye gastos no registrados.\n\nEsta simulación paga con saldo corriente y no retira ahorros de tus metas. La proyección base no descuenta automáticamente sus aportaciones futuras.\n\nSon estimaciones con tus datos registrados, no una garantía de solvencia ni asesoría financiera profesional. Puedes esperar, comparar o actualizar tus datos; la decisión es tuya.\n\n¿Quieres revisar un plan de ahorro con las aportaciones que ya tienes comprometidas?",
+      "quality": {
+        "score": 10,
+        "verdict": "aprobada"
+      }
+    },
+    {
+      "case": 4,
+      "source": "live-gemini",
+      "intent": {
+        "operation": "purchase",
+        "productName": "producto",
+        "price": 700,
+        "alternativePrice": null,
+        "weeks": null,
+        "weeklyContribution": null,
+        "upfrontAmount": null,
+        "reserveAmount": null,
+        "goalQuery": null
+      },
+      "reply": "La compra de $700.00 MXN está dentro del margen inmediato calculado. Quedarían $400.00 MXN de dinero libre estimado.\n\nAunque puede caber en el margen inmediato, esta simulación muestra riesgo de tocar fondos protegidos en las semanas 6. El saldo mínimo proyectado sería $100.00 MXN. Conviene explorar esperar o un precio menor.\n\nEsta simulación paga con saldo corriente y no retira ahorros de tus metas. La proyección base no descuenta automáticamente sus aportaciones futuras.\n\nSon estimaciones con tus datos registrados, no una garantía de solvencia ni asesoría financiera profesional. Puedes esperar, comparar o actualizar tus datos; la decisión es tuya.\n\n¿Quieres revisar un plan de ahorro con las aportaciones que ya tienes comprometidas?",
+      "quality": {
+        "score": 10,
+        "verdict": "aprobada"
+      }
+    },
+    {
+      "case": 5,
+      "source": "live-gemini",
+      "intent": {
+        "operation": "purchase",
+        "productName": "producto",
+        "price": 900,
+        "alternativePrice": null,
+        "weeks": null,
+        "weeklyContribution": null,
+        "upfrontAmount": null,
+        "reserveAmount": null,
+        "goalQuery": null
+      },
+      "reply": "La compra de $900.00 MXN está dentro del margen inmediato calculado. Quedarían $200.00 MXN de dinero libre estimado.\n\nAunque puede caber en el margen inmediato, esta simulación muestra riesgo de tocar fondos protegidos en las semanas 4, 5, 6. El saldo mínimo proyectado sería -$100.00 MXN. Conviene explorar esperar o un precio menor.\n\nEsta simulación paga con saldo corriente y no retira ahorros de tus metas. La proyección base no descuenta automáticamente sus aportaciones futuras.\n\nSon estimaciones con tus datos registrados, no una garantía de solvencia ni asesoría financiera profesional. Puedes esperar, comparar o actualizar tus datos; la decisión es tuya.\n\n¿Quieres revisar un plan de ahorro con las aportaciones que ya tienes comprometidas?",
+      "quality": {
+        "score": 10,
+        "verdict": "aprobada"
+      }
+    },
+    {
+      "case": 6,
+      "source": "live-gemini",
+      "intent": {
+        "operation": "purchase",
+        "productName": null,
+        "price": 1100,
+        "alternativePrice": null,
+        "weeks": null,
+        "weeklyContribution": null,
+        "upfrontAmount": null,
+        "reserveAmount": null,
+        "goalQuery": null
+      },
+      "reply": "La compra de $1,100.00 MXN está dentro del margen inmediato calculado. Quedarían $0.00 MXN de dinero libre estimado.\n\nAunque puede caber en el margen inmediato, esta simulación muestra riesgo de tocar fondos protegidos en las semanas 2, 3, 4, 5, 6. El saldo mínimo proyectado sería -$300.00 MXN. Conviene explorar esperar o un precio menor.\n\nEsta simulación paga con saldo corriente y no retira ahorros de tus metas. La proyección base no descuenta automáticamente sus aportaciones futuras.\n\nSon estimaciones con tus datos registrados, no una garantía de solvencia ni asesoría financiera profesional. Puedes esperar, comparar o actualizar tus datos; la decisión es tuya.\n\n¿Quieres revisar un plan de ahorro con las aportaciones que ya tienes comprometidas?",
+      "quality": {
+        "score": 10,
+        "verdict": "aprobada"
+      }
+    },
+    {
+      "case": 7,
+      "source": "live-gemini",
+      "intent": {
+        "operation": "purchase",
+        "productName": null,
+        "price": 1200,
+        "alternativePrice": null,
+        "weeks": null,
+        "weeklyContribution": null,
+        "upfrontAmount": null,
+        "reserveAmount": null,
+        "goalQuery": null
+      },
+      "reply": "La compra de $1,200.00 MXN excede tu margen calculado de $1,100.00 MXN por $100.00 MXN. Podría afectar gastos, compromisos o reservas protegidas; considera esperar o reducir el precio.\n\nAunque puede caber en el margen inmediato, esta simulación muestra riesgo de tocar fondos protegidos en las semanas 1, 2, 3, 4, 5, 6. El saldo mínimo proyectado sería -$400.00 MXN. Conviene explorar esperar o un precio menor.\n\nEsta simulación paga con saldo corriente y no retira ahorros de tus metas. La proyección base no descuenta automáticamente sus aportaciones futuras.\n\nSon estimaciones con tus datos registrados, no una garantía de solvencia ni asesoría financiera profesional. Puedes esperar, comparar o actualizar tus datos; la decisión es tuya.\n\n¿Quieres revisar un plan de ahorro con las aportaciones que ya tienes comprometidas?",
+      "quality": {
+        "score": 10,
+        "verdict": "aprobada"
+      }
+    },
+    {
+      "case": 8,
+      "source": "live-gemini",
+      "intent": {
+        "operation": "purchase",
+        "productName": null,
+        "price": 2500,
+        "alternativePrice": null,
+        "weeks": null,
+        "weeklyContribution": null,
+        "upfrontAmount": null,
+        "reserveAmount": null,
+        "goalQuery": null
+      },
+      "reply": "El precio de $2,500.00 MXN supera el saldo registrado de $2,000.00 MXN. No se simuló una compra realizada.\n\nLa compra de $2,500.00 MXN excede tu margen calculado de $1,100.00 MXN por $1,400.00 MXN. Podría afectar gastos, compromisos o reservas protegidas; considera esperar o reducir el precio.\n\nEsta simulación paga con saldo corriente y no retira ahorros de tus metas. La proyección base no descuenta automáticamente sus aportaciones futuras.\n\nSon estimaciones con tus datos registrados, no una garantía de solvencia ni asesoría financiera profesional. Puedes esperar, comparar o actualizar tus datos; la decisión es tuya.\n\n¿Quieres revisar un plan de ahorro con las aportaciones que ya tienes comprometidas?",
+      "quality": {
+        "score": 10,
+        "verdict": "aprobada"
+      }
+    },
+    {
+      "case": 9,
+      "source": "live-gemini",
+      "intent": {
+        "operation": "purchase",
+        "productName": null,
+        "price": 200,
+        "alternativePrice": null,
+        "weeks": null,
+        "weeklyContribution": null,
+        "upfrontAmount": null,
+        "reserveAmount": null,
+        "goalQuery": null
+      },
+      "reply": "No hay información suficiente para evaluar esta compra. Confirma la fecha del próximo ingreso, saldo, gastos, pagos y ubicación de ahorros que falten en tu perfil.\n\nLa proyección futura está incompleta: no puedo estimar de forma confiable las próximas seis semanas. El margen inmediato conocido no confirma la viabilidad futura. Revisa fechas, frecuencias, importes y ubicación de los ahorros; no supongo calendarios mensuales ni ingresos variables.\n\nEsta simulación paga con saldo corriente y no retira ahorros de tus metas. La proyección base no descuenta automáticamente sus aportaciones futuras.\n\nSon estimaciones con tus datos registrados, no una garantía de solvencia ni asesoría financiera profesional. Puedes esperar, comparar o actualizar tus datos; la decisión es tuya.\n\n¿Tus ingresos, vencimientos y gastos registrados están actualizados?",
+      "quality": {
+        "score": 10,
+        "verdict": "aprobada"
+      }
+    },
+    {
+      "case": 10,
+      "source": "live-gemini",
+      "intent": {
+        "operation": "purchase",
+        "productName": null,
+        "price": 200,
+        "alternativePrice": null,
+        "weeks": null,
+        "weeklyContribution": null,
+        "upfrontAmount": null,
+        "reserveAmount": null,
+        "goalQuery": null
+      },
+      "reply": "La compra de $200.00 MXN está dentro del margen inmediato calculado. Quedarían $900.00 MXN de dinero libre estimado.\n\nLa proyección futura está incompleta: no puedo estimar de forma confiable las próximas seis semanas. El margen inmediato conocido no confirma la viabilidad futura. Revisa fechas, frecuencias, importes y ubicación de los ahorros; no supongo calendarios mensuales ni ingresos variables.\n\nEsta simulación paga con saldo corriente y no retira ahorros de tus metas. La proyección base no descuenta automáticamente sus aportaciones futuras.\n\nSon estimaciones con tus datos registrados, no una garantía de solvencia ni asesoría financiera profesional. Puedes esperar, comparar o actualizar tus datos; la decisión es tuya.\n\n¿Quieres revisar un plan de ahorro con las aportaciones que ya tienes comprometidas?",
+      "quality": {
+        "score": 10,
+        "verdict": "aprobada"
+      }
+    }
+  ]
+}

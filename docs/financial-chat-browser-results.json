@@ -1,0 +1,16 @@
+{
+  "browser": "isolated headless Chrome",
+  "profile": "synthetic initial Mateo demo",
+  "chatRequests": 2,
+  "typingRequests": 0,
+  "shiftEnterRequests": 0,
+  "deterministicEvaluation": "passed",
+  "realGeminiFollowUp": "passed",
+  "mobileWidth": 390,
+  "horizontalOverflow": false,
+  "runtimeExceptions": [],
+  "screenshots": [
+    "/tmp/antesdegastar-chat-desktop.png",
+    "/tmp/antesdegastar-chat-mobile.png"
+  ]
+}

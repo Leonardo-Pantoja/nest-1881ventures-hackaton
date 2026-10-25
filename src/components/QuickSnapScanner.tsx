@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Camera,
+  ImagePlus,
   Sparkles,
   Loader2,
   Upload,
@@ -39,6 +40,9 @@ interface QuickSnapScannerProps {
   demoProfileId?: string;
   textQuery?: string;
   textFormId?: string;
+  attachmentOnly?: boolean;
+  requireImageConfirmation?: boolean;
+  onAttachmentStart?: () => void;
 }
 
 interface PresetStoreCapture {
@@ -123,7 +127,7 @@ const PRESET_CAPTURES: PresetStoreCapture[] = [
 
 export default function QuickSnapScanner({
   onScanComplete, inlineIconTrigger = false, embedded = false,
-  open, onOpenChange, accessMode = "account", demoProfileId, textQuery, textFormId,
+  open, onOpenChange, accessMode = "account", demoProfileId, textQuery, textFormId, attachmentOnly = false, requireImageConfirmation = false, onAttachmentStart,
 }: QuickSnapScannerProps) {
   const [localOpen, setLocalOpen] = useState(false);
   const isOpen = open ?? localOpen;
@@ -134,6 +138,7 @@ export default function QuickSnapScanner({
   const [draftPrice, setDraftPrice] = useState("");
   const [scanError, setScanError] = useState<string | null>(null);
   const [canRetry, setCanRetry] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const operation = useRef(0);
@@ -147,6 +152,7 @@ export default function QuickSnapScanner({
     controller.current?.abort();
     busy.current = false;
     lastRequest.current = null;
+    setPendingFile(null);
     setCanRetry(false);
     setIsScanning(false); setDraft(null); setPreview(null); setScanError(null); setOpen(false);
   };
@@ -238,15 +244,33 @@ export default function QuickSnapScanner({
     setOpen(true);
     review({ name: preset.productName, price: preset.price, currency: "MXN", source: "demo", thumbnailDataUrl: preset.svgDataUrl, storeTag: `Demo · ${preset.storeName}` });
   };
+  const selectImage = async (file: File) => {
+    onAttachmentStart?.();
+    if (!requireImageConfirmation) { void recognize(file); return; }
+    const id = ++operation.current;
+    controller.current?.abort(); busy.current = false;
+    setOpen(true); setDraft(null); setPendingFile(null); setPreview(null); setIsScanning(false); setCanRetry(false); setScanError(null);
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || !file.size || file.size > 8 * 1024 * 1024) {
+      setScanError("Usa una imagen JPG, PNG o WebP de hasta 8 MB."); return;
+    }
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader(); reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(Error("No se pudo leer la imagen.")); reader.readAsDataURL(file);
+      });
+      if (operation.current !== id) return;
+      setPreview(dataUrl); setPendingFile(file);
+    } catch { if (operation.current === id) setScanError("No se pudo leer la imagen."); }
+  };
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]; event.target.value = "";
-    if (file) void recognize(file);
+    if (file) void selectImage(file);
   };
   const uploadZone = (
     <div onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
       onDragLeave={() => setDragging(false)} onDrop={(event) => {
         event.preventDefault(); setDragging(false);
-        const file = event.dataTransfer.files[0]; if (file) void recognize(file);
+        const file = event.dataTransfer.files[0]; if (file) void selectImage(file);
       }}
       className={`rounded-2xl border-2 border-b-4 p-3 transition-colors ${dragging ? "border-emerald-500 bg-emerald-50" : "border-slate-200 bg-[#FAF8F5]"}`}>
       <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFileUpload} className="hidden" aria-label="Seleccionar imagen del producto" />
@@ -259,6 +283,12 @@ export default function QuickSnapScanner({
   );
   const panel = (
     <div className="space-y-3" aria-busy={isScanning}>
+      {pendingFile && !isScanning && !draft && <div className="rounded-2xl border-2 border-emerald-200 p-3 space-y-2">
+        {preview && <img src={preview} alt="Imagen adjunta por confirmar" className="h-24 w-full object-contain rounded-xl" />}
+        <p className="text-xs text-slate-600">Confirma el análisis para reconocer el producto. Después podrás corregir nombre y precio.</p>
+        <button type="button" onClick={cancel} className="text-xs underline mr-4">Eliminar imagen</button>
+        <button type="button" onClick={() => { const file = pendingFile; setPendingFile(null); void recognize(file); }} className="rounded-xl bg-[#10B981] text-white text-xs font-bold px-3 py-2">Analizar imagen</button>
+      </div>}
       {scanError && <div className="space-y-2"><p role="alert" className="text-xs text-red-600">{scanError}</p>
         {canRetry && <button type="button" disabled={isScanning} onClick={() => {
           const previous = lastRequest.current;
@@ -321,6 +351,10 @@ export default function QuickSnapScanner({
     </motion.button>
     <button type="button" disabled={isScanning} onClick={() => { cancel(); setOpen(true); review({ name: textQuery.trim().slice(0, 200), price: null, currency: "MXN", source: "manual", thumbnailDataUrl: "", storeTag: "Entrada manual" }); }} className="text-xs font-heading text-slate-600 underline cursor-pointer">Ingresar manualmente</button>
   </form>;
+  if (attachmentOnly) return <div className="space-y-3">
+    <button type="button" onClick={() => setOpen(!isOpen)} aria-label="Adjuntar imagen" className="inline-flex items-center gap-2 rounded-xl border-2 border-b-4 border-slate-200 bg-white px-3 py-2 text-xs font-bold font-heading text-slate-700"><ImagePlus className="h-4 w-4 text-emerald-600" />Imagen</button>
+    {isOpen && <div className="space-y-3">{uploadZone}{panel}</div>}
+  </div>;
   if (embedded) return <div className="space-y-3">{textActions}{uploadZone}<AnimatePresence>{isOpen && panel}</AnimatePresence></div>;
   return <>
     <motion.button type="button" whileTap={{ scale: 0.95 }} onClick={() => { playTap(); setOpen(true); }} title="Escanear producto o captura de tienda" aria-label="Escanear producto o captura de tienda"

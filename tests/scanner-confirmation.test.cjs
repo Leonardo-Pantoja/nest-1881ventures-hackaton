@@ -146,19 +146,16 @@ test('typing and rerenders send zero requests; explicit submit sends one and loc
   assert.equal(completions.length, 1); assert.equal(completions[0].price, 4200.5); assert.equal(completions[0].source, 'text');
   assert.equal(requests.length, 1);
 });
-test('Enter uses the explicitly associated form rather than an onChange or effect request', async t => {
+test('dashboard uses the shared chat and scanner retains explicit form submission', async t => {
   const fs = require('node:fs');
   const ts = require('typescript');
   const source = ts.createSourceFile('page.tsx', fs.readFileSync('src/app/app/page.tsx', 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  let associated = false;
+  let integratedChat = false;
   const visit = node => {
-    if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(source) === 'input') {
-      const form = node.attributes.properties.find(p => ts.isJsxAttribute(p) && p.name.getText(source) === 'form');
-      if (form?.initializer?.text === 'product-ai-search') associated = true;
-    }
+    if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(source) === 'FinancialChat') integratedChat = true;
     ts.forEachChild(node, visit);
   };
-  visit(source); assert.equal(associated, true);
+  visit(source); assert.equal(integratedChat, true);
   const { render, requests, type } = setupText(t); type('Monitor de 3000 pesos'); sendText(render); await flush();
   assert.equal(requests.length, 1);
 });

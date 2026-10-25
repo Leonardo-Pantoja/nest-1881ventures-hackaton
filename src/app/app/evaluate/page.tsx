@@ -25,6 +25,7 @@ function EvaluateContent() {
     streakCelebration,
   } = useFinancial();
 
+  const [scanRevision, setScanRevision] = useState(0);
   const [actionToast, setActionToast] = useState<string | null>(null);
 
   const [scannedThumb, setScannedThumb] = useState<string | null>(null);
@@ -82,11 +83,14 @@ function EvaluateContent() {
 
       <div className="space-y-4 max-w-xl mx-auto w-full">
         <QuickSnapScanner
+          attachmentOnly requireImageConfirmation
+          onAttachmentStart={() => setScanRevision(value => value + 1)}
           key={JSON.stringify([mode, profile.id, itemName, itemPrice])}
           accessMode={mode === "demo" ? "demo" : "account"}
           demoProfileId={mode === "demo" ? profile.id : undefined}
           onScanComplete={(scanned: ScannedProductResult) => {
             playTap();
+            setScanRevision(value => value + 1);
             setConfirmedScan(scanned);
             setPendingEvaluation({
               name: scanned.name,
@@ -106,7 +110,7 @@ function EvaluateContent() {
           className="w-full"
         >
           <PurchaseEvaluationFlow
-            key={evaluation.key}
+            key={JSON.stringify([mode, profile.id, scanRevision])}
             itemName={itemName}
             itemPrice={itemPrice}
             thumbnailDataUrl={scannedThumb}
@@ -119,6 +123,7 @@ function EvaluateContent() {
             onClose={() => router.push("/app")}
             onActionCompleted={handleActionCompleted}
             onUpdateEvaluatedItem={(nextName, nextPrice, nextThumb, nextTag) => {
+              setConfirmedScan({ name: nextName, price: nextPrice, thumbnailDataUrl: nextThumb ?? scannedThumb ?? "", storeTag: nextTag ?? scannedStore ?? "Consulta del copiloto" });
               setPendingEvaluation({
                 name: nextName,
                 price: nextPrice,

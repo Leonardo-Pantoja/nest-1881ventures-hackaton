@@ -1,6 +1,6 @@
 
-import { buildPurchaseReport } from "./purchaseReport";
-import type { OnboardingProfile } from "./financialTypes";
+import { buildPurchaseReport } from "./onboarding/purchaseReport";
+import type { OnboardingProfile } from "./onboarding/financialTypes";
 
 // Perfil utilizado en los 10 escenarios
 const perfil: OnboardingProfile = {
