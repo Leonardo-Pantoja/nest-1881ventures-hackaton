@@ -1,12 +1,22 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from "react";
+import { createClient } from "@/lib/supabase/client";
 
 export type LifeContextTag =
   | "estudio"
   | "trabajo"
   | "independiente"
-  | "dependientes";
+  | "dependientes"
+  | "apoyo";
 
 export type PayFrequency = "semanal" | "quincenal" | "mensual";
 
@@ -78,8 +88,20 @@ export const PRELOADED_SANDBOX_PROFILES: Record<string, FinancialProfile> = {
     safetyBuffer: 800,
     dailyEssentialBurn: 250,
     commitments: [
-      { id: "c1", title: "Renta (Complemento)", amount: 2100, dueInDays: 2, category: "Vivienda" },
-      { id: "c2", title: "Tarjeta de Crédito", amount: 500, dueInDays: 4, category: "Deuda" },
+      {
+        id: "c1",
+        title: "Renta (Complemento)",
+        amount: 2100,
+        dueInDays: 2,
+        category: "Vivienda",
+      },
+      {
+        id: "c2",
+        title: "Tarjeta de Crédito",
+        amount: 500,
+        dueInDays: 4,
+        category: "Deuda",
+      },
     ],
     goal: {
       title: "Fondo de emergencia",
@@ -117,7 +139,13 @@ export const PRELOADED_SANDBOX_PROFILES: Record<string, FinancialProfile> = {
     safetyBuffer: 400,
     dailyEssentialBurn: 120,
     commitments: [
-      { id: "c3", title: "Plan Celular", amount: 399, dueInDays: 3, category: "Servicios" },
+      {
+        id: "c3",
+        title: "Plan Celular",
+        amount: 399,
+        dueInDays: 3,
+        category: "Servicios",
+      },
     ],
     goal: {
       title: "Laptop",
@@ -161,7 +189,7 @@ export const EMPTY_NEW_USER_PROFILE: FinancialProfile = {
     title: "Fondo de emergencia",
     targetAmount: 15000,
     currentSaved: 0,
-    weeklyContribution: 500,
+    weeklyContribution: 0,
     deadlineLabel: "Próximos meses",
   },
   wishlist: [],
@@ -172,8 +200,9 @@ export const EMPTY_NEW_USER_PROFILE: FinancialProfile = {
 const LIFE_CONTEXT_LABELS: Record<LifeContextTag, string> = {
   estudio: "Estudio",
   trabajo: "Trabajo",
-  independiente: "Vivo por mi cuenta",
+  independiente: "Pago mi vivienda",
   dependientes: "Mantengo a otras personas",
+  apoyo: "Recibo apoyo económico",
 };
 
 export function buildRoleTagFromContext(tags: LifeContextTag[]): string {
@@ -230,274 +259,524 @@ export function getRealisticEstimateForContext(tags: LifeContextTag[]) {
   };
 }
 
+export type FinancialMode =
+  | "loading"
+  | "anonymous"
+  | "authenticated"
+  | "demo"
+  | "error";
+
+export interface OnboardingData {
+  lifeContext: LifeContextTag[];
+  currentBalance: number;
+  payFrequency: PayFrequency;
+  nextPaydayDays: number;
+  nextPaydayAmount: number;
+  commitments: Commitment[];
+  goalTitle: string;
+  goalTargetAmount: number;
+}
+
 interface FinancialContextType {
   profile: FinancialProfile;
+  mode: FinancialMode;
+  profileError: string | null;
+  refreshProfile: () => Promise<void>;
+  signOut: () => Promise<void>;
   setProfile: React.Dispatch<React.SetStateAction<FinancialProfile>>;
   updateProfile: (partial: Partial<FinancialProfile>) => void;
   loadPreloadedSandboxProfile: (presetKey?: "carlos" | "mateo") => void;
-  startFreshOnboarding: (email?: string) => void;
-  completeOnboarding: (data: {
-    lifeContext: LifeContextTag[];
-    currentBalance: number;
-    payFrequency: PayFrequency;
-    nextPaydayDays: number;
-    nextPaydayAmount: number;
-    commitments: Commitment[];
-    goalTitle: string;
-    goalTargetAmount: number;
-  }) => void;
+  startFreshOnboarding: (email?: string, demo?: boolean) => void;
+  completeOnboarding: (data: OnboardingData, userId?: string) => void;
   pendingEvaluation: PendingPurchaseEvaluation;
   setPendingEvaluation: (item: PendingPurchaseEvaluation) => void;
   addToWishlist: (
     item: Omit<WishlistItem, "id" | "savedAt">,
-    xpReward?: number
-  ) => void;
-  registerPurchaseAnyway: (name: string, price: number) => void;
+    xpReward?: number,
+  ) => Promise<number>;
+  registerPurchaseAnyway: (name: string, price: number) => Promise<void>;
   awardWisdomXp: (amount?: number) => void;
   incrementStreak: (reason?: string) => void;
   streakCelebration: { id: number; count: number; reason: string } | null;
 }
 
-const STORAGE_KEY = "antesdegastar_financial_profile_v1";
+const DEMO_STORAGE_KEY = "antesdegastar_demo_profile_v2";
+const LEGACY_STORAGE_KEY = "antesdegastar_financial_profile_v1";
 const EVAL_STORAGE_KEY = "antesdegastar_pending_eval_v1";
+const FinancialContext = createContext<FinancialContextType | undefined>(
+  undefined,
+);
 
-const FinancialContext = createContext<FinancialContextType | undefined>(undefined);
+const cleanProfile = (): FinancialProfile => ({
+  ...EMPTY_NEW_USER_PROFILE,
+  lifeContext: [],
+  commitments: [],
+  goal: { ...EMPTY_NEW_USER_PROFILE.goal },
+  wishlist: [],
+});
+
+function daysUntil(dateValue?: string | null): number {
+  if (!dateValue) return 0;
+  const [year, month, day] = dateValue.slice(0, 10).split("-").map(Number);
+  if (!year || !month || !day) return 0;
+  const today = new Date();
+  const a = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+  const b = Date.UTC(year, month - 1, day);
+  return Math.max(0, Math.ceil((b - a) / 86400000));
+}
+
+function toFrequency(value?: string | null): PayFrequency {
+  return value === "weekly"
+    ? "semanal"
+    : value === "monthly"
+      ? "mensual"
+      : "quincenal";
+}
 
 export function FinancialProvider({ children }: { children: React.ReactNode }) {
-  const [profile, setProfile] = useState<FinancialProfile>(PRELOADED_SANDBOX_PROFILES.carlos);
-  const [pendingEvaluation, setPendingEvaluationState] = useState<PendingPurchaseEvaluation>({
-    name: "Audífonos Inalámbricos Sony",
-    price: 2300,
-    imageName: null,
-  });
+  const supabase = useMemo(() => createClient(), []);
+  const [mode, setMode] = useState<FinancialMode>("loading");
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profile, setProfile] = useState<FinancialProfile>(cleanProfile);
+  const requestVersion = useRef(0);
+  const [pendingEvaluation, setPendingEvaluationState] =
+    useState<PendingPurchaseEvaluation>({
+      name: "",
+      price: 0,
+      imageName: null,
+    });
   const [streakCelebration, setStreakCelebration] = useState<{
     id: number;
     count: number;
     reason: string;
   } | null>(null);
 
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === "object" && "currentBalance" in parsed) {
-          setProfile({
-            ...PRELOADED_SANDBOX_PROFILES.carlos,
-            ...parsed,
-            lifeContext: Array.isArray(parsed.lifeContext) ? parsed.lifeContext : [],
-            commitments: Array.isArray(parsed.commitments) ? parsed.commitments : [],
-            wishlist: Array.isArray(parsed.wishlist) ? parsed.wishlist : [],
-          });
-        }
-      }
-      const savedEval = localStorage.getItem(EVAL_STORAGE_KEY);
-      if (savedEval) {
-        const parsedEval = JSON.parse(savedEval);
-        if (parsedEval && typeof parsedEval === "object" && "price" in parsedEval) {
-          setPendingEvaluationState(parsedEval);
-        }
-      }
-    } catch {
-      // Ignore localStorage errors
-    }
-  }, []);
+  const refreshProfile = useCallback(async () => {
+    const ticket = ++requestVersion.current;
+    setMode("loading");
+    setProfile(cleanProfile());
+    setProfileError(null);
 
-  const persistProfile = (next: FinancialProfile) => {
-    setProfile(next);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      // Ignore localStorage errors
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+      if (ticket !== requestVersion.current) return;
+      if (authError || !user) {
+        setMode("anonymous");
+        return;
+      }
+
+      const [profileRes, incomeRes, commitmentRes, goalRes, wishlistRes] =
+        await Promise.all([
+          supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+          supabase
+            .from("income_sources")
+            .select("*")
+            .eq("user_id", user.id)
+            .eq("is_active", true)
+            .order("next_payment_date", { ascending: true }),
+          supabase
+            .from("commitments")
+            .select("*")
+            .eq("user_id", user.id)
+            .eq("is_active", true)
+            .order("next_due_date", { ascending: true }),
+          supabase
+            .from("goals")
+            .select("*")
+            .eq("user_id", user.id)
+            .eq("is_active", true)
+            .order("created_at", { ascending: true })
+            .limit(1),
+          supabase
+            .from("wishlist_items")
+            .select("*")
+            .eq("user_id", user.id)
+            .order("updated_at", { ascending: false }),
+        ]);
+      if (ticket !== requestVersion.current) return;
+      for (const result of [
+        profileRes,
+        incomeRes,
+        commitmentRes,
+        goalRes,
+        wishlistRes,
+      ]) {
+        if (result.error) throw result.error;
+      }
+
+      const p = profileRes.data;
+      const nextIncome = incomeRes.data?.[0];
+      const goalRow = goalRes.data?.[0];
+      const tags = (p?.lifestyle_tags ?? []).filter((tag: string) =>
+        [
+          "estudio",
+          "trabajo",
+          "independiente",
+          "dependientes",
+          "apoyo",
+        ].includes(tag),
+      ) as LifeContextTag[];
+
+      setProfile({
+        ...cleanProfile(),
+        id: user.id,
+        name: p?.display_name || user.email?.split("@")[0] || "Tu Perfil",
+        email: user.email ?? "",
+        roleTag: buildRoleTagFromContext(tags),
+        lifeContext: tags,
+        currentBalance: Number(p?.current_balance ?? 0),
+        safetyBuffer: Number(p?.safety_buffer ?? 0),
+        dailyEssentialBurn: Number(p?.daily_essential_budget ?? 0),
+        payFrequency: toFrequency(nextIncome?.frequency),
+        nextPaydayDays: daysUntil(nextIncome?.next_payment_date),
+        nextPaydayAmount: Number(nextIncome?.amount ?? 0),
+        commitments: (commitmentRes.data ?? []).map((item) => ({
+          id: item.id,
+          title: item.title,
+          amount: Number(item.amount),
+          dueInDays: daysUntil(item.next_due_date),
+          category: item.category,
+        })),
+        goal: goalRow
+          ? {
+              title: goalRow.title,
+              targetAmount: Number(goalRow.target_amount),
+              currentSaved: Number(goalRow.current_saved),
+              weeklyContribution: Number(goalRow.weekly_contribution),
+              deadlineLabel: goalRow.target_date ?? "Sin fecha definida",
+            }
+          : {
+              ...EMPTY_NEW_USER_PROFILE.goal,
+              currentSaved: 0,
+              weeklyContribution: 0,
+            },
+        wishlist: (wishlistRes.data ?? []).map((item) => ({
+          id: item.id,
+          name: item.name,
+          price: Number(item.price),
+          savedAt: item.saved_at,
+          plannedWeeklySave:
+            item.planned_weekly_save == null
+              ? undefined
+              : Number(item.planned_weekly_save),
+          cooldownDays: daysUntil(item.hold_until),
+          strategy: item.strategy as "wait" | "microsave",
+        })),
+        wisdomXp: Number(p?.wisdom_xp ?? 0),
+        streakCount: Number(p?.streak_count ?? 0),
+        isOnboarded: Boolean(p?.onboarding_completed_at),
+        plaidConnected: false,
+      });
+      setMode("authenticated");
+    } catch (error) {
+      if (ticket !== requestVersion.current) return;
+      console.error("Financial profile loading failed:", error);
+      setProfileError(
+        error instanceof Error ? error.message : "Error al cargar el perfil",
+      );
+      setMode("error");
     }
+  }, [supabase]);
+
+  useEffect(() => {
+    // Do not reuse the old, shared localStorage profile for different accounts.
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
+    try {
+      const saved = sessionStorage.getItem(DEMO_STORAGE_KEY);
+      if (saved) {
+        const demo = JSON.parse(saved) as FinancialProfile;
+        if (demo?.id && demo?.goal && Array.isArray(demo?.commitments)) {
+          setProfile(demo);
+          setMode("demo");
+        } else {
+          sessionStorage.removeItem(DEMO_STORAGE_KEY);
+          void refreshProfile();
+        }
+      } else {
+        void refreshProfile();
+      }
+      const savedEval = sessionStorage.getItem(EVAL_STORAGE_KEY);
+      if (savedEval) {
+        const value = JSON.parse(savedEval) as PendingPurchaseEvaluation;
+        if (typeof value.price === "number") setPendingEvaluationState(value);
+      }
+    } catch {
+      void refreshProfile();
+    }
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") {
+        ++requestVersion.current;
+        sessionStorage.removeItem(DEMO_STORAGE_KEY);
+        setProfile(cleanProfile());
+        setMode("anonymous");
+        setProfileError(null);
+      }
+      // Defer Supabase calls outside the auth callback.
+      if (event === "SIGNED_IN" && !sessionStorage.getItem(DEMO_STORAGE_KEY)) {
+        setTimeout(() => {
+          void refreshProfile();
+        }, 0);
+      }
+    });
+    return () => {
+      ++requestVersion.current;
+      subscription.unsubscribe();
+    };
+  }, [supabase, refreshProfile]);
+
+  const persistDemo = (value: FinancialProfile) => {
+    setProfile(value);
+    if (mode === "demo")
+      sessionStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(value));
   };
 
   const setPendingEvaluation = (item: PendingPurchaseEvaluation) => {
     setPendingEvaluationState(item);
-    try {
-      localStorage.setItem(EVAL_STORAGE_KEY, JSON.stringify(item));
-    } catch {
-      // Ignore
+    sessionStorage.setItem(EVAL_STORAGE_KEY, JSON.stringify(item));
+  };
+
+  const loadPreloadedSandboxProfile = (
+    presetKey: "carlos" | "mateo" = "carlos",
+  ) => {
+    ++requestVersion.current;
+    const selected = PRELOADED_SANDBOX_PROFILES[presetKey];
+    sessionStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(selected));
+    setProfile({ ...selected });
+    setMode("demo");
+    setProfileError(null);
+  };
+
+  const startFreshOnboarding = (email?: string, demo = false) => {
+    ++requestVersion.current;
+    const fresh = { ...cleanProfile(), email: email || "" };
+    if (demo) {
+      sessionStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(fresh));
+      setMode("demo");
+    } else {
+      sessionStorage.removeItem(DEMO_STORAGE_KEY);
+      setMode("authenticated");
     }
+    setProfile(fresh);
   };
 
-  const updateProfile = (partial: Partial<FinancialProfile>) => {
-    setProfile((prev) => {
-      const updated = { ...prev, ...partial };
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-      } catch {
-        // Ignore
-      }
-      return updated;
-    });
-  };
-
-  const loadPreloadedSandboxProfile = (presetKey: "carlos" | "mateo" = "carlos") => {
-    const selected = PRELOADED_SANDBOX_PROFILES[presetKey] || PRELOADED_SANDBOX_PROFILES.carlos;
-    persistProfile(selected);
-  };
-
-  const startFreshOnboarding = (email?: string) => {
-    const fresh: FinancialProfile = {
-      ...EMPTY_NEW_USER_PROFILE,
-      email: email || "",
-    };
-    persistProfile(fresh);
-  };
-
-  const completeOnboarding = (data: {
-    lifeContext: LifeContextTag[];
-    currentBalance: number;
-    payFrequency: PayFrequency;
-    nextPaydayDays: number;
-    nextPaydayAmount: number;
-    commitments: Commitment[];
-    goalTitle: string;
-    goalTargetAmount: number;
-  }) => {
+  const completeOnboarding = (data: OnboardingData, userId?: string) => {
     const defaults = getRealisticEstimateForContext(data.lifeContext);
-    const roleTag = buildRoleTagFromContext(data.lifeContext);
-    const target = Math.max(500, data.goalTargetAmount || 10000);
-    const suggestedWeekly = Math.max(
-      200,
-      Math.round((data.nextPaydayAmount || defaults.nextPaydayAmount) * 0.08)
-    );
-
     const completed: FinancialProfile = {
-      id: "custom-user",
-      name: profile.email ? profile.email.split("@")[0] : "Tu Perfil",
+      ...cleanProfile(),
+      id: userId ?? "demo-custom-user",
+      name: profile.email?.split("@")[0] || "Tu Perfil",
       email: profile.email,
-      roleTag,
+      roleTag: buildRoleTagFromContext(data.lifeContext),
       lifeContext: data.lifeContext,
       payFrequency: data.payFrequency,
       currentBalance: data.currentBalance,
       nextPaydayDays: data.nextPaydayDays,
-      nextPaydayAmount: data.nextPaydayAmount || defaults.nextPaydayAmount,
+      nextPaydayAmount: data.nextPaydayAmount,
       safetyBuffer: defaults.safetyBuffer,
       dailyEssentialBurn: defaults.dailyEssentialBurn,
       commitments: data.commitments,
       goal: {
         title: data.goalTitle.trim() || "Fondo de emergencia",
-        targetAmount: target,
-        currentSaved: Math.round(target * 0.2),
-        weeklyContribution: suggestedWeekly,
+        targetAmount: data.goalTargetAmount,
+        currentSaved: 0,
+        weeklyContribution: 0,
         deadlineLabel: "Meta activa",
       },
-      wishlist: [
-      {
-        id: "wish-initial-1",
-        name: "Chamarra Impermeable",
-        price: 1450,
-        savedAt: "2026-10-22T10:00:00.000Z",
-        cooldownDays: 6,
-        strategy: "wait",
-      },
-    ],
+      wishlist: [],
+      wisdomXp: 0,
+      streakCount: 0,
       isOnboarded: true,
       plaidConnected: false,
     };
-
-    persistProfile(completed);
+    if (userId) {
+      sessionStorage.removeItem(DEMO_STORAGE_KEY);
+      setProfile(completed);
+      setMode("authenticated");
+      // Database is canonical; reload exact persisted values.
+      void refreshProfile();
+    } else {
+      sessionStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(completed));
+      setProfile(completed);
+      setMode("demo");
+    }
   };
 
-  const addToWishlist = (
+  const updateProfile = (partial: Partial<FinancialProfile>) => {
+    if (mode === "demo") {
+      const updated = { ...profile, ...partial };
+      persistDemo(updated);
+    } else {
+      // Authenticated balance changes must use an atomic database transaction.
+      console.warn(
+        "updateProfile is demo-only until the database mutation is implemented.",
+      );
+    }
+  };
+
+  const announceStreak = (count: number, reason: string) => {
+    const id = Date.now();
+    setStreakCelebration({ id, count, reason });
+    setTimeout(
+      () =>
+        setStreakCelebration((current) =>
+          current?.id === id ? null : current,
+        ),
+      3200,
+    );
+  };
+
+  const addToWishlist = async (
     item: Omit<WishlistItem, "id" | "savedAt">,
-    xpReward = 50
-  ) => {
-    setProfile((prev) => {
-      const existing = prev.wishlist || [];
-      const newItem: WishlistItem = {
-        ...item,
-        id: `wish-${Date.now()}`,
-        savedAt: new Date().toISOString(),
+    xpReward = 50,
+  ): Promise<number> => {
+    if (mode === "demo") {
+      const next = {
+        ...profile,
+        wisdomXp: (profile.wisdomXp ?? 0) + xpReward,
+        streakCount: (profile.streakCount ?? 0) + 1,
+        wishlist: [
+          {
+            ...item,
+            id: `wish-${Date.now()}`,
+            savedAt: new Date().toISOString(),
+          },
+          ...(profile.wishlist || []).filter((w) => w.name !== item.name),
+        ],
       };
-      const nextStreak = (prev.streakCount ?? 3) + 1;
-      const updated = {
-        ...prev,
-        wisdomXp: (prev.wisdomXp || 100) + xpReward,
-        streakCount: nextStreak,
-        wishlist: [newItem, ...existing.filter((w) => w.name !== item.name)],
-      };
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-      } catch {
-        // Ignore
-      }
-      const celId = Date.now();
-      setStreakCelebration({
-        id: celId,
-        count: nextStreak,
-        reason: `¡Enfriamiento activo! +${xpReward} XP`,
-      });
-      setTimeout(() => {
-        setStreakCelebration((cur) => (cur?.id === celId ? null : cur));
-      }, 3200);
-      return updated;
+      persistDemo(next);
+      announceStreak(next.streakCount, `¡Enfriamiento activo! +${xpReward} XP`);
+      return xpReward;
+    }
+
+    if (mode !== "authenticated") {
+      throw new Error("Debes iniciar sesión para guardar compras.");
+    }
+    if (!item.name.trim() || !Number.isFinite(item.price) || item.price <= 0) {
+      throw new Error("Selecciona un producto con precio válido.");
+    }
+
+    const { data, error } = await supabase.rpc("save_wishlist_item", {
+      p_name: item.name.trim(),
+      p_price: item.price,
+      p_strategy: item.strategy ?? "wait",
+      p_cooldown_days: Math.min(365, Math.max(1, item.cooldownDays ?? 7)),
+      p_planned_weekly_save:
+        item.strategy === "microsave" ? (item.plannedWeeklySave ?? 400) : null,
     });
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error("Supabase no devolvió la compra guardada.");
+
+    const saved = data as {
+      id: string;
+      name: string;
+      price: number;
+      saved_at: string;
+      hold_until: string;
+      planned_weekly_save: number | null;
+      strategy: "wait" | "microsave";
+      wisdom_xp: number;
+      streak_count: number;
+      xp_awarded: number;
+    };
+    setProfile((prev) => ({
+      ...prev,
+      wishlist: [
+        {
+          id: saved.id,
+          name: saved.name,
+          price: Number(saved.price),
+          savedAt: saved.saved_at,
+          cooldownDays: daysUntil(saved.hold_until),
+          plannedWeeklySave:
+            saved.planned_weekly_save == null
+              ? undefined
+              : Number(saved.planned_weekly_save),
+          strategy: saved.strategy,
+        },
+        ...(prev.wishlist || []).filter(
+          (w) => w.id !== saved.id && w.name !== saved.name,
+        ),
+      ],
+      wisdomXp: Number(saved.wisdom_xp),
+      streakCount: Number(saved.streak_count),
+    }));
+    return Number(saved.xp_awarded);
   };
 
-  const incrementStreak = (reason = "¡Buena decisión evaluada!") => {
-    setProfile((prev) => {
-      const nextStreak = (prev.streakCount ?? 3) + 1;
-      const updated = {
-        ...prev,
-        streakCount: nextStreak,
-        wisdomXp: (prev.wisdomXp || 100) + 25,
-      };
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-      } catch {
-        // Ignore
-      }
-      const celId = Date.now();
-      setStreakCelebration({
-        id: celId,
-        count: nextStreak,
-        reason,
+  const registerPurchaseAnyway = async (
+    name: string,
+    price: number,
+  ): Promise<void> => {
+    if (mode === "demo") {
+      persistDemo({
+        ...profile,
+        currentBalance: Math.max(0, profile.currentBalance - price),
+        wishlist: (profile.wishlist || []).filter((w) => w.name !== name),
       });
-      setTimeout(() => {
-        setStreakCelebration((cur) => (cur?.id === celId ? null : cur));
-      }, 3000);
-      return updated;
+      return;
+    }
+    if (mode !== "authenticated") {
+      throw new Error("Debes iniciar sesión para registrar una compra.");
+    }
+    if (!name.trim() || !Number.isFinite(price) || price <= 0) {
+      throw new Error("Selecciona un producto con precio válido.");
+    }
+
+    const { data, error } = await supabase.rpc("record_purchase", {
+      p_name: name.trim(),
+      p_price: price,
     });
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error("Supabase no confirmó la compra.");
+    const result = data as { current_balance: number };
+
+    setProfile((prev) => ({
+      ...prev,
+      currentBalance: Number(result.current_balance),
+      wishlist: (prev.wishlist || []).filter((w) => w.name !== name),
+    }));
   };
 
   const awardWisdomXp = (amount = 50) => {
-    setProfile((prev) => {
-      const updated = {
-        ...prev,
-        wisdomXp: (prev.wisdomXp || 100) + amount,
-      };
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-      } catch {
-        // Ignore
-      }
-      return updated;
-    });
+    if (mode !== "demo") return;
+    persistDemo({ ...profile, wisdomXp: (profile.wisdomXp ?? 0) + amount });
   };
 
-  const registerPurchaseAnyway = (name: string, price: number) => {
-    setProfile((prev) => {
-      const updated = {
-        ...prev,
-        currentBalance: Math.max(0, prev.currentBalance - price),
-        wishlist: (prev.wishlist || []).filter((w) => w.name !== name),
-      };
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-      } catch {
-        // Ignore
-      }
-      return updated;
+  const incrementStreak = (reason = "¡Buena decisión evaluada!") => {
+    if (mode !== "demo") return;
+    const count = (profile.streakCount ?? 0) + 1;
+    persistDemo({
+      ...profile,
+      streakCount: count,
+      wisdomXp: (profile.wisdomXp ?? 0) + 25,
     });
+    announceStreak(count, reason);
+  };
+
+  const signOut = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+    sessionStorage.removeItem(DEMO_STORAGE_KEY);
+    sessionStorage.removeItem(EVAL_STORAGE_KEY);
+    ++requestVersion.current;
+    setProfile(cleanProfile());
+    setMode("anonymous");
   };
 
   return (
     <FinancialContext.Provider
       value={{
         profile,
+        mode,
+        profileError,
+        refreshProfile,
+        signOut,
         setProfile,
         updateProfile,
         loadPreloadedSandboxProfile,
@@ -519,8 +798,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
 
 export function useFinancial() {
   const context = useContext(FinancialContext);
-  if (!context) {
+  if (!context)
     throw new Error("useFinancial debe usarse dentro de un FinancialProvider");
-  }
   return context;
 }

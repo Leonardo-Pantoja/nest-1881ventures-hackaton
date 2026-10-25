@@ -137,13 +137,15 @@ const FIVE_EVOLUTION_LEVELS: {
   {
     level: 2,
     title: "Estabilidad",
-    description: "Brote joven: tus compromisos de los próximos días están cubiertos.",
+    description:
+      "Brote joven: tus compromisos de los próximos días están cubiertos.",
     milestone: "100 – 250 XP",
   },
   {
     level: 3,
     title: "Seguridad",
-    description: "Planta frondosa: cuentas con tu colchón de tranquilidad intacto.",
+    description:
+      "Planta frondosa: cuentas con tu colchón de tranquilidad intacto.",
     milestone: "250 – 450 XP",
   },
   {
@@ -155,7 +157,8 @@ const FIVE_EVOLUTION_LEVELS: {
   {
     level: 5,
     title: "Abundancia",
-    description: "Árbol radiante: dominio total de tu liquidez y ahorro constante.",
+    description:
+      "Árbol radiante: dominio total de tu liquidez y ahorro constante.",
     milestone: "700+ XP",
   },
 ];
@@ -431,7 +434,10 @@ function HeroWorldDiorama({
               {autoVoiceEnabled ? (
                 <Volume2 className="w-3.5 h-3.5" strokeWidth={1.5} />
               ) : (
-                <VolumeX className="w-3.5 h-3.5 text-slate-400" strokeWidth={1.5} />
+                <VolumeX
+                  className="w-3.5 h-3.5 text-slate-400"
+                  strokeWidth={1.5}
+                />
               )}
               <span>Voz del Copiloto 🔊</span>
             </button>
@@ -516,21 +522,21 @@ function HeroWorldDiorama({
                         scaleY: 0.93,
                       }
                     : isCelebrating
-                    ? {
-                        rotate: [0, -5, 5, -3, 0],
-                        scale: [1, 1.09, 1.04, 1.07],
-                      }
-                    : {
-                        rotate: [-2, 2, -2],
-                        y: [0, -2, 0],
-                      }
+                      ? {
+                          rotate: [0, -5, 5, -3, 0],
+                          scale: [1, 1.09, 1.04, 1.07],
+                        }
+                      : {
+                          rotate: [-2, 2, -2],
+                          y: [0, -2, 0],
+                        }
                 }
                 transition={
                   isStormy
                     ? { duration: 1.8, repeat: Infinity, ease: "easeInOut" }
                     : isCelebrating
-                    ? { duration: 1.2, ease: "easeOut" }
-                    : { duration: 3.5, repeat: Infinity, ease: "easeInOut" }
+                      ? { duration: 1.2, ease: "easeOut" }
+                      : { duration: 3.5, repeat: Infinity, ease: "easeInOut" }
                 }
               >
                 <path d="M84 110 L87 56 L93 56 L96 110 Z" fill="#78350F" />
@@ -611,8 +617,8 @@ function HeroWorldDiorama({
               isStormy
                 ? "bg-white/95 border-amber-300 border-b-amber-400 text-slate-900"
                 : isCelebrating
-                ? "bg-white/95 border-emerald-400 border-b-emerald-500 text-slate-900"
-                : "bg-white/95 border-white border-b-slate-200 text-slate-900"
+                  ? "bg-white/95 border-emerald-400 border-b-emerald-500 text-slate-900"
+                  : "bg-white/95 border-white border-b-slate-200 text-slate-900"
             }`}
           >
             <div
@@ -631,8 +637,8 @@ function HeroWorldDiorama({
                     {isStormy
                       ? "⚠️ Alerta de tu Árbol"
                       : isCelebrating
-                      ? "🌟 ¡Sabiduría desbloqueada!"
-                      : "💬 Tu Copiloto Vivo"}
+                        ? "🌟 ¡Sabiduría desbloqueada!"
+                        : "💬 Tu Copiloto Vivo"}
                   </span>
 
                   {isDeficit && !isCelebrating && (
@@ -743,6 +749,10 @@ export default function AppDashboardPage() {
   const router = useRouter();
   const {
     profile,
+    mode,
+    profileError,
+    refreshProfile,
+    signOut,
     updateProfile,
     loadPreloadedSandboxProfile,
     setPendingEvaluation,
@@ -754,13 +764,14 @@ export default function AppDashboardPage() {
   const [activeBottomTab, setActiveBottomTab] =
     useState<BottomNavTab>("simulate");
   const [showTourModal, setShowTourModal] = useState(false);
+  const [isSavingDecision, setIsSavingDecision] = useState(false);
 
   // Simulator State
   const [queryText, setQueryText] = useState("");
   const [parsedItemName, setParsedItemName] = useState("");
   const [parsedItemPrice, setParsedItemPrice] = useState<number>(0);
   const [scannedThumbnailUrl, setScannedThumbnailUrl] = useState<string | null>(
-    null
+    null,
   );
   const [scannedStoreTag, setScannedStoreTag] = useState<string | null>(null);
 
@@ -798,6 +809,12 @@ export default function AppDashboardPage() {
     }
   }, []);
 
+  useEffect(() => {
+    if (mode === "anonymous") router.replace("/auth");
+    if (mode === "authenticated" && !profile.isOnboarded)
+      router.replace("/onboarding");
+  }, [mode, profile.isOnboarded, router]);
+
   const triggerToast = (message: string) => {
     const id = Date.now();
     setToastFeedback({ id, message });
@@ -819,22 +836,22 @@ export default function AppDashboardPage() {
 
     const safeToSpend = Math.max(
       0,
-      profile.currentBalance - fixedAndRentTotal - profile.safetyBuffer
+      profile.currentBalance - fixedAndRentTotal - profile.safetyBuffer,
     );
 
     const totalBalance = Math.max(
       1,
       profile.currentBalance ||
-        fixedAndRentTotal + profile.safetyBuffer + safeToSpend
+        fixedAndRentTotal + profile.safetyBuffer + safeToSpend,
     );
 
     const fixedPct = Math.min(
       82,
-      Math.max(15, Math.round((fixedAndRentTotal / totalBalance) * 100))
+      Math.max(15, Math.round((fixedAndRentTotal / totalBalance) * 100)),
     );
     const bufferPct = Math.min(
       35,
-      Math.max(10, Math.round((profile.safetyBuffer / totalBalance) * 100))
+      Math.max(10, Math.round((profile.safetyBuffer / totalBalance) * 100)),
     );
     const freePct = Math.max(8, 100 - fixedPct - bufferPct);
 
@@ -844,18 +861,18 @@ export default function AppDashboardPage() {
 
     const weeklyGoalContribution = Math.max(
       300,
-      profile.goal.weeklyContribution || 500
+      profile.goal.weeklyContribution || 500,
     );
     const weeksGoalDelayed = Math.max(
       1,
-      Math.ceil(parsedItemPrice / weeklyGoalContribution)
+      Math.ceil(parsedItemPrice / weeklyGoalContribution),
     );
 
     // Real-Life Cost Psychology Pills:
     // 1. Work Hours (assuming ~80 work hours per quincena)
     const hourlyWage = Math.max(
       45,
-      Math.round((profile.nextPaydayAmount || 6500) / 80)
+      Math.round((profile.nextPaydayAmount || 6500) / 80),
     );
     const workHoursEquivalent =
       parsedItemPrice > 0
@@ -879,7 +896,7 @@ export default function AppDashboardPage() {
     const suggestedWeeklySave = 400;
     const microSaveWeeks = Math.max(
       1,
-      Math.ceil(parsedItemPrice / suggestedWeeklySave)
+      Math.ceil(parsedItemPrice / suggestedWeeklySave),
     );
 
     const goalPct =
@@ -887,15 +904,15 @@ export default function AppDashboardPage() {
         ? Math.min(
             100,
             Math.round(
-              (profile.goal.currentSaved / profile.goal.targetAmount) * 100
-            )
+              (profile.goal.currentSaved / profile.goal.targetAmount) * 100,
+            ),
           )
         : 0;
 
     // Total Protected Money in Impulse Freezer ("Compras en Enfriamiento 🧊")
     const totalProtectedMoney = (profile.wishlist || []).reduce(
       (sum, item) => sum + item.price,
-      0
+      0,
     );
 
     let currentLevel: PlantLevel = 2;
@@ -903,7 +920,7 @@ export default function AppDashboardPage() {
       profile.goal.targetAmount > 0
         ? profile.goal.currentSaved / profile.goal.targetAmount
         : 0;
-    const baseXp = profile.wisdomXp || 120;
+    const baseXp = profile.wisdomXp ?? 0;
     if (safeToSpend <= 0) {
       currentLevel = 1;
     } else if (safeToSpend < profile.safetyBuffer * 1.4 && goalRatio < 0.45) {
@@ -950,7 +967,7 @@ export default function AppDashboardPage() {
 
   // Build Live RPG Speech Message
   const rpgSpeechMessage = useMemo(() => {
-    const firstName = (profile.name || "Carlos").split(" ")[0];
+    const firstName = (profile.name || "Amigo").split(" ")[0];
     const isStormy =
       financialMetrics.isDeficit &&
       selectedDecision !== "wait" &&
@@ -960,8 +977,8 @@ export default function AppDashboardPage() {
 
     if (isCelebrating) {
       return selectedDecision === "wait"
-        ? `¡Gran jugada ${firstName}! Guardado en el congelador por ${profile.nextPaydayDays} días y subimos +50 XP ☀️`
-        : `¡Plan maestro ${firstName}! Con micro-ahorro protegemos tu quincena y ganamos +100 XP ✨`;
+        ? `¡Gran jugada ${firstName}! Guardado en el congelador por ${profile.nextPaydayDays} días y ganamos +${decisionXpBonus} XP ☀️`
+        : `¡Plan maestro ${firstName}! Con micro-ahorro protegemos tu quincena y ganamos +${decisionXpBonus} XP ✨`;
     }
     if (isStormy) {
       return `¡Cuidado ${firstName}! Con "${parsedItemName}" ($${parsedItemPrice.toLocaleString()}) nos quedaríamos sin para la renta 🌧️`;
@@ -969,13 +986,14 @@ export default function AppDashboardPage() {
     if (parsedItemPrice > 0) {
       return `¡Sí nos alcanza para "${parsedItemName}"! Aún conservarías $${Math.max(
         0,
-        financialMetrics.safeToSpend - parsedItemPrice
+        financialMetrics.safeToSpend - parsedItemPrice,
       ).toLocaleString()} MXN libres ☀️`;
     }
     return `¡Hola ${firstName}! Tienes $${financialMetrics.safeToSpend.toLocaleString()} MXN libres hoy. ¿Qué evaluamos? 🌱`;
   }, [
     profile.name,
     profile.nextPaydayDays,
+    decisionXpBonus,
     financialMetrics.isDeficit,
     financialMetrics.safeToSpend,
     selectedDecision,
@@ -992,7 +1010,7 @@ export default function AppDashboardPage() {
       const cleanText = textToRead
         .replace(
           /[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu,
-          ""
+          "",
         )
         .replace(/\$/g, "")
         .replace(/MXN/g, "pesos")
@@ -1009,7 +1027,7 @@ export default function AppDashboardPage() {
           (v) =>
             v.lang.includes("es-MX") ||
             v.lang.includes("es-ES") ||
-            v.lang.startsWith("es")
+            v.lang.startsWith("es"),
         ) || null;
       if (spanishVoice) {
         utterance.voice = spanishVoice;
@@ -1040,7 +1058,7 @@ export default function AppDashboardPage() {
     let domain = "amazon.com.mx";
     try {
       const parsed = new URL(
-        rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`
+        rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`,
       );
       domain = parsed.hostname.replace(/^www\./, "");
     } catch {
@@ -1058,11 +1076,19 @@ export default function AppDashboardPage() {
     let extractedPrice = 2300;
     let thumb = STORE_URL_PRESETS[0].svgThumb;
 
-    if (lower.includes("tenis") || lower.includes("nike") || lower.includes("jordan")) {
+    if (
+      lower.includes("tenis") ||
+      lower.includes("nike") ||
+      lower.includes("jordan")
+    ) {
       extractedName = "Tenis Nike Air Force 1";
       extractedPrice = 1800;
       thumb = STORE_URL_PRESETS[1].svgThumb;
-    } else if (lower.includes("switch") || lower.includes("juego") || lower.includes("gamer")) {
+    } else if (
+      lower.includes("switch") ||
+      lower.includes("juego") ||
+      lower.includes("gamer")
+    ) {
       extractedName = "Videojuego Edición Especial";
       extractedPrice = 1200;
     } else {
@@ -1182,59 +1208,117 @@ export default function AppDashboardPage() {
     }
   };
 
-  // Decision 1: "Comprar hoy"
-  const handleDecisionBuyToday = () => {
-    playDamage();
+  // Decision 1: selecting a scenario is not the same as confirming a real expense.
+  const handleDecisionBuyToday = async () => {
+    if (isSavingDecision || !parsedItemName.trim() || parsedItemPrice <= 0)
+      return;
     setSelectedDecision("bought");
-    registerPurchaseAnyway(parsedItemName, parsedItemPrice);
-    triggerToast(
-      `Compra registrada: −$${parsedItemPrice.toLocaleString()} MXN (${parsedItemName})`
-    );
+
+    if (mode === "authenticated") {
+      const confirmed = window.confirm(
+        `¿Ya realizaste esta compra por $${parsedItemPrice.toLocaleString()} MXN?\n\n` +
+          "Aceptar la registrará como gasto real y descontará tu saldo. " +
+          "Cancelar solo seleccionará esta alternativa para compararla.",
+      );
+      if (!confirmed) {
+        triggerToast("Solo simulación: no se descontó dinero de tu cuenta.");
+        return;
+      }
+    }
+
+    setIsSavingDecision(true);
+    try {
+      await registerPurchaseAnyway(parsedItemName, parsedItemPrice);
+      playDamage();
+      triggerToast(
+        `Compra registrada: −$${parsedItemPrice.toLocaleString()} MXN (${parsedItemName})`,
+      );
+    } catch (error) {
+      setSelectedDecision("idle");
+      console.error("Purchase save failed:", error);
+      triggerToast(
+        error instanceof Error
+          ? error.message
+          : "No se pudo registrar la compra.",
+      );
+    } finally {
+      setIsSavingDecision(false);
+    }
   };
 
-  // Decision 2: "Esperar a tu nómina (en X días)" -> Saves to "Compras en Enfriamiento 🧊" (+50 XP)
-  const handleDecisionWaitPayroll = () => {
-    playCoin();
-    triggerConfettiBurst();
-    setDecisionXpBonus(50);
-    setSelectedDecision("wait");
-    addToWishlist(
-      {
-        name: parsedItemName,
-        price: parsedItemPrice,
-        cooldownDays: profile.nextPaydayDays,
-        strategy: "wait",
-      },
-      50
-    );
-    triggerToast(
-      `🧊 ¡Guardado en tu Congelador por ${profile.nextPaydayDays} días! Acabas de proteger $${parsedItemPrice.toLocaleString()} MXN de tu quincena`
-    );
+  // Decision 2: persist a waiting item and show it in Goals.
+  const handleDecisionWaitPayroll = async () => {
+    if (isSavingDecision || !parsedItemName.trim() || parsedItemPrice <= 0)
+      return;
+    setIsSavingDecision(true);
+    try {
+      const earnedXp = await addToWishlist(
+        {
+          name: parsedItemName,
+          price: parsedItemPrice,
+          cooldownDays: Math.max(1, profile.nextPaydayDays || 7),
+          strategy: "wait",
+        },
+        50,
+      );
+      playCoin();
+      triggerConfettiBurst();
+      setDecisionXpBonus(earnedXp);
+      setSelectedDecision("wait");
+      triggerToast(`🧊 Guardado en Retos y Metas: ${parsedItemName}`);
+    } catch (error) {
+      console.error("Wishlist save failed:", error);
+      triggerToast(
+        error instanceof Error
+          ? error.message
+          : "No se pudo guardar la compra.",
+      );
+    } finally {
+      setIsSavingDecision(false);
+    }
   };
 
-  // Decision 3: "Plan de Micro-ahorro" -> Saves to "Compras en Enfriamiento 🧊" (+100 XP)
-  const handleDecisionMicroSave = () => {
-    playCoin();
-    triggerConfettiBurst();
-    setDecisionXpBonus(100);
-    setSelectedDecision("microsave");
-    addToWishlist(
-      {
-        name: parsedItemName,
-        price: parsedItemPrice,
-        plannedWeeklySave: financialMetrics.suggestedWeeklySave,
-        cooldownDays: profile.nextPaydayDays,
-        strategy: "microsave",
-      },
-      100
-    );
-    triggerToast(
-      `🧊 ¡Guardado en tu Congelador por ${profile.nextPaydayDays} días! Acabas de proteger $${parsedItemPrice.toLocaleString()} MXN de tu quincena`
-    );
+  // Decision 3: switch the same item to a weekly micro-saving plan.
+  const handleDecisionMicroSave = async () => {
+    if (isSavingDecision || !parsedItemName.trim() || parsedItemPrice <= 0)
+      return;
+    setIsSavingDecision(true);
+    try {
+      const earnedXp = await addToWishlist(
+        {
+          name: parsedItemName,
+          price: parsedItemPrice,
+          plannedWeeklySave: financialMetrics.suggestedWeeklySave,
+          cooldownDays: Math.max(1, profile.nextPaydayDays || 7),
+          strategy: "microsave",
+        },
+        100,
+      );
+      playCoin();
+      triggerConfettiBurst();
+      setDecisionXpBonus(earnedXp);
+      setSelectedDecision("microsave");
+      triggerToast(
+        `💰 Plan de micro-ahorro guardado en Retos y Metas: ${parsedItemName}`,
+      );
+    } catch (error) {
+      console.error("Micro-saving plan save failed:", error);
+      triggerToast(
+        error instanceof Error ? error.message : "No se pudo guardar el plan.",
+      );
+    } finally {
+      setIsSavingDecision(false);
+    }
   };
 
   const handleQuickExpenseSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (mode !== "demo") {
+      triggerToast(
+        "El registro de gastos reales aún requiere una operación en Supabase.",
+      );
+      return;
+    }
     if (!quickExpenseInput.trim()) return;
 
     const normalized = quickExpenseInput.replace(/,/g, "");
@@ -1250,7 +1334,7 @@ export default function AppDashboardPage() {
     });
 
     triggerToast(
-      `Gasto registrado: −$${amount.toLocaleString()} MXN (${quickExpenseInput.trim()})`
+      `Gasto registrado: −$${amount.toLocaleString()} MXN (${quickExpenseInput.trim()})`,
     );
     setQuickExpenseInput("");
     setIsQuickExpenseOpen(false);
@@ -1260,10 +1344,44 @@ export default function AppDashboardPage() {
     selectedDecision === "wait" || selectedDecision === "microsave"
       ? "recovered"
       : financialMetrics.isDeficit
-      ? "danger"
-      : "normal";
+        ? "danger"
+        : "normal";
 
   const hasSelectedProduct = parsedItemPrice > 0;
+
+  if (mode === "loading") {
+    return (
+      <div className="min-h-screen grid place-items-center">
+        Cargando tu perfil financiero...
+      </div>
+    );
+  }
+  if (mode === "error") {
+    return (
+      <div className="min-h-screen grid place-items-center p-6 text-center">
+        <div>
+          <p role="alert">No pudimos cargar tu perfil: {profileError}</p>
+          <button
+            type="button"
+            onClick={() => void refreshProfile()}
+            className="mt-3 underline"
+          >
+            Reintentar
+          </button>
+        </div>
+      </div>
+    );
+  }
+  if (
+    mode === "anonymous" ||
+    (mode === "authenticated" && !profile.isOnboarded)
+  ) {
+    return (
+      <div className="min-h-screen grid place-items-center">
+        Redirigiendo...
+      </div>
+    );
+  }
 
   return (
     <AppShell
@@ -1359,7 +1477,10 @@ export default function AppDashboardPage() {
                 onClick={handleDemoStoreLinkClick}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50 hover:border-emerald-200 text-xs font-bold font-heading text-slate-700 hover:text-emerald-800 transition-colors cursor-pointer"
               >
-                <Link2 className="w-3.5 h-3.5 text-emerald-600" strokeWidth={1.5} />
+                <Link2
+                  className="w-3.5 h-3.5 text-emerald-600"
+                  strokeWidth={1.5}
+                />
                 <span>🔗 Probar con link de tienda</span>
               </motion.button>
             </div>
@@ -1445,7 +1566,9 @@ export default function AppDashboardPage() {
                     />
                     <span>
                       ⏱️ Equivale a{" "}
-                      <strong>{financialMetrics.workHoursEquivalent} horas</strong>{" "}
+                      <strong>
+                        {financialMetrics.workHoursEquivalent} horas
+                      </strong>{" "}
                       de tu trabajo
                     </span>
                   </span>
@@ -1570,6 +1693,7 @@ export default function AppDashboardPage() {
                   {/* CARTA 1: Comprar hoy */}
                   <motion.div
                     onClick={handleDecisionBuyToday}
+                    aria-disabled={isSavingDecision}
                     className={`rounded-3xl bg-white border-2 border-b-4 p-4 sm:p-5 shadow-sm flex flex-col justify-between gap-3.5 transition-all hover:-translate-y-1 active:translate-y-0.5 cursor-pointer ${
                       selectedDecision === "bought"
                         ? "border-amber-400 border-b-amber-600 ring-2 ring-amber-400/20"
@@ -1598,7 +1722,7 @@ export default function AppDashboardPage() {
                             ? `Te faltan $${financialMetrics.missingLiquidity.toLocaleString()} de liquidez libre`
                             : `Margen: $${Math.max(
                                 0,
-                                financialMetrics.netAfterPurchase
+                                financialMetrics.netAfterPurchase,
                               ).toLocaleString()}`}
                         </span>
                       </div>
@@ -1640,6 +1764,7 @@ export default function AppDashboardPage() {
                   {/* CARTA 2 (Destacada Esmeralda): Esperar a tu nómina */}
                   <motion.div
                     onClick={handleDecisionWaitPayroll}
+                    aria-disabled={isSavingDecision}
                     className={`rounded-3xl bg-white border-2 border-b-4 p-4 sm:p-5 shadow-sm flex flex-col justify-between gap-3.5 transition-all hover:-translate-y-1 active:translate-y-0.5 cursor-pointer ${
                       selectedDecision === "wait"
                         ? "border-[#10B981] border-b-emerald-700 ring-4 ring-emerald-500/15"
@@ -1687,7 +1812,9 @@ export default function AppDashboardPage() {
                       <div className="p-2.5 rounded-2xl bg-emerald-50/70 border border-emerald-200/80 space-y-1">
                         <div className="flex justify-between text-[10px] font-bold font-heading text-emerald-900">
                           <span>Congelador de compras 🧊</span>
-                          <span>Protege ${parsedItemPrice.toLocaleString()}</span>
+                          <span>
+                            Protege ${parsedItemPrice.toLocaleString()}
+                          </span>
                         </div>
                         <div className="w-full h-1.5 rounded-full bg-emerald-200/70 overflow-hidden">
                           <div className="h-full w-full bg-[#10B981] rounded-full" />
@@ -1710,6 +1837,7 @@ export default function AppDashboardPage() {
                   {/* CARTA 3: Plan de Micro-ahorro */}
                   <motion.div
                     onClick={handleDecisionMicroSave}
+                    aria-disabled={isSavingDecision}
                     className={`rounded-3xl bg-white border-2 border-b-4 p-4 sm:p-5 shadow-sm flex flex-col justify-between gap-3.5 transition-all hover:-translate-y-1 active:translate-y-0.5 cursor-pointer ${
                       selectedDecision === "microsave"
                         ? "border-indigo-400 border-b-indigo-600 ring-2 ring-indigo-400/20"
@@ -1762,8 +1890,12 @@ export default function AppDashboardPage() {
 
                       <div className="p-2.5 rounded-2xl bg-indigo-50/70 border border-indigo-200/80 space-y-1">
                         <div className="flex justify-between text-[10px] font-bold font-heading text-indigo-900">
-                          <span>Meta en {financialMetrics.microSaveWeeks} sem</span>
-                          <span>${financialMetrics.suggestedWeeklySave}/sem</span>
+                          <span>
+                            Meta en {financialMetrics.microSaveWeeks} sem
+                          </span>
+                          <span>
+                            ${financialMetrics.suggestedWeeklySave}/sem
+                          </span>
                         </div>
                         <div className="w-full h-1.5 rounded-full bg-indigo-200/70 overflow-hidden">
                           <div className="h-full w-4/5 bg-indigo-500 rounded-full" />
@@ -1775,7 +1907,8 @@ export default function AppDashboardPage() {
                       type="button"
                       className="w-full h-10 rounded-xl border-2 border-b-4 border-indigo-200 border-b-indigo-300 bg-indigo-50/60 hover:bg-indigo-100/80 text-indigo-950 text-xs font-bold font-heading transition-colors cursor-pointer"
                     >
-                      Apartar ${financialMetrics.suggestedWeeklySave}/sem (+100 XP)
+                      Apartar ${financialMetrics.suggestedWeeklySave}/sem (+100
+                      XP)
                     </button>
                   </motion.div>
                 </div>
@@ -1820,8 +1953,7 @@ export default function AppDashboardPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
               {FIVE_EVOLUTION_LEVELS.map((item) => {
-                const isCurrent =
-                  item.level === financialMetrics.currentLevel;
+                const isCurrent = item.level === financialMetrics.currentLevel;
                 return (
                   <div
                     key={item.level}
@@ -1920,7 +2052,10 @@ export default function AppDashboardPage() {
           <div className="bg-gradient-to-br from-emerald-50 via-white to-sky-50/70 rounded-3xl border-2 border-b-4 border-emerald-300 border-b-emerald-500 shadow-sm p-6 sm:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
             <div className="space-y-2">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold font-heading bg-white text-emerald-800 border border-emerald-200 shadow-2xs">
-                <Snowflake className="w-3.5 h-3.5 text-sky-500" strokeWidth={1.5} />
+                <Snowflake
+                  className="w-3.5 h-3.5 text-sky-500"
+                  strokeWidth={1.5}
+                />
                 El Congelador de Compras Impulsivas 🧊
               </span>
               <h2 className="text-xl sm:text-2xl font-bold font-heading text-slate-900">
@@ -2078,10 +2213,7 @@ export default function AppDashboardPage() {
                 <span className="text-base font-bold font-heading text-slate-900">
                   Medallas Desbloqueadas
                 </span>
-                <Trophy
-                  className="w-4 h-4 text-amber-500"
-                  strokeWidth={1.5}
-                />
+                <Trophy className="w-4 h-4 text-amber-500" strokeWidth={1.5} />
               </div>
 
               <div className="space-y-2">
@@ -2124,71 +2256,109 @@ export default function AppDashboardPage() {
               </div>
               <div>
                 <h2 className="text-xl font-bold font-heading text-slate-900">
-                  Cambiar Perfil de Simulación
+                  {mode === "demo"
+                    ? "Cambiar Perfil de Simulación"
+                    : "Mi cuenta"}
                 </h2>
                 <p className="text-sm text-slate-500">
-                  Elige un perfil precargado o configura tus datos desde cero
+                  {mode === "demo"
+                    ? "Elige un perfil precargado o configura tus datos desde cero"
+                    : "Consulta tu perfil financiero autenticado"}
                 </p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {(["carlos", "mateo"] as const).map((key) => {
-                const item = PRELOADED_SANDBOX_PROFILES[key];
-                const isCurrent = profile.id === item.id;
-                return (
-                  <motion.button
-                    key={key}
-                    type="button"
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => {
-                      playCoin();
-                      loadPreloadedSandboxProfile(key);
-                      setActiveBottomTab("simulate");
-                      triggerToast(`Perfil cargado: ${item.name}`);
-                    }}
-                    className={`text-left p-5 rounded-2xl border-2 border-b-4 transition-all flex items-center justify-between cursor-pointer ${
-                      isCurrent
-                        ? "bg-emerald-50/50 border-[#10B981] border-b-emerald-600 shadow-2xs"
-                        : "bg-white border-slate-200 border-b-slate-300 hover:border-slate-300"
-                    }`}
-                  >
-                    <div className="space-y-1">
-                      <p className="text-base font-bold font-heading text-slate-900">
-                        {item.name}
-                      </p>
-                      <p className="text-xs text-slate-600">
-                        Saldo: ${item.currentBalance.toLocaleString()} MXN ·{" "}
-                        {item.commitments.length} compromisos fijos
-                      </p>
-                      <p className="text-[11px] text-slate-400">
-                        Meta: {item.goal.title} ($
-                        {item.goal.targetAmount.toLocaleString()})
-                      </p>
-                    </div>
-                    {isCurrent && (
-                      <CheckCircle2
-                        className="w-5 h-5 text-[#10B981] shrink-0"
-                        strokeWidth={1.5}
-                      />
-                    )}
-                  </motion.button>
-                );
-              })}
-            </div>
+            {mode === "demo" ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {(["carlos", "mateo"] as const).map((key) => {
+                  const item = PRELOADED_SANDBOX_PROFILES[key];
+                  const isCurrent = profile.id === item.id;
+                  return (
+                    <motion.button
+                      key={key}
+                      type="button"
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => {
+                        playCoin();
+                        loadPreloadedSandboxProfile(key);
+                        setActiveBottomTab("simulate");
+                        triggerToast(`Perfil cargado: ${item.name}`);
+                      }}
+                      className={`text-left p-5 rounded-2xl border-2 border-b-4 transition-all flex items-center justify-between cursor-pointer ${
+                        isCurrent
+                          ? "bg-emerald-50/50 border-[#10B981] border-b-emerald-600 shadow-2xs"
+                          : "bg-white border-slate-200 border-b-slate-300 hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="space-y-1">
+                        <p className="text-base font-bold font-heading text-slate-900">
+                          {item.name}
+                        </p>
+                        <p className="text-xs text-slate-600">
+                          Saldo: ${item.currentBalance.toLocaleString()} MXN ·{" "}
+                          {item.commitments.length} compromisos fijos
+                        </p>
+                        <p className="text-[11px] text-slate-400">
+                          Meta: {item.goal.title} ($
+                          {item.goal.targetAmount.toLocaleString()})
+                        </p>
+                      </div>
+                      {isCurrent && (
+                        <CheckCircle2
+                          className="w-5 h-5 text-[#10B981] shrink-0"
+                          strokeWidth={1.5}
+                        />
+                      )}
+                    </motion.button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm space-y-2">
+                <p>
+                  <strong>Cuenta:</strong> {profile.email}
+                </p>
+                <p>
+                  <strong>Perfil:</strong> {profile.roleTag}
+                </p>
+                <p>
+                  Tu información se obtiene de Supabase. No puedes sustituirla
+                  por usuarios demo.
+                </p>
+              </div>
+            )}
 
-            <motion.button
-              type="button"
-              whileTap={{ scale: 0.98 }}
-              onClick={() => {
-                playTap();
-                router.push("/onboarding");
-              }}
-              className="w-full h-12 rounded-2xl border-2 border-b-4 border-slate-200 border-b-slate-300 bg-slate-50 hover:bg-slate-100 text-sm font-bold font-heading text-slate-800 flex items-center justify-center gap-2 cursor-pointer transition-colors"
-            >
-              <SlidersHorizontal className="w-4 h-4" strokeWidth={1.5} />
-              <span>Personalizar perfil desde cero (Onboarding)</span>
-            </motion.button>
+            {mode === "demo" && (
+              <motion.button
+                type="button"
+                whileTap={{ scale: 0.98 }}
+                onClick={() => {
+                  playTap();
+                  router.push("/onboarding?demo=1");
+                }}
+                className="w-full h-12 rounded-2xl border-2 border-b-4 border-slate-200 border-b-slate-300 bg-slate-50 hover:bg-slate-100 text-sm font-bold font-heading text-slate-800 flex items-center justify-center gap-2 cursor-pointer transition-colors"
+              >
+                <SlidersHorizontal className="w-4 h-4" strokeWidth={1.5} />
+                <span>Personalizar perfil desde cero (Onboarding)</span>
+              </motion.button>
+            )}
+
+            {mode === "authenticated" && (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await signOut();
+                    router.replace("/auth");
+                  } catch (error) {
+                    console.error("Logout failed:", error);
+                  }
+                }}
+                className="w-full h-12 rounded-xl border border-slate-300 bg-white text-slate-800 font-semibold"
+              >
+                Cerrar sesión
+              </button>
+            )}
           </div>
         </motion.div>
       )}
