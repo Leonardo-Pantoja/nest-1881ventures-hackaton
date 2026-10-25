@@ -183,7 +183,7 @@ export default function AppShell({
       <div className="flex-1 min-w-0 md:pl-64 lg:pl-72 flex flex-col min-h-screen">
         {/* Top Bar (Visible on Mobile & Desktop Top-Right for non-duplicated Streak & XP) */}
         <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-[#FAF8F5]/90 backdrop-blur-md">
-          <div className="max-w-5xl mx-auto px-4 sm:px-8 h-16 flex items-center justify-between gap-4">
+          <div className="max-w-6xl mx-auto px-4 sm:px-8 h-16 flex items-center justify-between gap-4">
             {/* Mobile Brand / Desktop View Title */}
             <div className="flex items-center gap-2.5">
               <Link
@@ -273,7 +273,7 @@ export default function AppShell({
         </header>
 
         {/* Central Spacious Container with Generous Whitespace */}
-        <main className="flex-1 w-full min-w-0 overflow-x-hidden max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-28 md:py-4">
+        <main className="flex-1 w-full min-w-0 overflow-x-hidden max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-28 md:py-4">
           {children}
         </main>
 
