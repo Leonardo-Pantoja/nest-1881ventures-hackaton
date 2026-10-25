@@ -55,14 +55,23 @@ const FREQUENCY_OPTIONS: {
   label: string;
   monthlyMultiplier: number;
 }[] = [
-  { value: "one_time", label: "Pago único (one_time)", monthlyMultiplier: 1 },
-  { value: "weekly", label: "Semanal (weekly)", monthlyMultiplier: 4.33 },
-  { value: "biweekly", label: "Quincenal (biweekly)", monthlyMultiplier: 2 },
-  { value: "monthly", label: "Mensual (monthly)", monthlyMultiplier: 1 },
+  { value: "one_time", label: "Único", monthlyMultiplier: 1 },
+  { value: "weekly", label: "Semanal", monthlyMultiplier: 4.33 },
+  { value: "biweekly", label: "Quincenal", monthlyMultiplier: 2 },
+  { value: "monthly", label: "Mensual", monthlyMultiplier: 1 },
+];
+
+const PLAN_VIEW_TABS: {
+  id: "fijos" | "imprevistos" | "planeados";
+  label: string;
+}[] = [
+  { id: "fijos", label: "📅 Gastos Fijos" },
+  { id: "imprevistos", label: "⚠️ Imprevistos" },
+  { id: "planeados", label: "✨ Planeados" },
 ];
 
 const FREQUENCY_BADGE_LABELS: Record<CommitmentDbFrequency, string> = {
-  one_time: "Pago único",
+  one_time: "Único",
   weekly: "Semanal",
   biweekly: "Quincenal",
   monthly: "Mensual",
@@ -106,6 +115,9 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
   const [formKind, setFormKind] = useState<
     "commitment" | "unforeseen" | "planned"
   >("commitment");
+  const [viewTab, setViewTab] = useState<"fijos" | "imprevistos" | "planeados">(
+    "fijos",
+  );
   const [title, setTitle] = useState("");
   const [amountInput, setAmountInput] = useState("");
   const [category, setCategory] = useState("Vivienda");
@@ -494,7 +506,7 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
               </h1>
               <p className="text-xs sm:text-sm text-slate-500">
                 Registra compromisos fijos, gastos imprevistos o simula gastos
-                planeados con tu motor financiero
+                planeados
               </p>
             </div>
           </div>
@@ -520,7 +532,7 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
             }`}
           >
             <Calendar className="w-3.5 h-3.5 text-emerald-600" />
-            <span>A. Gasto Fijo / en Curso</span>
+            <span>Gasto Fijo</span>
           </button>
 
           <button
@@ -537,7 +549,7 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
             }`}
           >
             <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-            <span>B. Gasto Imprevisto (Hoy)</span>
+            <span>Gasto Imprevisto</span>
           </button>
 
           <button
@@ -554,13 +566,13 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
             }`}
           >
             <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-            <span>C. Gasto Planeado (Simular)</span>
+            <span>Gasto Planeado</span>
           </button>
         </div>
 
         <form onSubmit={handleCreateSubmit} className="space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-            <div className="sm:col-span-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
               <label className="block text-[11px] font-bold font-heading text-slate-600 mb-1">
                 Concepto o nombre del gasto
               </label>
@@ -580,7 +592,7 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
               />
             </div>
 
-            <div className="sm:col-span-2">
+            <div>
               <label className="block text-[11px] font-bold font-heading text-slate-600 mb-1">
                 Monto (MXN)
               </label>
@@ -596,7 +608,7 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
               />
             </div>
 
-            <div className="sm:col-span-2">
+            <div>
               <label className="block text-[11px] font-bold font-heading text-slate-600 mb-1">
                 Categoría
               </label>
@@ -614,7 +626,7 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
             </div>
 
             {formKind !== "unforeseen" && (
-              <div className="sm:col-span-2">
+              <div>
                 <label className="block text-[11px] font-bold font-heading text-slate-600 mb-1">
                   Frecuencia
                 </label>
@@ -635,7 +647,7 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
             )}
 
             {formKind === "commitment" && (
-              <div className="sm:col-span-2">
+              <div>
                 <label className="block text-[11px] font-bold font-heading text-slate-600 mb-1">
                   Próximo pago
                 </label>
@@ -650,7 +662,7 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
             )}
 
             {formKind === "planned" && (
-              <div className="sm:col-span-2">
+              <div>
                 <label className="block text-[11px] font-bold font-heading text-slate-600 mb-1">
                   ¿En cuántos días?
                 </label>
@@ -667,12 +679,11 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
             )}
 
             {formKind === "unforeseen" && (
-              <div className="sm:col-span-4 flex items-end">
+              <div className="flex items-end">
                 <div className="w-full h-10 px-3 rounded-xl bg-amber-50 border border-amber-200 flex items-center gap-2 text-[11px] font-semibold text-amber-900">
                   <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                   <span>
-                    Se inserta en public.transactions (expense) y actualiza tu
-                    liquidez
+                    Se descuenta de tu saldo disponible hoy
                   </span>
                 </div>
               </div>
@@ -714,9 +725,33 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
       {/* =====================================================================
           2. LOS 3 BLOQUES INTERACTIVOS DEL PLAN DE GASTOS
          ===================================================================== */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="space-y-5">
+        <div
+          role="tablist"
+          className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-1.5 rounded-2xl bg-slate-100 border border-slate-200"
+        >
+          {PLAN_VIEW_TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={viewTab === t.id}
+              onClick={() => {
+                playTap();
+                setViewTab(t.id);
+              }}
+              className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold font-heading transition-all cursor-pointer text-center ${
+                viewTab === t.id
+                  ? "bg-white text-slate-900 shadow-2xs border border-slate-200/80"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
         {/* BLOQUE A: Gastos en Curso / Fijos (public.commitments) */}
-        <section className="bg-white rounded-3xl border-2 border-b-4 border-slate-200 shadow-sm p-5 flex flex-col justify-between gap-4">
+        <section className={`bg-white rounded-3xl border-2 border-b-4 border-slate-200 shadow-sm p-5 flex flex-col justify-between gap-4 ${viewTab === "fijos" ? "" : "hidden"}`}>
           <div className="space-y-4">
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-2.5">
@@ -727,9 +762,6 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
                   />
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold font-heading uppercase tracking-wider text-emerald-700 block">
-                    Bloque A · public.commitments
-                  </span>
                   <h2 className="text-base font-bold font-heading text-slate-900">
                     Gastos en Curso / Fijos
                   </h2>
@@ -741,7 +773,7 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
             </div>
 
             {profile.commitments.length > 0 ? (
-              <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 {profile.commitments.map((item) => {
                   const isEditing = editingId === item.id;
                   const isBusy = busyCommitmentId === item.id;
@@ -778,7 +810,7 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
                           >
                             {FREQUENCY_OPTIONS.map((f) => (
                               <option key={f.value} value={f.value}>
-                                {f.value}
+                                {f.label}
                               </option>
                             ))}
                           </select>
@@ -836,7 +868,7 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
                               {item.category}
                             </span>
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800">
-                              {FREQUENCY_BADGE_LABELS[freqKey]} ({freqKey})
+                              {FREQUENCY_BADGE_LABELS[freqKey]}
                             </span>
                           </div>
                           <p className="text-sm font-bold font-heading text-slate-900 mt-1">
@@ -890,7 +922,7 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
             ) : (
               <div className="p-5 rounded-2xl border border-dashed border-slate-200 text-center text-xs text-slate-500">
                 No tienes compromisos fijos activos. Agrégalos arriba para que el
-                motor los reserve antes de tu próximo ingreso.
+                reservemos ese dinero antes de tu próximo ingreso.
               </div>
             )}
           </div>
@@ -914,7 +946,7 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
         </section>
 
         {/* BLOQUE B: Gastos Imprevistos / Fuera de Control (public.transactions tipo expense) */}
-        <section className="bg-white rounded-3xl border-2 border-b-4 border-slate-200 shadow-sm p-5 flex flex-col justify-between gap-4">
+        <section className={`bg-white rounded-3xl border-2 border-b-4 border-slate-200 shadow-sm p-5 flex flex-col justify-between gap-4 ${viewTab === "imprevistos" ? "" : "hidden"}`}>
           <div className="space-y-4">
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-2.5">
@@ -925,9 +957,6 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
                   />
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold font-heading uppercase tracking-wider text-amber-700 block">
-                    Bloque B · public.transactions
-                  </span>
                   <h2 className="text-base font-bold font-heading text-slate-900">
                     Gastos Imprevistos / Fuera de Control
                   </h2>
@@ -941,7 +970,7 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
             {/* Visual Indicator of Liquidity Reduction from financialEngine.ts */}
             <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-2">
               <div className="flex items-center justify-between text-xs font-bold font-heading text-amber-950">
-                <span>Reducción de liquidez libre (Safe-to-Spend)</span>
+                <span>Reducción de tu dinero libre</span>
                 <span>
                   −$
                   {Math.max(
@@ -989,13 +1018,13 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
             </div>
 
             {engineMetrics.expenseTransactions.length > 0 ? (
-              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 {engineMetrics.expenseTransactions.map((tx) => (
                   <div
                     key={tx.id}
                     className="p-3 rounded-2xl border border-slate-200 bg-slate-50/70 flex items-center justify-between gap-2"
                   >
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <span className="text-[10px] font-bold uppercase text-amber-700 block">
                         {tx.category} ·{" "}
                         {new Date(tx.occurredAt).toLocaleDateString("es-MX", {
@@ -1003,7 +1032,7 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
                           month: "short",
                         })}
                       </span>
-                      <p className="text-xs sm:text-sm font-bold font-heading text-slate-900 truncate">
+                      <p className="text-xs sm:text-sm font-bold font-heading text-slate-900 break-words">
                         {tx.title}
                       </p>
                     </div>
@@ -1034,7 +1063,7 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
         </section>
 
         {/* BLOQUE C: Gastos Planeados (Simulación en el Plan con weeklyProjection.ts + financialEngine.ts) */}
-        <section className="bg-white rounded-3xl border-2 border-b-4 border-slate-200 shadow-sm p-5 flex flex-col justify-between gap-4">
+        <section className={`bg-white rounded-3xl border-2 border-b-4 border-slate-200 shadow-sm p-5 flex flex-col justify-between gap-4 ${viewTab === "planeados" ? "" : "hidden"}`}>
           <div className="space-y-4">
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-2.5">
@@ -1045,9 +1074,6 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
                   />
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold font-heading uppercase tracking-wider text-indigo-700 block">
-                    Bloque C · Simulación en el Plan
-                  </span>
                   <h2 className="text-base font-bold font-heading text-slate-900">
                     Gastos Planeados
                   </h2>
@@ -1091,7 +1117,7 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
               <div className="grid grid-cols-2 gap-2 pt-1 border-t border-indigo-200/60 text-[11px] text-indigo-950">
                 <div>
                   <span className="text-slate-500 block">
-                    Saldo Sem. 6 (weeklyProjection):
+                    Saldo en la semana 6:
                   </span>
                   <strong className="text-slate-900">
                     {engineMetrics.projectionWithPlanned.status === "calculado"
@@ -1111,18 +1137,18 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
             </div>
 
             {engineMetrics.plannedItems.length > 0 ? (
-              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 {engineMetrics.plannedItems.map((item) => (
                   <div
                     key={item.id}
                     className="p-3 rounded-2xl border border-slate-200 bg-slate-50/70 flex items-center justify-between gap-2"
                   >
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <span className="text-[10px] font-bold uppercase text-indigo-700 block">
                         {item.category} · en {item.dueInDays}d (
                         {FREQUENCY_BADGE_LABELS[item.frequency]})
                       </span>
-                      <p className="text-xs sm:text-sm font-bold font-heading text-slate-900 truncate">
+                      <p className="text-xs sm:text-sm font-bold font-heading text-slate-900 break-words">
                         {item.title}
                       </p>
                     </div>
@@ -1159,7 +1185,7 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
                           }
                         }}
                         className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 cursor-pointer"
-                        title="Confirmar y pasar a Compromisos Fijos (public.commitments)"
+                        title="Confirmar y pasar a Pagos Fijos"
                       >
                         <ArrowUpRight className="w-3.5 h-3.5" />
                       </button>
@@ -1180,7 +1206,7 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
               </div>
             ) : (
               <div className="p-5 rounded-2xl border border-dashed border-slate-200 text-center text-xs text-slate-500">
-                Agrega gastos futuros arriba eligiendo “C. Gasto Planeado” para
+                Agrega gastos futuros arriba eligiendo “Gasto Planeado” para
                 simular su impacto en tus próximas 6 semanas sin afectar tu
                 saldo real.
               </div>
@@ -1212,9 +1238,7 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
                 Desglose de Gastos Mensuales vs. Fuentes de Ingreso
               </h2>
               <p className="text-xs text-slate-500">
-                Agrupación mensualizada de compromisos (public.commitments) y
-                gastos registrados (public.transactions) frente a tus ingresos
-                (public.income_sources)
+                Tus pagos fijos y gastos imprevistos del mes frente a tus ingresos
               </p>
             </div>
           </div>
@@ -1279,7 +1303,7 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
           <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold text-slate-700">
-                Fuentes activas (income_sources):
+                Mis ingresos:
               </span>
               {monthlyBreakdown.sources.map((src) => (
                 <span

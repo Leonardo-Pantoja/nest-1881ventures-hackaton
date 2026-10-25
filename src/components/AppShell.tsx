@@ -76,9 +76,9 @@ export default function AppShell({
     .toUpperCase();
 
   return (
-    <div className="min-h-screen bg-[#FAF8F5] text-slate-900 flex flex-col md:flex-row font-sans">
+    <div className="min-h-screen w-full overflow-x-hidden bg-[#FAF8F5] text-slate-900 flex flex-col md:flex-row font-sans">
       {/* Desktop Clean Left Sidebar (Apple / Wise Minimalist Palette + Emerald Primary) */}
-      <aside className="hidden md:flex md:w-64 lg:w-72 md:flex-col md:fixed md:inset-y-0 md:left-0 border-r border-slate-200 bg-white px-5 py-6 justify-between z-30">
+      <aside className="hidden md:flex md:w-64 lg:w-72 md:flex-col md:fixed md:inset-y-0 md:left-0 border-r border-slate-200 bg-white px-5 pt-6 pb-8 justify-between z-30 overflow-y-auto">
         <div className="space-y-8">
           {/* Logo */}
           <Link
@@ -179,7 +179,7 @@ export default function AppShell({
       </aside>
 
       {/* Main Content Wrapper */}
-      <div className="flex-1 md:pl-64 lg:pl-72 flex flex-col min-h-screen">
+      <div className="flex-1 min-w-0 md:pl-64 lg:pl-72 flex flex-col min-h-screen">
         {/* Top Bar (Visible on Mobile & Desktop Top-Right for non-duplicated Streak & XP) */}
         <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-[#FAF8F5]/90 backdrop-blur-md">
           <div className="max-w-5xl mx-auto px-4 sm:px-8 h-16 flex items-center justify-between gap-4">
@@ -240,6 +240,19 @@ export default function AppShell({
                 <span>{profile.wisdomXp ?? 120} XP</span>
               </motion.button>
 
+              <motion.button
+                type="button"
+                disabled={isSigningOut}
+                whileTap={{ scale: 0.96 }}
+                onClick={() => void handleSignOut()}
+                className="h-9 px-2.5 sm:px-3.5 rounded-full border border-slate-200 bg-white text-slate-700 hover:text-rose-700 hover:bg-rose-50 hover:border-rose-200 text-xs font-bold font-heading flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50 transition-colors"
+                aria-label="Cerrar sesión"
+                title="Cerrar sesión"
+              >
+                <LogOut className="w-4 h-4" strokeWidth={1.5} />
+                <span className="hidden sm:inline">Salir</span>
+              </motion.button>
+
               {onOpenGuide && (
                 <motion.button
                   type="button"
@@ -259,7 +272,7 @@ export default function AppShell({
         </header>
 
         {/* Central Spacious Container with Generous Whitespace */}
-        <main className="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-28 md:py-4">
+        <main className="flex-1 w-full min-w-0 overflow-x-hidden max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-28 md:py-4">
           {children}
         </main>
 

@@ -1182,8 +1182,23 @@ export default function AppDashboardPage() {
 
   if (mode === "loading") {
     return (
-      <div className="min-h-screen grid place-items-center">
-        Cargando tu perfil financiero...
+      <div
+        className="min-h-screen w-full overflow-x-hidden bg-[#FAF8F5] p-4 sm:p-8 md:pl-72"
+        role="status"
+        aria-live="polite"
+      >
+        <span className="sr-only">Cargando tu perfil financiero...</span>
+        <div className="max-w-5xl mx-auto space-y-5 animate-pulse">
+          <div className="h-16 rounded-3xl bg-slate-200/70" />
+          <div className="h-64 rounded-3xl bg-slate-200/70" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="h-32 rounded-3xl bg-slate-200/70" />
+            <div className="h-32 rounded-3xl bg-slate-200/70" />
+          </div>
+          <p className="text-center text-xs font-semibold text-slate-400">
+            Cargando tu perfil financiero...
+          </p>
+        </div>
       </div>
     );
   }

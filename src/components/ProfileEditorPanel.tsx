@@ -32,6 +32,14 @@ interface ProfileEditorPanelProps {
   onNavigateToSimulate?: () => void;
 }
 
+type ProfileTabId = "perfil" | "liquidez" | "ingresos";
+
+const PROFILE_TABS: { id: ProfileTabId; label: string }[] = [
+  { id: "perfil", label: "👤 Perfil y Estilo de Vida" },
+  { id: "liquidez", label: "🛡️ Liquidez y Colchón" },
+  { id: "ingresos", label: "📅 Ingresos y Pagos Fijos" },
+];
+
 const LIFESTYLE_OPTIONS: {
   tag: LifeContextTag;
   label: string;
@@ -61,6 +69,18 @@ export default function ProfileEditorPanel({
     deactivateCommitment,
     saveGoalWithSubGoals,
   } = useFinancial();
+
+  const [activeTab, setActiveTab] = useState<ProfileTabId>("perfil");
+
+  const handleLogout = async () => {
+    playTap();
+    try {
+      await signOut();
+      router.replace("/auth");
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  };
 
   // 1. User Personal Data State (NO gender or sex fields)
   const [displayName, setDisplayName] = useState(profile.name || "");
@@ -151,7 +171,7 @@ export default function ProfileEditorPanel({
       });
       playLevelUp();
       onShowToast(
-        "¡Perfil personal y parámetros financieros guardados en Supabase!",
+        "¡Perfil guardado correctamente!",
       );
     } catch (err) {
       onShowToast(
@@ -180,7 +200,7 @@ export default function ProfileEditorPanel({
       playCoin();
       setIncName("");
       setIncAmount("");
-      onShowToast("¡Fuente de ingreso guardada en `income_sources`!");
+      onShowToast("¡Ingreso guardado!");
     } catch (err) {
       onShowToast(
         err instanceof Error ? err.message : "Error al guardar ingreso",
@@ -209,7 +229,7 @@ export default function ProfileEditorPanel({
       playCoin();
       setCommTitle("");
       setCommAmount("");
-      onShowToast("¡Gasto fijo guardado en `commitments`!");
+      onShowToast("¡Pago fijo guardado!");
     } catch (err) {
       onShowToast(
         err instanceof Error ? err.message : "Error al guardar compromiso",
@@ -234,7 +254,7 @@ export default function ProfileEditorPanel({
         subGoals: profile.goal.subGoals ?? [],
       });
       playLevelUp();
-      onShowToast("¡Meta principal actualizada en `goals`!");
+      onShowToast("¡Meta principal actualizada!");
     } catch (err) {
       onShowToast(
         err instanceof Error ? err.message : "Error al actualizar la meta",
@@ -250,56 +270,86 @@ export default function ProfileEditorPanel({
       animate={{ opacity: 1, y: 0 }}
       className="space-y-6"
     >
-      {/* =====================================================================
-          1. PERSONAL & FINANCIAL CORE PROFILE EDITOR (public.profiles)
-         ===================================================================== */}
+      {/* Encabezado */}
+      <div className="bg-white rounded-3xl border-2 border-b-4 border-slate-200 shadow-sm p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-11 h-11 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center shrink-0">
+            <UserCheck className="w-5 h-5 text-emerald-600" strokeWidth={1.5} />
+          </div>
+          <div className="min-w-0">
+            <span className="text-xs font-bold font-heading uppercase tracking-wider text-emerald-700 block break-words">
+              {mode === "authenticated"
+                ? `Cuenta sincronizada · ${profile.email}`
+                : "Modo Demo Interactivo"}
+            </span>
+            <h2 className="text-xl font-bold font-heading text-slate-900">
+              Editar Perfil
+            </h2>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="h-10 px-4 rounded-xl border border-slate-300 bg-white hover:bg-rose-50 hover:border-rose-200 text-slate-800 hover:text-rose-700 text-xs font-bold font-heading flex items-center justify-center gap-2 transition-colors cursor-pointer shrink-0"
+        >
+          <LogOut className="w-4 h-4" />
+          <span>Cerrar sesión</span>
+        </button>
+      </div>
+
+      {/* Sub-pestañas */}
+      <div
+        role="tablist"
+        className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-1.5 rounded-2xl bg-slate-100 border border-slate-200"
+      >
+        {PROFILE_TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === t.id}
+            onClick={() => {
+              playTap();
+              setActiveTab(t.id);
+            }}
+            className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold font-heading transition-all cursor-pointer text-center ${
+              activeTab === t.id
+                ? "bg-white text-slate-900 shadow-2xs border border-slate-200/80"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab !== "ingresos" && (
       <form
         onSubmit={handleSaveCoreProfile}
-        className="bg-white rounded-3xl border-2 border-b-4 border-slate-200 shadow-sm p-6 sm:p-8 space-y-6"
+        className="bg-white rounded-3xl border-2 border-b-4 border-slate-200 shadow-sm p-5 sm:p-8 space-y-6"
       >
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center shrink-0">
-              <UserCheck
-                className="w-5 h-5 text-emerald-600"
-                strokeWidth={1.5}
-              />
-            </div>
-            <div>
-              <span className="text-xs font-bold font-heading uppercase tracking-wider text-emerald-700 block">
-                {mode === "authenticated"
-                  ? `Cuenta sincronizada · ${profile.email}`
-                  : "Modo Demo Interactivo"}
-              </span>
-              <h2 className="text-xl font-bold font-heading text-slate-900">
-                Editar Perfil Personal y Financiero
-              </h2>
-            </div>
-          </div>
-
+        <div className="flex justify-end">
           <button
             type="submit"
             disabled={isSavingCore}
             className="h-11 px-5 rounded-2xl bg-[#10B981] hover:bg-emerald-600 text-white text-xs sm:text-sm font-bold font-heading border-2 border-emerald-600 border-b-4 border-b-emerald-800 flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50 shrink-0"
           >
             <Save className="w-4 h-4" />
-            <span>
-              {isSavingCore ? "Guardando cambios..." : "Guardar Perfil"}
-            </span>
+            <span>{isSavingCore ? "Guardando cambios..." : "Guardar Perfil"}</span>
           </button>
         </div>
 
-        {/* User Personal Data Section (Zero gender/sex fields) */}
+        {activeTab === "perfil" && (
         <div className="space-y-4">
           <h3 className="text-sm font-bold font-heading text-slate-800 flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-emerald-600" />
-            1. Datos de Usuario (`display_name`, apodo, edad y dependientes)
+            Datos Personales
           </h3>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <label className="space-y-1.5 block">
-              <span className="text-xs font-bold text-slate-700">
-                Nombre completo (`display_name`)
+              <span className="text-xs font-bold text-slate-700 block whitespace-nowrap">
+                Nombre completo
               </span>
               <input
                 type="text"
@@ -312,8 +362,8 @@ export default function ProfileEditorPanel({
             </label>
 
             <label className="space-y-1.5 block">
-              <span className="text-xs font-bold text-slate-700">
-                Apodo (Cómo te llama tu planta)
+              <span className="text-xs font-bold text-slate-700 block whitespace-nowrap">
+                Apodo
               </span>
               <input
                 type="text"
@@ -325,8 +375,8 @@ export default function ProfileEditorPanel({
             </label>
 
             <label className="space-y-1.5 block">
-              <span className="text-xs font-bold text-slate-700">
-                Edad (Opcional)
+              <span className="text-xs font-bold text-slate-700 block whitespace-nowrap">
+                Edad (opcional)
               </span>
               <input
                 type="number"
@@ -340,8 +390,8 @@ export default function ProfileEditorPanel({
             </label>
 
             <label className="space-y-1.5 block">
-              <span className="text-xs font-bold text-slate-700">
-                Número de dependientes económicos
+              <span className="text-xs font-bold text-slate-700 block whitespace-nowrap">
+                Dependientes económicos
               </span>
               <input
                 type="number"
@@ -358,7 +408,7 @@ export default function ProfileEditorPanel({
           {/* Lifestyle Context Tags */}
           <div className="space-y-2 pt-1">
             <span className="text-xs font-bold text-slate-700 block">
-              Etiquetas de Estilo de Vida (`lifestyle_tags`)
+              Tu estilo de vida
             </span>
             <div className="flex flex-wrap gap-2">
               {LIFESTYLE_OPTIONS.map((opt) => {
@@ -382,18 +432,19 @@ export default function ProfileEditorPanel({
             </div>
           </div>
         </div>
+        )}
 
-        {/* Financial Parameters Section */}
-        <div className="space-y-4 pt-4 border-t border-slate-100">
+        {activeTab === "liquidez" && (
+        <div className="space-y-4">
           <h3 className="text-sm font-bold font-heading text-slate-800 flex items-center gap-2">
             <Wallet className="w-4 h-4 text-emerald-600" />
-            2. Liquidez y Parámetros de Protección (`profiles`)
+            Tu Dinero y Protección
           </h3>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <label className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-1 block">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <label className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 block">
               <span className="text-xs font-bold text-slate-700 block">
-                Saldo Actual (`current_balance`)
+                Saldo disponible hoy
               </span>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">
@@ -414,9 +465,9 @@ export default function ProfileEditorPanel({
               </span>
             </label>
 
-            <label className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-1 block">
+            <label className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 block">
               <span className="text-xs font-bold text-slate-700 block">
-                Colchón de Seguridad (`safety_buffer`)
+                Colchón de emergencias
               </span>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">
@@ -437,9 +488,9 @@ export default function ProfileEditorPanel({
               </span>
             </label>
 
-            <label className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-1 block">
+            <label className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 block">
               <span className="text-xs font-bold text-slate-700 block">
-                Presupuesto Esencial Diario (`daily_essential_budget`)
+                Gasto básico por día
               </span>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">
@@ -461,8 +512,12 @@ export default function ProfileEditorPanel({
             </label>
           </div>
         </div>
+        )}
       </form>
+      )}
 
+      {activeTab === "ingresos" && (
+      <div className="space-y-6">
       {/* =====================================================================
           2. INCOME SOURCES & FIXED COMMITMENTS EDITOR (income_sources & commitments)
          ===================================================================== */}
@@ -476,7 +531,7 @@ export default function ProfileEditorPanel({
               </div>
               <div>
                 <h3 className="text-base font-bold font-heading text-slate-900">
-                  Fuentes de Ingreso (`income_sources`)
+                  Mis Ingresos
                 </h3>
                 <p className="text-xs text-slate-500">
                   Nómina, becas o ingresos recurrentes
@@ -592,7 +647,7 @@ export default function ProfileEditorPanel({
               </div>
               <div>
                 <h3 className="text-base font-bold font-heading text-slate-900">
-                  Compromisos y Gastos Fijos (`commitments`)
+                  Mis Pagos Fijos
                 </h3>
                 <p className="text-xs text-slate-500">
                   Renta, tarjetas, servicios y deudas
@@ -707,7 +762,7 @@ export default function ProfileEditorPanel({
             </div>
             <div>
               <h3 className="text-base font-bold font-heading text-slate-900">
-                Meta de Ahorro Principal (`goals`)
+                Meta de Ahorro Principal
               </h3>
               <p className="text-xs text-slate-500">
                 Ahorro fijo semanal y monto acumulado actual
@@ -755,7 +810,7 @@ export default function ProfileEditorPanel({
 
           <label className="space-y-1 block">
             <span className="text-[11px] font-bold text-slate-600">
-              Ahorrado (`current_saved`)
+              Ahorrado
             </span>
             <input
               type="number"
@@ -785,7 +840,7 @@ export default function ProfileEditorPanel({
 
           <label className="space-y-1 block">
             <span className="text-[11px] font-bold text-slate-600">
-              Ubicación (`savings_location`)
+              ¿Dónde guardas tu ahorro?
             </span>
             <select
               value={goalLocation}
@@ -803,6 +858,8 @@ export default function ProfileEditorPanel({
           </label>
         </div>
       </form>
+      </div>
+      )}
 
       {/* =====================================================================
           4. DEMO PROFILE SWITCHER & ACCOUNT SESSION ACTIONS

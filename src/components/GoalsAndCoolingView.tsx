@@ -470,7 +470,7 @@ export default function GoalsAndCoolingView({
                 Compras en Enfriamiento y Planes Activos
               </h3>
               <p className="text-xs sm:text-sm text-slate-500">
-                Conectado a tu reporte financiero (`purchaseReport.ts`) y metas
+                Conectado a tu reporte financiero y a tus metas
                 de ahorro fijo
               </p>
             </div>
@@ -887,7 +887,7 @@ export default function GoalsAndCoolingView({
             </div>
             <div>
               <span className="text-xs font-bold font-heading uppercase tracking-wider text-emerald-700 block">
-                Metas por Proyecto y Etapas (`goalImpact.ts`)
+                Metas por Proyecto y Etapas
               </span>
               <h3 className="text-lg sm:text-xl font-bold font-heading text-slate-900">
                 {profile.goal.title}
@@ -940,7 +940,7 @@ export default function GoalsAndCoolingView({
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-3 rounded-xl bg-white border border-slate-200">
               <span className="text-[11px] font-semibold text-slate-500 block">
-                Ahorrado Actual (`current_saved`)
+                Ahorrado actual
               </span>
               <span className="text-lg font-bold font-heading text-emerald-600">
                 ${activeGoalImpact.savedBefore.toLocaleString()} MXN
@@ -967,7 +967,7 @@ export default function GoalsAndCoolingView({
 
             <div className="p-3 rounded-xl bg-white border border-slate-200">
               <span className="text-[11px] font-semibold text-slate-500 block">
-                Tiempo Estimado (`goalImpact`)
+                Tiempo estimado
               </span>
               <span className="text-lg font-bold font-heading text-amber-600">
                 {activeGoalImpact.weeksBefore === null
@@ -1156,7 +1156,7 @@ export default function GoalsAndCoolingView({
 
                 <label className="space-y-1 block">
                   <span className="text-xs font-bold text-slate-700">
-                    Ahorrado Actual (`current_saved`)
+                    Ahorrado actual
                   </span>
                   <input
                     type="number"
@@ -1188,7 +1188,7 @@ export default function GoalsAndCoolingView({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <label className="space-y-1 block">
                   <span className="text-xs font-bold text-slate-700">
-                    Ubicación del Ahorro (`savings_location` en Supabase)
+                    ¿Dónde guardas este ahorro?
                   </span>
                   <select
                     value={goalLocation}
@@ -1307,7 +1307,7 @@ export default function GoalsAndCoolingView({
                   className="h-10 px-5 rounded-xl bg-[#10B981] hover:bg-emerald-600 text-white text-xs font-bold font-heading border-b-4 border-emerald-700 cursor-pointer disabled:opacity-50"
                 >
                   {isSavingGoal
-                    ? "Guardando en Supabase..."
+                    ? "Guardando..."
                     : "Guardar Meta y Etapas"}
                 </button>
               </div>

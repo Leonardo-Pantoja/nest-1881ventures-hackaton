@@ -495,7 +495,7 @@ export default function PurchaseEvaluationFlow({
                 </div>
                 <div>
                   <h3 className="text-sm font-bold font-heading text-slate-900">
-                    Chat Conversacional con tu Copiloto (Gemini + Motor)
+                    Chat con tu Copiloto Financiero
                   </h3>
                   <p className="text-[11px] text-slate-500">
                     Evalúa por texto o imagen y compara escenarios antes de decidir
@@ -516,7 +516,7 @@ export default function PurchaseEvaluationFlow({
                   </div>
                   <div className="rounded-2xl rounded-tl-xs bg-white border border-slate-200 px-3.5 py-2.5 text-xs sm:text-sm text-slate-800 shadow-2xs leading-relaxed">
                     <p className="font-semibold text-emerald-800 text-[11px] mb-0.5">
-                      Diagnóstico del Motor + Gemini
+                      Diagnóstico de tu Copiloto
                     </p>
                     <p>{initialCopilotDiagnosis}</p>
                   </div>
@@ -553,9 +553,18 @@ export default function PurchaseEvaluationFlow({
               ))}
 
               {isSendingChat && (
-                <div className="flex items-center gap-2 text-xs text-slate-500 pl-2">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
-                  <span>Analizando escenario con el motor financiero...</span>
+                <div
+                  className="flex items-center gap-2 text-xs text-slate-600 px-3 py-2 rounded-2xl rounded-tl-xs bg-white border border-slate-200 w-fit max-w-full"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600 shrink-0" />
+                  <span>Tu copiloto está pensando</span>
+                  <span className="flex gap-0.5" aria-hidden="true">
+                    <span className="w-1 h-1 rounded-full bg-emerald-500 animate-bounce [animation-delay:-0.3s]" />
+                    <span className="w-1 h-1 rounded-full bg-emerald-500 animate-bounce [animation-delay:-0.15s]" />
+                    <span className="w-1 h-1 rounded-full bg-emerald-500 animate-bounce" />
+                  </span>
                 </div>
               )}
             </div>

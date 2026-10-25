@@ -532,7 +532,7 @@ export default function AuthPage() {
 
       {/* Footer Note */}
       <footer className="py-5 text-center text-xs text-slate-400">
-        Protegido con sesiones cifradas · Preparado para Supabase Auth &amp;
+        Protegido con sesiones cifradas · Tus datos están seguros &amp;
         Plaid Sandbox
       </footer>
     </div>
