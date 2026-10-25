@@ -139,6 +139,8 @@ export interface OnboardingProfile {
   // Pantalla 4: Metas y seguridad
   safetyBuffer: number | null;
   primaryGoal?: FinancialGoal;
+  // All protected goals, including the primary goal when present.
+  goals?: FinancialGoal[];
 
   // Estado del onboarding
   isOnboarded: boolean;

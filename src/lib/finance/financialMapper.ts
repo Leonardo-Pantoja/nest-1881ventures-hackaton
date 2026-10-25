@@ -291,7 +291,7 @@ export function mapSupabaseRecord(
   const activeIncomeSources = asArray(data.incomeSources);
   const income = nextDateFromSources(activeIncomeSources, now);
   const payments = mapCommitments(asArray(data.commitments), now);
-  const goal = asArray(data.goals)[0];
+  const goals = asArray(data.goals).map(mapGoal).sort((a, b) => a.id.localeCompare(b.id));
   const tags = Array.isArray(profile.lifestyle_tags)
     ? profile.lifestyle_tags.filter(
         (tag): tag is OnboardingProfile["lifeContext"][number] =>
@@ -313,7 +313,8 @@ export function mapSupabaseRecord(
     commitments: payments.commitments,
     debts: payments.debts,
     safetyBuffer: numberOrNull(profile.safety_buffer),
-    primaryGoal: goal ? mapGoal(goal) : undefined,
+    primaryGoal: goals[0],
+    goals,
     isOnboarded: Boolean(profile.onboarding_completed_at),
   };
 }

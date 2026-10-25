@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
@@ -21,9 +21,9 @@ import { useFinancial } from "@/context/FinancialContext";
 import {
   playTap,
   playCoin,
-  playDamage,
   triggerConfettiBurst,
 } from "@/lib/soundEffects";
+import PurchaseConfirmationModal from "./PurchaseConfirmationModal";
 import type { EvaluateApiResponse } from "@/app/api/evaluate/route";
 
 interface PurchaseEvaluationFlowProps {
@@ -53,12 +53,17 @@ export default function PurchaseEvaluationFlow({
   onActionCompleted,
   isStandalonePage = false,
 }: PurchaseEvaluationFlowProps) {
-  const { profile, addToWishlist, registerPurchaseAnyway } = useFinancial();
+  const { profile, addToWishlist } = useFinancial();
 
   const [selectedDecision, setSelectedDecision] = useState<
     "idle" | "wait" | "microsave" | "bought"
   >("idle");
   const [decisionXpBonus, setDecisionXpBonus] = useState<number>(50);
+
+  const [confirming, setConfirming] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const actionLock = useRef(false);
 
   // Core Deterministic Financial Engine
   const metrics = useMemo(() => {
@@ -67,7 +72,8 @@ export default function PurchaseEvaluationFlow({
       apiEvaluationError ||
       !apiEvaluation ||
       apiEvaluation?.status === "datos_incompletos" ||
-      apiEvaluation?.status === "error_procesamiento";
+      apiEvaluation?.status === "error_procesamiento" ||
+      apiEvaluation.safeToSpend === null || apiEvaluation.remainingAfterBuyToday === null;
     const safeToSpend =
       evaluationIncomplete ? 0 : (apiEvaluation?.safeToSpend ?? 0);
     const netAfterPurchase =
@@ -89,71 +95,25 @@ export default function PurchaseEvaluationFlow({
     };
   }, [apiEvaluation, apiEvaluationError, isLoadingApi]);
 
-  useEffect(() => {
-    setSelectedDecision("idle");
-    if (metrics.isDeficit) {
-      playDamage();
-    } else {
-      playTap();
-    }
-  }, [itemName, itemPrice, metrics.isDeficit]);
-
-  // Decision 1: "Comprar hoy"
   const handleDecisionBuyToday = () => {
-    if (metrics.evaluationIncomplete || itemPrice <= 0 || !itemName.trim())
-      return;
-    playDamage();
-    setSelectedDecision("bought");
-    registerPurchaseAnyway(itemName, itemPrice);
-    const msg = `Compra registrada: −$${itemPrice.toLocaleString()} MXN (${itemName})`;
-    if (onActionCompleted) {
-      onActionCompleted(msg);
-    }
+    if (!metrics.evaluationIncomplete && !saving && itemPrice > 0) setConfirming(true);
   };
-
-  // Decision 2: "Esperar a tu nómina" (+50 XP)
-  const handleDecisionWaitPayroll = () => {
-    if (itemPrice <= 0 || !itemName.trim()) return;
-    playCoin();
-    triggerConfettiBurst();
-    setDecisionXpBonus(50);
-    setSelectedDecision("wait");
-    addToWishlist(
-      {
-        name: itemName,
-        price: itemPrice,
-        cooldownDays: profile.nextPaydayDays,
-        strategy: "wait",
-      },
-      50
-    );
-    const msg = `🧊 ¡Guardado para reevaluarlo después! Esperar no garantiza que la compra sea viable.`;
-    if (onActionCompleted) {
-      onActionCompleted(msg);
-    }
+  const saveAlternative = async (strategy: "wait" | "microsave") => {
+    if (actionLock.current || itemPrice <= 0 || !itemName.trim()) return;
+    actionLock.current = true;
+    setSaving(true);
+    setActionError(null);
+    try {
+      const xp = await addToWishlist({ name: itemName, price: itemPrice, cooldownDays: profile.nextPaydayDays, strategy }, strategy === "wait" ? 50 : 100);
+      setDecisionXpBonus(xp);
+      setSelectedDecision(strategy);
+      playCoin(); triggerConfettiBurst();
+      onActionCompleted?.("Guardado en Retos y Metas. No se descont? dinero de tu saldo.");
+    } catch (error) { setActionError(error instanceof Error ? error.message : "No se pudo guardar la decisión."); }
+    finally { actionLock.current = false; setSaving(false); }
   };
-
-  // Decision 3: "Plan de Micro-ahorro" (+100 XP)
-  const handleDecisionMicroSave = () => {
-    if (itemPrice <= 0 || !itemName.trim()) return;
-    playCoin();
-    triggerConfettiBurst();
-    setDecisionXpBonus(100);
-    setSelectedDecision("microsave");
-    addToWishlist(
-      {
-        name: itemName,
-        price: itemPrice,
-        cooldownDays: profile.nextPaydayDays,
-        strategy: "microsave",
-      },
-      100
-    );
-    const msg = `🧊 ¡Plan de micro-ahorro guardado! No se descontó dinero de tu saldo ni de tu meta.`;
-    if (onActionCompleted) {
-      onActionCompleted(msg);
-    }
-  };
+  const handleDecisionWaitPayroll = () => { void saveAlternative("wait"); };
+  const handleDecisionMicroSave = () => { void saveAlternative("microsave"); };
 
   const plantSimulationState: PlantSimulationState =
     selectedDecision === "wait" || selectedDecision === "microsave"
@@ -164,6 +124,8 @@ export default function PurchaseEvaluationFlow({
 
   return (
     <div className="w-full max-w-4xl mx-auto">
+      {confirming && <PurchaseConfirmationModal itemName={itemName} itemPrice={itemPrice} evaluation={apiEvaluation} onCancel={() => setConfirming(false)} onSuccess={() => { setConfirming(false); setSelectedDecision("bought"); onActionCompleted?.("Compra registrada correctamente."); }} />}
+      {actionError && <p role="alert" className="text-rose-700 p-3">{actionError}</p>}
       <Card className="bg-white border-2 border-b-4 border-slate-200 shadow-sm rounded-3xl overflow-hidden py-0 gap-0">
         {/* Clean Header */}
         <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between gap-3">
@@ -331,7 +293,7 @@ export default function PurchaseEvaluationFlow({
             {/* Carta 2 (Destacada Esmeralda): Guardar para reevaluar */}
             <motion.div
               onClick={handleDecisionWaitPayroll}
-              aria-disabled={itemPrice <= 0}
+              aria-disabled={saving || itemPrice <= 0}
               className={`rounded-3xl bg-white border-2 border-b-4 p-6 shadow-sm flex flex-col justify-between gap-5 transition-all hover:-translate-y-1 active:translate-y-0.5 cursor-pointer ${
                 selectedDecision === "wait"
                   ? "border-[#10B981] border-b-emerald-700 ring-4 ring-emerald-500/15"

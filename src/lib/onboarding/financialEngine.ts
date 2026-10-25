@@ -1,3 +1,4 @@
+import { protectedSavingsCents } from "./protectedFunds";
 
 /**
  * ANTES DE GASTAR
@@ -139,16 +140,8 @@ export function calculateSafeToSpend(
   const balance = toCents(profile.currentBalance);
   const buffer = toCents(profile.safetyBuffer);
 
-  const goal = profile.primaryGoal;
-
-  if (
-    goal &&
-    (goal.currentSaved === null ||
-      goal.targetAmount === null ||
-      (goal.currentSaved > 0 && goal.savingsLocation === "desconocido"))
-  ) {
-    return incomplete;
-  }
+  const protectedSavings = protectedSavingsCents(profile);
+  if (protectedSavings === null) return incomplete;
 
   // Evitamos contar deudas en ambas listas.
   // Las deudas se registran únicamente en debts.
@@ -220,25 +213,6 @@ export function calculateSafeToSpend(
   // ========================================
   // AHORROS PROTEGIDOS
   // ========================================
-
-  let protectedSavings = 0;
-
-  if (goal?.savingsLocation === "incluido") {
-    if (goal.currentSaved === null) return incomplete;
-    const saved = toCents(goal.currentSaved);
-
-    // Conservamos la regla inicial:
-    // se supone que un fondo de emergencia
-    // comparte dinero con el safetyBuffer.
-    if (goal.category === "emergencia") {
-      protectedSavings = Math.max(
-        0,
-        saved - buffer
-      );
-    } else {
-      protectedSavings = saved;
-    }
-  }
 
   // ========================================
   // RESULTADO FINAL

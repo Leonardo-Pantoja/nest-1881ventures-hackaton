@@ -9,6 +9,11 @@ import React, {
   useCallback,
   useRef,
 } from "react";
+import { mapSupabaseRecord } from "@/lib/finance/financialMapper";
+import { mapDemoFinancialProfile } from "@/lib/finance/demoFinancialProfile";
+import { isMissingSupabaseSessionError } from "@/lib/finance/evaluationProfile";
+import type { OnboardingProfile } from "@/lib/onboarding/financialTypes";
+import { validPurchasePrice } from "@/lib/finance/money";
 import { createClient } from "@/lib/supabase/client";
 
 export type LifeContextTag =
@@ -281,6 +286,8 @@ interface FinancialContextType {
   profile: FinancialProfile;
   mode: FinancialMode;
   profileError: string | null;
+  financialProfile: OnboardingProfile | null;
+  financialVersion: string;
   refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
   setProfile: React.Dispatch<React.SetStateAction<FinancialProfile>>;
@@ -294,7 +301,7 @@ interface FinancialContextType {
     item: Omit<WishlistItem, "id" | "savedAt">,
     xpReward?: number,
   ) => Promise<number>;
-  registerPurchaseAnyway: (name: string, price: number) => Promise<void>;
+  registerPurchaseAnyway: (name: string, price: number, operationId: string, revision?: string) => Promise<void>;
   awardWisdomXp: (amount?: number) => void;
   incrementStreak: (reason?: string) => void;
   streakCelebration: { id: number; count: number; reason: string } | null;
@@ -339,6 +346,10 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profile, setProfile] = useState<FinancialProfile>(cleanProfile);
   const requestVersion = useRef(0);
+  const [accountFinancialProfile, setAccountFinancialProfile] = useState<OnboardingProfile | null>(null);
+  const [accountVersion, setAccountVersion] = useState("");
+  const pendingPurchases = useRef(new Map<string, Promise<void>>());
+  const completedPurchases = useRef(new Set<string>());
   const [pendingEvaluation, setPendingEvaluationState] =
     useState<PendingPurchaseEvaluation>({
       name: "",
@@ -351,10 +362,9 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
     reason: string;
   } | null>(null);
 
-  const refreshProfile = useCallback(async () => {
+  const refreshProfile = useCallback(async (silent = false) => {
     const ticket = ++requestVersion.current;
-    setMode("loading");
-    setProfile(cleanProfile());
+    if (!silent) { setMode("loading"); setProfile(cleanProfile()); }
     setProfileError(null);
 
     try {
@@ -363,7 +373,8 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         error: authError,
       } = await supabase.auth.getUser();
       if (ticket !== requestVersion.current) return;
-      if (authError || !user) {
+      if (authError && !isMissingSupabaseSessionError(authError)) throw authError;
+      if (!user) {
         setMode("anonymous");
         return;
       }
@@ -388,8 +399,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
             .select("*")
             .eq("user_id", user.id)
             .eq("is_active", true)
-            .order("created_at", { ascending: true })
-            .limit(1),
+            .order("created_at", { ascending: true }),
           supabase
             .from("wishlist_items")
             .select("*")
@@ -407,6 +417,9 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         if (result.error) throw result.error;
       }
 
+      const rows = { profile: profileRes.data, incomeSources: incomeRes.data ?? [], commitments: commitmentRes.data ?? [], goals: goalRes.data ?? [] };
+      setAccountFinancialProfile(mapSupabaseRecord(rows));
+      setAccountVersion(JSON.stringify(rows));
       const p = profileRes.data;
       const nextIncome = incomeRes.data?.[0];
       const goalRow = goalRes.data?.[0];
@@ -482,6 +495,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
   }, [supabase]);
 
   useEffect(() => {
+    const initialize = () => {
     // Do not reuse the old, shared localStorage profile for different accounts.
     localStorage.removeItem(LEGACY_STORAGE_KEY);
     try {
@@ -507,6 +521,9 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
       void refreshProfile();
     }
 
+    };
+    const initialization = setTimeout(initialize, 0);
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event) => {
@@ -525,7 +542,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
       }
     });
     return () => {
-      ++requestVersion.current;
+      clearTimeout(initialization);
       subscription.unsubscribe();
     };
   }, [supabase, refreshProfile]);
@@ -684,7 +701,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
       streak_count: number;
       xp_awarded: number;
     };
-    setProfile((prev) => ({
+    setProfile((prev) => prev.id !== profile.id ? prev : ({
       ...prev,
       wishlist: [
         {
@@ -709,38 +726,32 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
     return Number(saved.xp_awarded);
   };
 
-  const registerPurchaseAnyway = async (
-    name: string,
-    price: number,
-  ): Promise<void> => {
-    if (mode === "demo") {
-      persistDemo({
-        ...profile,
-        currentBalance: Math.max(0, profile.currentBalance - price),
-        wishlist: (profile.wishlist || []).filter((w) => w.name !== name),
-      });
-      return;
-    }
-    if (mode !== "authenticated") {
-      throw new Error("Debes iniciar sesión para registrar una compra.");
-    }
-    if (!name.trim() || !Number.isFinite(price) || price <= 0) {
-      throw new Error("Selecciona un producto con precio válido.");
-    }
-
-    const { data, error } = await supabase.rpc("record_purchase", {
-      p_name: name.trim(),
-      p_price: price,
-    });
-    if (error) throw new Error(error.message);
-    if (!data) throw new Error("Supabase no confirmó la compra.");
-    const result = data as { current_balance: number };
-
-    setProfile((prev) => ({
-      ...prev,
-      currentBalance: Number(result.current_balance),
-      wishlist: (prev.wishlist || []).filter((w) => w.name !== name),
-    }));
+  const registerPurchaseAnyway = (name: string, price: number, operationId: string, revision?: string): Promise<void> => {
+    const accountKey = JSON.stringify([mode, profile.id, operationId]);
+    const pending = pendingPurchases.current.get(accountKey);
+    if (pending) return pending;
+    if (completedPurchases.current.has(accountKey)) return Promise.resolve();
+    const ticket = requestVersion.current;
+    const operation = (async () => {
+      if (!name.trim() || !validPurchasePrice(price) || !operationId) throw new Error("Selecciona un producto con precio válido.");
+      if (mode === "demo") {
+        if (price > profile.currentBalance) throw new Error("Saldo insuficiente.");
+        persistDemo({ ...profile, currentBalance: (Math.round(profile.currentBalance * 100) - Math.round(price * 100)) / 100, wishlist: (profile.wishlist ?? []).filter(w => w.name !== name) });
+        return;
+      }
+      if (mode !== "authenticated") throw new Error("Debes iniciar sesión para registrar una compra.");
+      const response = await fetch("/api/purchases", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ itemName: name.trim(), itemPrice: price, operationId, financialRevision: revision }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "No se pudo registrar la compra.");
+      if (ticket !== requestVersion.current) { await refreshProfile(true); return; }
+      if (typeof result.currentBalance !== "number" || !Number.isFinite(result.currentBalance)) throw new Error("El servidor no confirmó el saldo.");
+      setProfile(prev => prev.id === profile.id ? { ...prev, currentBalance: result.currentBalance, wishlist: (prev.wishlist ?? []).filter(w => w.name !== name) } : prev);
+      setAccountFinancialProfile(prev => prev?.id === profile.id ? { ...prev, currentBalance: result.currentBalance } : prev);
+      await refreshProfile(true);
+    })();
+    pendingPurchases.current.set(accountKey, operation);
+    void operation.then(() => completedPurchases.current.add(accountKey)).catch(() => {}).finally(() => pendingPurchases.current.delete(accountKey));
+    return operation;
   };
 
   const awardWisdomXp = (amount = 50) => {
@@ -759,6 +770,28 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
     announceStreak(count, reason);
   };
 
+  const financialProfile = useMemo(() => {
+    if (mode === "authenticated") return accountFinancialProfile?.id === profile.id ? accountFinancialProfile : null;
+    if (mode !== "demo") return null;
+    return mapDemoFinancialProfile(profile);
+  }, [mode, profile, accountFinancialProfile]);
+  const financialVersion = JSON.stringify([mode, profile.id, accountVersion, financialProfile]);
+
+  useEffect(() => {
+    if (mode !== "authenticated") return;
+    const reload = () => { void refreshProfile(true); };
+    const onVisibility = () => { if (document.visibilityState === "visible") reload(); };
+    window.addEventListener("focus", reload);
+    document.addEventListener("visibilitychange", onVisibility);
+    const timer = setInterval(reload, 30_000);
+    let channel = supabase.channel("financial-profile-" + profile.id);
+    for (const table of ["profiles", "income_sources", "commitments", "goals"]) {
+      channel = channel.on("postgres_changes", { event: "*", schema: "public", table, filter: (table === "profiles" ? "id" : "user_id") + "=eq." + profile.id }, reload);
+    }
+    channel.subscribe();
+    return () => { clearInterval(timer); window.removeEventListener("focus", reload); document.removeEventListener("visibilitychange", onVisibility); void supabase.removeChannel(channel); };
+  }, [mode, profile.id, refreshProfile, supabase]);
+
   const signOut = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
@@ -775,6 +808,8 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         profile,
         mode,
         profileError,
+        financialProfile,
+        financialVersion,
         refreshProfile,
         signOut,
         setProfile,

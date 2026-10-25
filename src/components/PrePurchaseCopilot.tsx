@@ -469,7 +469,7 @@ export default function PrePurchaseCopilot() {
               <div className="space-y-1">
                 <div className="flex items-center gap-2 text-xs text-emerald-400 font-medium">
                   <Target className="w-4 h-4" strokeWidth={1.5} />
-                  Costo de Oportunidad en tu Meta: "{profile.goal.title}"
+                  Costo de Oportunidad en tu Meta: &quot;{profile.goal.title}&quot;
                 </div>
                 <p className="text-xs text-slate-400">
                   Progreso actual: ${profile.goal.currentSaved.toLocaleString()} de $
@@ -582,7 +582,7 @@ export default function PrePurchaseCopilot() {
                 </div>
                 <p className="text-xs text-slate-300 leading-relaxed">
                   Si destinas ${evaluation.suggestedWeeklySave} MXN semanales sin tocar el dinero de
-                  tus pagos fijos ni frenar tu meta principal ("{profile.goal.title}"), completas los $
+                  tus pagos fijos ni frenar tu meta principal (&quot;{profile.goal.title}&quot;), completas los $
                   {itemPrice.toLocaleString()} MXN en {evaluation.weeksToSave} semanas con cero estrés
                   financiero.
                 </p>

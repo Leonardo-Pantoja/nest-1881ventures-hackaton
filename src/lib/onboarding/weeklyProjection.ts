@@ -1,3 +1,4 @@
+import { protectedSavingsCents } from "./protectedFunds";
 
 /**
  * ANTES DE GASTAR
@@ -115,16 +116,8 @@ export function projectSixWeeks(
 
   // Si no sabemos dónde están los ahorros,
   // no podemos estimar dinero disponible.
-  const goal = profile.primaryGoal;
-
-  if (
-    goal &&
-    (goal.currentSaved === null ||
-      goal.targetAmount === null ||
-      (goal.currentSaved > 0 && goal.savingsLocation === "desconocido"))
-  ) {
-    return incomplete;
-  }
+  const protectedSavings = protectedSavingsCents(profile);
+  if (protectedSavings === null) return incomplete;
 
   // Evitamos duplicar pagos de deudas.
   if (
@@ -188,18 +181,6 @@ export function projectSixWeeks(
   const dailyCost = toCents(dailyEssentialBurn);
 
   const buffer = toCents(safetyBuffer);
-  let protectedSavings = 0;
-
-  if (goal?.savingsLocation === "incluido") {
-    if (goal.currentSaved === null) return incomplete;
-    const saved = toCents(goal.currentSaved);
-
-    protectedSavings =
-      goal.category === "emergencia"
-        ? Math.max(0, saved - buffer)
-        : saved;
-  }
-
   const protectedFloor = buffer + protectedSavings;
 
   function expensesForDay(day: number): number {
