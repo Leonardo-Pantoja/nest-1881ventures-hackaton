@@ -601,6 +601,16 @@ interface FinancialContextType {
   }) => void;
   removePlannedExpense: (id: string) => void;
   contributeToWishlistItem: (id: string, amount: number) => Promise<void>;
+  contributeToGoal: (
+    goalId: string,
+    amount: number,
+    deductFromBalance: boolean,
+    subGoalId?: string,
+    options?: {
+      weeklyContribution?: number;
+      savingsLocation?: "incluido" | "separado" | "desconocido";
+    },
+  ) => Promise<{ completedGoal: boolean; completedSubGoal: boolean }>;
   updateWishlistDecisionStatus: (
     id: string,
     decisionStatus: "purchased" | "discarded",
@@ -1536,10 +1546,11 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
 
     const { error: txError } = await supabase.from("transactions").insert({
       user_id: user.id,
-      title: cleanTitle,
-      amount: roundedAmount,
       type: "expense",
+      amount: roundedAmount,
       category: input.category || "Imprevistos",
+      description: cleanTitle,
+      occurred_at: occurredIso,
     });
 
     if (txError) throw new Error(txError.message);
@@ -1702,6 +1713,176 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
     }));
   };
 
+  const contributeToGoal = async (
+    goalId: string,
+    amount: number,
+    deductFromBalance: boolean,
+    subGoalId?: string,
+    options?: {
+      weeklyContribution?: number;
+      savingsLocation?: "incluido" | "separado" | "desconocido";
+    },
+  ): Promise<{ completedGoal: boolean; completedSubGoal: boolean }> => {
+    const cents = Math.round(Number(amount) * 100);
+    if (!Number.isFinite(cents) || cents <= 0) {
+      throw new Error("Ingresa un abono válido mayor a cero.");
+    }
+    const roundedAmount = cents / 100;
+    const goal = (profile.goalsList ?? [profile.goal]).find(
+      (g) => g.id === goalId,
+    ) ?? (profile.goal.id === goalId ? profile.goal : undefined);
+    if (!goal) throw new Error("No se encontró la meta seleccionada.");
+    if (
+      deductFromBalance &&
+      cents > Math.round(profile.currentBalance * 100)
+    ) {
+      throw new Error("El abono supera tu saldo disponible hoy.");
+    }
+
+    const nextSaved = Number(((Math.round(goal.currentSaved * 100) + cents) / 100).toFixed(2));
+    const nextBalance = deductFromBalance
+      ? Number(((Math.round(profile.currentBalance * 100) - cents) / 100).toFixed(2))
+      : profile.currentBalance;
+    const nextWeekly =
+      options?.weeklyContribution !== undefined &&
+      Number.isFinite(options.weeklyContribution) &&
+      options.weeklyContribution >= 0
+        ? Number(options.weeklyContribution.toFixed(2))
+        : goal.weeklyContribution;
+    const nextLocation = options?.savingsLocation ?? goal.savingsLocation;
+
+    // Waterfall actual de sub-metas -> valores explícitos para poder dirigir el abono
+    let nextSubGoals = goal.subGoals ?? [];
+    let completedSubGoal = false;
+    if (subGoalId && nextSubGoals.length > 0) {
+      let pool = Math.max(0, goal.currentSaved);
+      const explicit = nextSubGoals.map((st) => {
+        const target = Math.max(1, Number(st.targetAmount) || 0);
+        const allocated =
+          st.savedAmount !== undefined
+            ? Math.min(target, Math.max(0, st.savedAmount))
+            : Math.min(target, pool);
+        if (st.savedAmount === undefined) pool = Math.max(0, pool - allocated);
+        return { st, target, allocated };
+      });
+      nextSubGoals = explicit.map(({ st, target, allocated }) => {
+        if (st.id !== subGoalId) return { ...st, savedAmount: allocated };
+        const next = Math.min(target, Number((allocated + roundedAmount).toFixed(2)));
+        completedSubGoal = allocated < target && next >= target;
+        return { ...st, savedAmount: next };
+      });
+    }
+    const completedGoal =
+      goal.currentSaved < goal.targetAmount && nextSaved >= goal.targetAmount;
+
+    const updatedGoal: FinancialGoal = {
+      ...goal,
+      currentSaved: nextSaved,
+      weeklyContribution: nextWeekly,
+      savingsLocation: nextLocation,
+      subGoals: nextSubGoals,
+    };
+    const nextList = (profile.goalsList ?? [profile.goal]).map((g) =>
+      g.id === goalId ? updatedGoal : g,
+    );
+    const isActive = profile.goal.id === goalId;
+
+    if (mode === "demo") {
+      writeStoredSubGoals(goalId, nextSubGoals);
+      const tx: TransactionRecord | null = deductFromBalance
+        ? {
+            id: `tx-${Date.now()}`,
+            title: `Abono a meta: ${goal.title}`,
+            amount: roundedAmount,
+            type: "expense",
+            category: "Ahorro",
+            occurredAt: new Date().toISOString(),
+            isUnforeseen: false,
+          }
+        : null;
+      persistDemo({
+        ...profile,
+        goal: isActive ? updatedGoal : profile.goal,
+        goalsList: nextList,
+        currentBalance: nextBalance,
+        wisdomXp: (profile.wisdomXp ?? 0) + 25,
+        transactions: tx ? [tx, ...(profile.transactions ?? [])] : profile.transactions,
+      });
+      return { completedGoal, completedSubGoal };
+    }
+
+    if (mode !== "authenticated") {
+      throw new Error("Debes iniciar sesión para abonar a tu meta.");
+    }
+    const {
+      data: { user },
+      error: authErr,
+    } = await supabase.auth.getUser();
+    if (authErr || !user) {
+      throw new Error("No se pudo verificar el usuario autenticado.");
+    }
+
+    const { error: goalErr } = await supabase
+      .from("goals")
+      .update({
+        current_saved: nextSaved,
+        weekly_contribution: nextWeekly,
+        savings_location: nextLocation,
+      })
+      .eq("id", goalId)
+      .eq("user_id", user.id);
+    if (goalErr) throw new Error(goalErr.message);
+
+    if (subGoalId) writeStoredSubGoals(goalId, nextSubGoals);
+
+    if (deductFromBalance) {
+      const { error: txErr } = await supabase.from("transactions").insert({
+        user_id: user.id,
+        type: "expense",
+        amount: roundedAmount,
+        category: "Ahorro",
+        description: `Abono a meta: ${goal.title}`,
+        occurred_at: new Date().toISOString(),
+      });
+      if (txErr) throw new Error(txErr.message);
+    }
+
+    const nextXp = (profile.wisdomXp ?? 0) + 25;
+    const { error: profErr } = await supabase
+      .from("profiles")
+      .update({
+        ...(deductFromBalance ? { current_balance: nextBalance } : {}),
+        wisdom_xp: nextXp,
+      })
+      .eq("id", user.id);
+    if (profErr) throw new Error(profErr.message);
+
+    // Registro de XP (best-effort: no bloquea el abono si la tabla difiere)
+    await Promise.resolve(
+      supabase.from("xp_events").upsert(
+        {
+          user_id: user.id,
+          event_type: "goal_contribution",
+          source_key: `${goalId}:${Date.now()}`,
+          amount: 25,
+        },
+        { onConflict: "user_id,event_type,source_key" },
+      ),
+    ).catch(() => null);
+    await Promise.resolve(
+      supabase.from("activity_days").upsert(
+        {
+          user_id: user.id,
+          activity_date: new Date().toISOString().slice(0, 10),
+        },
+        { onConflict: "user_id,activity_date" },
+      ),
+    ).catch(() => null);
+
+    await refreshProfile(true);
+    return { completedGoal, completedSubGoal };
+  };
+
   const updateWishlistDecisionStatus = async (
     id: string,
     decisionStatus: "purchased" | "discarded",
@@ -1777,29 +1958,29 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
     writeWishlistMetaMap(user.id, currentMeta);
 
     // Best-effort update on wishlist_items / purchase_analyses
-    await Promise.resolve(
-      supabase
-        .from("wishlist_items")
-        .update({
-          user_id: user.id,
-          status: decisionStatus,
-        })
-        .eq("id", id)
-        .eq("user_id", user.id),
-    ).catch(() => null);
 
     await Promise.resolve(
       supabase.from("purchase_analyses").insert({
         user_id: user.id,
         item_name: targetItem.name,
         price: Number(targetItem.price.toFixed(2)),
+        status:
+          profile.currentBalance - targetItem.price >= profile.safetyBuffer
+            ? "affordable"
+            : profile.currentBalance - targetItem.price >= 0
+              ? "caution"
+              : "not_recommended",
         decision: decisionStatus,
         available_before: targetItem.availableBefore ?? profile.currentBalance,
         available_after:
           decisionStatus === "purchased"
             ? Math.max(0, profile.currentBalance - targetItem.price)
             : (targetItem.availableAfter ?? profile.currentBalance),
-        awarded_xp: bonusXp,
+        calculation_snapshot: {
+          price: targetItem.price,
+          currentBalance: profile.currentBalance,
+          safetyBuffer: profile.safetyBuffer,
+        },
         explanation:
           decisionStatus === "discarded"
             ? `Compra descartada tras enfriamiento: salvaste $${targetItem.price.toLocaleString()} MXN.`
@@ -1820,10 +2001,11 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
       );
       await supabase.from("transactions").insert({
         user_id: user.id,
-        title: targetItem.name,
-        amount: Number(targetItem.price.toFixed(2)),
         type: "expense",
+        amount: Number(targetItem.price.toFixed(2)),
         category: "Compras",
+        description: targetItem.name,
+        occurred_at: new Date().toISOString(),
       });
       await supabase
         .from("profiles")
@@ -2071,22 +2253,11 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         safety_buffer: roundedBuffer,
         daily_essential_budget: roundedDailyBurn,
         lifestyle_tags: updatedTags,
+        dependents_count: cleanDependents,
       })
       .eq("id", user.id);
 
     if (profileErr) throw new Error(profileErr.message);
-
-    // Best-effort update optional columns in public.profiles if schema supports them
-    await Promise.resolve(
-      supabase
-        .from("profiles")
-        .update({
-          nickname: cleanNickname || null,
-          age: cleanAge,
-          dependents_count: cleanDependents,
-        })
-        .eq("id", user.id),
-    ).catch(() => null);
 
     // Persist nickname, age, dependents_count, display_name in Supabase auth user_metadata (NO gender/sex)
     await Promise.resolve(
@@ -2163,7 +2334,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         .from("income_sources")
         .update({
           user_id: user.id,
-          name: cleanName,
+          title: cleanName,
           amount: roundedAmount,
           frequency: input.frequency,
           next_payment_date: input.nextPaymentDate,
@@ -2298,6 +2469,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         addPlannedExpense,
         removePlannedExpense,
         contributeToWishlistItem,
+        contributeToGoal,
         updateWishlistDecisionStatus,
         saveGoalWithSubGoals,
         selectActiveGoal,

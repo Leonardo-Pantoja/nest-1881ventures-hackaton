@@ -81,7 +81,7 @@ function EvaluateContent() {
         )}
       </AnimatePresence>
 
-      <div className="space-y-4 max-w-xl mx-auto w-full">
+      <div className="space-y-4 max-w-6xl mx-auto w-full">
         <QuickSnapScanner
           attachmentOnly requireImageConfirmation
           onAttachmentStart={() => setScanRevision(value => value + 1)}

@@ -60,6 +60,7 @@ export default function GoalsAndCoolingView({
     profile,
     financialProfile,
     contributeToWishlistItem,
+    contributeToGoal,
     updateWishlistDecisionStatus,
     saveGoalWithSubGoals,
     selectActiveGoal,
@@ -70,6 +71,18 @@ export default function GoalsAndCoolingView({
     Record<string, string>
   >({});
   const [busyItemId, setBusyItemId] = useState<string | null>(null);
+
+  // Quick "Abonar ahorro" panel state
+  const QUICK_AMOUNTS = [100, 250, 500, 1000];
+  const [contribOpen, setContribOpen] = useState(false);
+  const [contribAmount, setContribAmount] = useState("");
+  const [contribDeduct, setContribDeduct] = useState(true);
+  const [contribSubGoalId, setContribSubGoalId] = useState("");
+  const [contribWeekly, setContribWeekly] = useState("");
+  const [contribLocation, setContribLocation] = useState<
+    "incluido" | "separado"
+  >("separado");
+  const [isContributing, setIsContributing] = useState(false);
 
   // Goal & Sub-Goals Editor State
   const [isEditingGoal, setIsEditingGoal] = useState(false);
@@ -273,6 +286,75 @@ export default function GoalsAndCoolingView({
     }
     return computed;
   }, [profile.goal]);
+
+  const openContribution = (subGoalId = "") => {
+    playTap();
+    setContribSubGoalId(subGoalId);
+    setContribAmount("");
+    setContribDeduct(true);
+    setContribWeekly("");
+    setContribLocation(
+      profile.goal.savingsLocation === "incluido" ? "incluido" : "separado",
+    );
+    setContribOpen(true);
+  };
+
+  const runGoalContribution = async (
+    amount: number,
+    deduct: boolean,
+    subGoalId?: string,
+    options?: Parameters<typeof contributeToGoal>[4],
+  ) => {
+    const goalId = profile.goal.id;
+    if (!goalId) {
+      onShowToast("No se encontró la meta activa.");
+      return;
+    }
+    setIsContributing(true);
+    try {
+      const result = await contributeToGoal(
+        goalId,
+        amount,
+        deduct,
+        subGoalId || undefined,
+        options,
+      );
+      playCoin();
+      if (result.completedGoal || result.completedSubGoal) {
+        playLevelUp();
+        triggerConfettiBurst();
+      }
+      onShowToast(
+        result.completedGoal
+          ? `🎉 ¡Completaste tu meta "${profile.goal.title}"! (+25 XP)`
+          : result.completedSubGoal
+            ? `🎉 ¡Etapa completada! Abonaste $${amount.toLocaleString()} MXN (+25 XP)`
+            : `¡Abonaste $${amount.toLocaleString()} MXN a "${profile.goal.title}"! (+25 XP)`,
+      );
+      setContribOpen(false);
+    } catch (err) {
+      onShowToast(
+        err instanceof Error ? err.message : "No se pudo registrar el abono.",
+      );
+    } finally {
+      setIsContributing(false);
+    }
+  };
+
+  const handleSubmitContribution = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amount = Number(Number(contribAmount).toFixed(2));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      onShowToast("Ingresa un monto de abono válido.");
+      return;
+    }
+    const weeklyNum = Number(contribWeekly);
+    const options =
+      profile.goal.weeklyContribution === 0 && weeklyNum > 0
+        ? { weeklyContribution: weeklyNum, savingsLocation: contribLocation }
+        : undefined;
+    await runGoalContribution(amount, contribDeduct, contribSubGoalId, options);
+  };
 
   const handleContribute = async (item: WishlistItem) => {
     const rawVal =
@@ -729,7 +811,7 @@ export default function GoalsAndCoolingView({
                           onClick={() => void handleContribute(item)}
                           className="h-9 px-3.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold font-heading border-b-2 border-violet-900 cursor-pointer shrink-0 transition-all disabled:opacity-50"
                         >
-                          + Registrar abono
+                          ➕ Abonar a este artículo
                         </button>
                       </div>
                     </div>
@@ -975,6 +1057,34 @@ export default function GoalsAndCoolingView({
             </div>
           </div>
 
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => openContribution()}
+              className="h-10 px-4 rounded-xl bg-[#10B981] hover:bg-emerald-600 text-white text-xs font-bold font-heading border-b-4 border-emerald-700 flex items-center gap-1.5 cursor-pointer transition-all"
+            >
+              <span>➕ Abonar ahorro</span>
+            </button>
+            {profile.goal.weeklyContribution > 0 && (
+              <button
+                type="button"
+                disabled={isContributing}
+                onClick={() =>
+                  void runGoalContribution(
+                    profile.goal.weeklyContribution,
+                    true,
+                  )
+                }
+                className="h-10 px-4 rounded-xl bg-white hover:bg-emerald-50 text-emerald-800 border-2 border-emerald-300 text-xs font-bold font-heading flex items-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50"
+              >
+                <span>
+                  ⚡ Abonar mi cuota semanal ($
+                  {profile.goal.weeklyContribution.toLocaleString()})
+                </span>
+              </button>
+            )}
+          </div>
+
           <div className="space-y-1.5">
             <div className="flex items-center justify-between text-xs font-bold font-heading">
               <span className="text-slate-700">
@@ -1070,6 +1180,16 @@ export default function GoalsAndCoolingView({
                       ⏱️ ~{stage.weeksNeeded} sem. con tu ahorro fijo actual
                     </p>
                   )}
+
+                  {stage.missing > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => openContribution(stage.id)}
+                      className="w-full h-8 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-bold font-heading cursor-pointer transition-colors"
+                    >
+                      ➕ Abonar
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -1080,8 +1200,9 @@ export default function GoalsAndCoolingView({
                   ¿Tu meta es un proyecto grande (ej. Viaje $50,000 MXN)?
                 </p>
                 <p className="text-xs text-slate-500">
-                  Divídela en sub-metas como Vuelos ($12,000), Hospedaje ($18,000)
-                  y Viáticos ($20,000) para visualizar tu avance por etapa.
+                  Divide tu meta en sub-metas como Vuelos ($12,000), Hospedaje
+                  ($18,000) y Viáticos ($20,000) para visualizar tu avance por
+                  etapa.
                 </p>
               </div>
               <button
@@ -1094,6 +1215,157 @@ export default function GoalsAndCoolingView({
             </div>
           )}
         </div>
+
+        {/* Panel rápido: Abonar ahorro */}
+        <AnimatePresence>
+          {contribOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-slate-900/50 flex items-end sm:items-center justify-center p-4"
+              onClick={() => !isContributing && setContribOpen(false)}
+            >
+              <motion.form
+                initial={{ y: 24, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: 24, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                onSubmit={handleSubmitContribution}
+                className="w-full max-w-md max-h-[90vh] overflow-y-auto bg-white rounded-3xl border-2 border-b-4 border-slate-200 shadow-xl p-5 sm:p-6 space-y-4"
+              >
+                <div>
+                  <h3 className="text-lg font-bold font-heading text-slate-900">
+                    ➕ Abonar a {profile.goal.title}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Llevas ${profile.goal.currentSaved.toLocaleString()} de $
+                    {profile.goal.targetAmount.toLocaleString()} MXN
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {QUICK_AMOUNTS.map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => {
+                        playTap();
+                        setContribAmount(String(q));
+                      }}
+                      className={`px-3 py-1.5 rounded-full text-xs font-bold font-heading border-2 cursor-pointer transition-colors ${
+                        Number(contribAmount) === q
+                          ? "bg-emerald-50 border-[#10B981] text-emerald-900"
+                          : "bg-white border-slate-200 text-slate-700 hover:border-slate-300"
+                      }`}
+                    >
+                      +${q.toLocaleString()}
+                    </button>
+                  ))}
+                </div>
+
+                <label className="block space-y-1">
+                  <span className="text-xs font-bold text-slate-700">
+                    Otro monto ($ MXN)
+                  </span>
+                  <input
+                    type="number"
+                    min="1"
+                    step="0.01"
+                    required
+                    value={contribAmount}
+                    onChange={(e) => setContribAmount(e.target.value)}
+                    className="w-full h-11 px-3.5 rounded-xl border border-slate-300 text-sm font-bold text-slate-900 focus:outline-none focus:border-emerald-500"
+                  />
+                </label>
+
+                <label className="flex items-start gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-200 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={contribDeduct}
+                    onChange={(e) => setContribDeduct(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 accent-emerald-600"
+                  />
+                  <span className="text-xs text-slate-700">
+                    <strong className="block text-slate-900">
+                      Descontar de mi saldo disponible hoy
+                    </strong>
+                    Actívalo si apartas dinero de tu quincena actual. Desactívalo
+                    si ya lo tenías guardado aparte.
+                  </span>
+                </label>
+
+                {(profile.goal.subGoals ?? []).length > 0 && (
+                  <label className="block space-y-1">
+                    <span className="text-xs font-bold text-slate-700">
+                      Etapa / Sub-meta (opcional)
+                    </span>
+                    <select
+                      value={contribSubGoalId}
+                      onChange={(e) => setContribSubGoalId(e.target.value)}
+                      className="w-full h-11 px-3 rounded-xl border border-slate-300 bg-white text-sm font-semibold text-slate-900"
+                    >
+                      <option value="">Solo a la meta global</option>
+                      {(profile.goal.subGoals ?? []).map((st) => (
+                        <option key={st.id} value={st.id}>
+                          {st.title} (${st.targetAmount.toLocaleString()})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+
+                {profile.goal.weeklyContribution === 0 && (
+                  <div className="p-3 rounded-2xl bg-indigo-50/60 border border-indigo-200 space-y-2">
+                    <span className="text-xs font-bold text-indigo-900 block">
+                      Aún no tienes ahorro semanal fijo. Defínelo para calcular
+                      tu tiempo estimado:
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="Ahorro semanal fijo ($ MXN)"
+                      value={contribWeekly}
+                      onChange={(e) => setContribWeekly(e.target.value)}
+                      className="w-full h-10 px-3 rounded-xl border border-indigo-200 bg-white text-sm font-semibold text-slate-900"
+                    />
+                    <select
+                      value={contribLocation}
+                      onChange={(e) =>
+                        setContribLocation(
+                          e.target.value as "incluido" | "separado",
+                        )
+                      }
+                      className="w-full h-10 px-3 rounded-xl border border-indigo-200 bg-white text-sm font-semibold text-slate-900"
+                    >
+                      <option value="separado">Guardado aparte de mi saldo</option>
+                      <option value="incluido">Incluido en mi saldo</option>
+                    </select>
+                  </div>
+                )}
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    disabled={isContributing}
+                    onClick={() => setContribOpen(false)}
+                    className="h-11 px-4 rounded-xl border border-slate-300 bg-white text-xs font-bold font-heading text-slate-700 cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isContributing}
+                    className="flex-1 h-11 rounded-xl bg-[#10B981] hover:bg-emerald-600 text-white text-xs font-bold font-heading border-b-4 border-emerald-700 cursor-pointer disabled:opacity-50"
+                  >
+                    {isContributing ? "Abonando..." : "Confirmar abono (+25 XP)"}
+                  </button>
+                </div>
+              </motion.form>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Collapsible Goal & Sub-Goals Editor Form */}
         <AnimatePresence>

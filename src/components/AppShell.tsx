@@ -127,7 +127,18 @@ export default function AppShell({
         </div>
 
         {/* Clean Sidebar Footer: Fixed Avatar + User Info + Clear Logout Button */}
-        <div className="pt-5 border-t border-slate-200 space-y-2.5">
+        <div className="pt-5 pb-16 border-t border-slate-200 space-y-2.5">
+          <motion.button
+            type="button"
+            disabled={isSigningOut}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => void handleSignOut()}
+            className="w-full h-10 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-200 text-slate-700 hover:text-rose-700 text-xs font-bold font-heading flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
+          >
+            <LogOut className="w-4 h-4 shrink-0" strokeWidth={1.5} />
+            <span>{isSigningOut ? "Cerrando sesión..." : "Cerrar sesión"}</span>
+          </motion.button>
+
           <div className="flex items-center justify-between gap-2 p-2.5 rounded-2xl bg-slate-50 border border-slate-200/80">
             <button
               type="button"
@@ -165,16 +176,6 @@ export default function AppShell({
             )}
           </div>
 
-          <motion.button
-            type="button"
-            disabled={isSigningOut}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => void handleSignOut()}
-            className="w-full h-10 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-200 text-slate-700 hover:text-rose-700 text-xs font-bold font-heading flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
-          >
-            <LogOut className="w-4 h-4 shrink-0" strokeWidth={1.5} />
-            <span>{isSigningOut ? "Cerrando sesión..." : "Cerrar sesión"}</span>
-          </motion.button>
         </div>
       </aside>
 
@@ -182,7 +183,7 @@ export default function AppShell({
       <div className="flex-1 min-w-0 md:pl-64 lg:pl-72 flex flex-col min-h-screen">
         {/* Top Bar (Visible on Mobile & Desktop Top-Right for non-duplicated Streak & XP) */}
         <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-[#FAF8F5]/90 backdrop-blur-md">
-          <div className="max-w-5xl mx-auto px-4 sm:px-8 h-16 flex items-center justify-between gap-4">
+          <div className="max-w-6xl mx-auto px-4 sm:px-8 h-16 flex items-center justify-between gap-4">
             {/* Mobile Brand / Desktop View Title */}
             <div className="flex items-center gap-2.5">
               <Link
@@ -272,7 +273,7 @@ export default function AppShell({
         </header>
 
         {/* Central Spacious Container with Generous Whitespace */}
-        <main className="flex-1 w-full min-w-0 overflow-x-hidden max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-28 md:py-4">
+        <main className="flex-1 w-full min-w-0 overflow-x-hidden max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-28 md:py-4">
           {children}
         </main>
 
