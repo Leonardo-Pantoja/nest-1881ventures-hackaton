@@ -105,7 +105,7 @@ export async function saveOnboardingToSupabase(
   );
 
   if (error) {
-    console.error("Onboarding persistence failed:", error.message);
+    console.error("Onboarding persistence failed.");
     throw new Error(
       "No se pudo guardar tu información financiera. Inténtalo de nuevo."
     );

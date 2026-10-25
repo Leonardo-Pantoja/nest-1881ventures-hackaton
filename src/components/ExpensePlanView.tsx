@@ -1127,7 +1127,7 @@ export default function ExpensePlanView({ onShowToast }: ExpensePlanViewProps) {
                 </div>
                 <div>
                   <span className="text-slate-500 block">
-                    Ahorro fijo en "{profile.goal.title}":
+                    Ahorro fijo en &quot;{profile.goal.title}&quot;:
                   </span>
                   <strong className="text-emerald-700">
                     ${profile.goal.currentSaved.toLocaleString()} (Intacto)

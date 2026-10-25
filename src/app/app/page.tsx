@@ -6,14 +6,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Sparkles,
   CheckCircle2,
-  SlidersHorizontal,
-  UserCheck,
   X,
   Flame,
-  Trophy,
   Target,
   Sprout,
-  Search,
   Clock,
   ArrowRight,
   Award,
@@ -41,18 +37,15 @@ import FinancialPlantWidget, {
   type PlantSimulationState,
   type PlantLevel,
 } from "@/components/FinancialPlantWidget";
-import QuickSnapScanner, {
-  type ScannedProductResult,
-} from "@/components/QuickSnapScanner";
+import FinancialChat from "@/components/FinancialChat";
+import FinancialDataStatus from "@/components/FinancialDataStatus";
 import { type BottomNavTab } from "@/components/BottomNav";
 import {
   useFinancial,
-  PRELOADED_SANDBOX_PROFILES,
 } from "@/context/FinancialContext";
 import {
   playTap,
   playCoin,
-  playLevelUp,
   triggerConfettiBurst,
 } from "@/lib/soundEffects";
 
@@ -716,14 +709,17 @@ function HeroWorldDiorama({
 }
 
 export default function AppDashboardPage() {
+  const { mode, profile } = useFinancial();
+  return <DashboardContent key={JSON.stringify([mode, profile.id])} />;
+}
+
+function DashboardContent() {
   const router = useRouter();
   const {
     profile,
     mode,
     profileError,
     refreshProfile,
-    signOut,
-    loadPreloadedSandboxProfile,
     setPendingEvaluation,
     addToWishlist,
     streakCelebration,
@@ -731,11 +727,19 @@ export default function AppDashboardPage() {
 
   const [activeBottomTab, setActiveBottomTab] =
     useState<BottomNavTab>("simulate");
+  const [profileStartTab, setProfileStartTab] = useState<"perfil" | "ingresos">("perfil");
   const [showTourModal, setShowTourModal] = useState(false);
   const [isSavingDecision, setIsSavingDecision] = useState(false);
 
+  useEffect(() => {
+    const openIncomeEditor = () => { if (window.location.hash === "#ingresos") { setProfileStartTab("ingresos"); setActiveBottomTab("profile"); } };
+    const timer = setTimeout(openIncomeEditor, 0);
+    window.addEventListener("hashchange", openIncomeEditor);
+    return () => { clearTimeout(timer); window.removeEventListener("hashchange", openIncomeEditor); };
+  }, []);
+
   // Simulator State
-  const [queryText, setQueryText] = useState("");
+  const [chatSuggestion, setChatSuggestion] = useState<{ text: string; id: number } | undefined>();
   const [parsedItemName, setParsedItemName] = useState("");
   const [parsedItemPrice, setParsedItemPrice] = useState<number>(0);
 
@@ -743,6 +747,7 @@ export default function AppDashboardPage() {
     null,
   );
   const [scannedStoreTag, setScannedStoreTag] = useState<string | null>(null);
+  const [scannerRevision, setScannerRevision] = useState(0);
 
   // Native Text-to-Speech (Voz Interactiva para la Planta)
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -804,7 +809,7 @@ export default function AppDashboardPage() {
     const evaluationPending =
       parsedItemPrice > 0 && currentEvaluation === null;
 
-    const expenses = evaluationReady ? evaluation.consideredExpenses : null;
+    const expenses = evaluation?.consideredExpenses ?? null;
     const totalBalance = expenses?.currentBalance ?? null;
     const fixedAndRentTotal =
       expenses?.essentialExpenses !== null &&
@@ -904,9 +909,7 @@ export default function AppDashboardPage() {
 
     return {
       safeToSpend,
-      nextPaydayDays: evaluationReady
-        ? evaluation.daysUntilNextIncome
-        : null,
+      nextPaydayDays: evaluation?.daysUntilNextIncome ?? null,
       evaluation,
       evaluationReady,
       evaluationIncomplete,
@@ -950,7 +953,7 @@ export default function AppDashboardPage() {
         : `¡Plan maestro ${firstName}! Con micro-ahorro protegemos tu quincena y ganamos +${decisionXpBonus} XP ✨`;
     }
     if (isStormy) {
-      return `¡Cuidado ${firstName}! Con "${parsedItemName}" ($${parsedItemPrice.toLocaleString()}) nos quedaríamos sin para la renta 🌧️`;
+      return `La compra de "${parsedItemName}" supera el margen calculado y podría afectar gastos o reservas registradas.`;
     }
     if (parsedItemPrice > 0) {
       if (financialMetrics.evaluationIncomplete) {
@@ -959,7 +962,7 @@ export default function AppDashboardPage() {
           : `No puedo recomendar esta compra: la evaluación no se completó con datos financieros suficientes.`;
       }
       if (financialMetrics.evaluation?.status === "precaucion") {
-        return `La compra de "${parsedItemName}" cabe con precaución y dejaría menos de la mitad del colchón de seguridad.`;
+        return financialMetrics.evaluation.headlineLine1;
       }
       return `¡Sí nos alcanza para "${parsedItemName}"! Aún conservarías $${Math.max(
         0,
@@ -1030,39 +1033,10 @@ export default function AppDashboardPage() {
     }
   }, [autoVoiceEnabled, rpgSpeechMessage, speakAdviceText]);
 
-  // Real-Time Input Handler (parses product name + price)
-  const handleQueryInputChange = (value: string) => {
-    setQueryText(value);
-    setSelectedDecision("idle");
-
-    if (!value.trim()) {
-      setParsedItemName("");
-      setParsedItemPrice(0);
-      return;
-    }
-
-    const normalized = value.replace(/,/g, "");
-    const priceMatch = normalized.match(/(\d+(?:\.\d+)?)/);
-    if (priceMatch) {
-      const price = Math.max(0, Math.round(parseFloat(priceMatch[1])));
-      setParsedItemPrice(price);
-      const cleanedName = value
-        .replace(/\$?\s*\d[\d,.]*/g, "")
-        .replace(/\bde\b|\bpor\b|\bmxn\b|\bpesos\b/gi, "")
-        .trim();
-      setParsedItemName(cleanedName || "Artículo consultado");
-
-      playTap();
-    } else {
-      setParsedItemPrice(0);
-      setParsedItemName(value.trim());
-    }
-  };
-
   // Select RPG Shop Item Card
   const handleSelectShopItem = (item: (typeof RPG_SHOP_ITEMS)[number]) => {
+    setScannerRevision(value => value + 1);
     setSelectedDecision("idle");
-    setQueryText(`${item.name} $${item.price.toLocaleString()}`);
     setParsedItemName(item.name);
     setParsedItemPrice(item.price);
     setScannedThumbnailUrl(null);
@@ -1074,33 +1048,6 @@ export default function AppDashboardPage() {
     });
 
     playTap();
-  };
-
-  // Camera / QuickSnapScanner Handler
-  const handleScanComplete = (scanned: ScannedProductResult) => {
-    setSelectedDecision("idle");
-    setQueryText(
-      scanned.price === null
-        ? scanned.name
-        : `${scanned.name} $${scanned.price.toLocaleString()}`,
-    );
-    setParsedItemName(scanned.name);
-    setParsedItemPrice(scanned.price ?? 0);
-    setScannedThumbnailUrl(scanned.thumbnailDataUrl);
-    setScannedStoreTag(scanned.storeTag);
-    setPendingEvaluation({
-      name: scanned.name,
-      price: scanned.price ?? 0,
-      imageName: scanned.storeTag,
-    });
-
-    if (scanned.price === null) {
-      triggerToast(
-        "La lectura de imágenes con Gemini está pendiente para Fase 2. Confirma manualmente el nombre y el precio antes de evaluar.",
-      );
-    } else {
-      playTap();
-    }
   };
 
   const handleDecisionBuyToday = () => {
@@ -1139,36 +1086,9 @@ export default function AppDashboardPage() {
     }
   };
 
-  // Decision 3: switch the same item to a weekly micro-saving plan.
-  const handleDecisionMicroSave = async () => {
-    if (isSavingDecision || !parsedItemName.trim() || parsedItemPrice <= 0)
-      return;
-    setIsSavingDecision(true);
-    try {
-      const earnedXp = await addToWishlist(
-        {
-          name: parsedItemName,
-          price: parsedItemPrice,
-          cooldownDays: Math.max(1, profile.nextPaydayDays || 7),
-          strategy: "microsave",
-        },
-        100,
-      );
-      playCoin();
-      triggerConfettiBurst();
-      setDecisionXpBonus(earnedXp);
-      setSelectedDecision("microsave");
-      triggerToast(
-        `💰 Plan de micro-ahorro guardado en Retos y Metas: ${parsedItemName}`,
-      );
-    } catch (error) {
-      console.error("Micro-saving plan save failed:", error);
-      triggerToast(
-        error instanceof Error ? error.message : "No se pudo guardar el plan.",
-      );
-    } finally {
-      setIsSavingDecision(false);
-    }
+  const handleDecisionMicroSave = () => {
+    setChatSuggestion({ text: `¿Cuánto tendría que ahorrar para comprar ${parsedItemName} de $${parsedItemPrice} MXN?`, id: Date.now() });
+    document.getElementById("dashboard-financial-chat")?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
   const plantSimulationState: PlantSimulationState =
@@ -1316,44 +1236,29 @@ export default function AppDashboardPage() {
               </div>
             </div>
 
-            {/* Clean Search Input Bar with Integrated Camera Button on the Right */}
-            <div className="relative flex items-center">
-              <Search
-                className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none"
-                strokeWidth={1.5}
+            <div id="dashboard-financial-chat">
+              <FinancialChat
+                selectionRevision={scannerRevision}
+                onOpenFinancialProfile={() => { setProfileStartTab("ingresos"); setActiveBottomTab("profile"); }}
+                suggestion={chatSuggestion}
+                product={parsedItemPrice > 0 ? { name: parsedItemName, price: parsedItemPrice } : null}
+                onClearProduct={name => {
+                  setParsedItemName(name ?? ""); setParsedItemPrice(0);
+                  setScannedThumbnailUrl(null); setScannedStoreTag(null); setSelectedDecision("idle");
+                  setPendingEvaluation({ name: name ?? "", price: 0, imageName: null });
+                }}
+                onProduct={(product, image) => {
+                  setSelectedDecision("idle");
+                  setParsedItemName(product.name);
+                  setParsedItemPrice(product.price);
+                  if (image) { setScannedThumbnailUrl(image.thumbnailDataUrl); setScannedStoreTag(image.storeTag); }
+                  setPendingEvaluation({ name: product.name, price: product.price, imageName: image?.storeTag ?? null });
+                }}
               />
-              <input
-                type="text"
-                value={queryText}
-                onChange={(e) => handleQueryInputChange(e.target.value)}
-                placeholder="Escribe ej. Audífonos $2,300 o escanea tu producto..."
-                className="w-full h-12 pl-10 pr-32 rounded-2xl border-2 border-slate-200 bg-slate-50/70 text-sm sm:text-base font-semibold text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-[#10B981] focus:outline-none transition-all"
-              />
-              <div className="absolute right-1.5 flex items-center gap-1">
-                {queryText && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playTap();
-                      setQueryText("");
-                      setParsedItemName("");
-                      setParsedItemPrice(0);
-                      setSelectedDecision("idle");
-                      setScannedThumbnailUrl(null);
-                      setScannedStoreTag(null);
-                    }}
-                    className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
-                    title="Limpiar"
-                  >
-                    <X className="w-4 h-4" strokeWidth={1.5} />
-                  </button>
-                )}
-                <QuickSnapScanner
-                  inlineIconTrigger
-                  onScanComplete={handleScanComplete}
-                />
-              </div>
             </div>
+
+            <FinancialDataStatus evaluation={evaluation.response} loading={evaluation.loading}
+              error={evaluation.error ?? profileError} onRetry={() => void refreshProfile()} />
 
             {/* Real-Life Cost Psychology Pills (Píldoras de Costo de Vida Real) */}
             <AnimatePresence>
@@ -1569,7 +1474,7 @@ export default function AppDashboardPage() {
                               ? `Excede el margen por $${financialMetrics.missingLiquidity.toLocaleString()}`
                               : financialMetrics.evaluation?.status ===
                                   "precaucion"
-                                ? "Viable con precaución"
+                                ? financialMetrics.evaluation.badgeLabel
                                 : `Margen: $${Math.max(
                                     0,
                                     financialMetrics.netAfterPurchase ?? 0,
@@ -1594,7 +1499,7 @@ export default function AppDashboardPage() {
                             ? `La compra supera tu margen libre por $${financialMetrics.missingLiquidity.toLocaleString()} MXN. Esta simulación no retira dinero de tu meta "${profile.goal.title}".`
                             : financialMetrics.evaluation?.status ===
                                 "precaucion"
-                              ? `La compra cabe en el margen calculado, pero dejaría menos de la mitad del colchón de seguridad libre. Esta simulación no retira dinero de tu meta "${profile.goal.title}".`
+                              ? financialMetrics.evaluation.headlineLine1
                               : `La compra cabe en el margen calculado. Esta simulación no retira dinero de tu meta "${profile.goal.title}".`}
                         </p>
                       </div>
@@ -1764,7 +1669,7 @@ export default function AppDashboardPage() {
                       type="button"
                       className="w-full h-10 rounded-xl border-2 border-b-4 border-indigo-200 border-b-indigo-300 bg-indigo-50/60 hover:bg-indigo-100/80 text-indigo-950 text-xs font-bold font-heading transition-colors cursor-pointer"
                     >
-                      Crear plan de micro-ahorro (+100 XP)
+                      Calcular plan de ahorro
                     </button>
                   </motion.div>
                 </div>
@@ -1920,6 +1825,7 @@ export default function AppDashboardPage() {
          ===================================================================== */}
       {activeBottomTab === "profile" && (
         <ProfileEditorPanel
+          key={profileStartTab} initialTab={profileStartTab}
           onShowToast={(msg) => triggerToast(msg)}
           onNavigateToSimulate={() => setActiveBottomTab("simulate")}
         />

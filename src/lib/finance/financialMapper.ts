@@ -5,6 +5,7 @@ import type {
   FinancialGoal,
   OnboardingProfile,
   PayFrequency,
+  RegisteredIncomeSource,
   SavingsLocation,
 } from "../onboarding/financialTypes";
 
@@ -27,6 +28,7 @@ function asArray(value: unknown): DataRecord[] {
 function numberOrNull(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
   if (typeof value !== "number" && typeof value !== "string") return null;
+  if (typeof value === "string" && !value.trim()) return null;
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
@@ -91,7 +93,8 @@ function normalizeSavingsLocation(value: unknown): SavingsLocation {
 
 function datePartsInMexico(value: unknown): [number, number, number] | null {
   if (typeof value !== "string" || !value.trim()) return null;
-  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const text = value.trim();
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
 
   if (dateOnly) {
     const parts = dateOnly.slice(1).map(Number) as [number, number, number];
@@ -106,8 +109,10 @@ function datePartsInMexico(value: unknown): [number, number, number] | null {
     return parts;
   }
 
+  // Only unambiguous ISO timestamps with a valid calendar date and explicit offset are accepted.
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/i.test(text) || !datePartsInMexico(text.slice(0, 10))) return null;
   // Timestamp values are converted to calendar dates in Mexico City.
-  const timestamp = new Date(value);
+  const timestamp = new Date(text);
   if (!Number.isFinite(timestamp.getTime())) return null;
   const formatted = new Intl.DateTimeFormat("en-CA", {
     timeZone: FINANCIAL_TIME_ZONE,
@@ -121,41 +126,63 @@ function datePartsInMexico(value: unknown): [number, number, number] | null {
     : null;
 }
 
-function daysBetweenCalendarDates(
-  value: unknown,
-  now: Date,
-): number | null {
+function financialDateDetails(value: unknown, now: Date): {
+  date: string | null;
+  days: number | null;
+  status: RegisteredIncomeSource["dateStatus"];
+} {
+  if (value === null || value === undefined || value === "" || typeof value === "string" && !value.trim()) {
+    return { date: null, days: null, status: "missing" };
+  }
   const target = datePartsInMexico(value);
   const today = datePartsInMexico(now.toISOString());
-  if (!target || !today) return null;
-
-  const targetDay = Date.UTC(target[0], target[1] - 1, target[2]);
-  const todayDay = Date.UTC(today[0], today[1] - 1, today[2]);
-  const days = Math.round((targetDay - todayDay) / 86_400_000);
-  return days < 0 ? null : days;
+  if (!target || !today) return { date: null, days: null, status: "invalid" };
+  const difference = Math.round((Date.UTC(target[0], target[1] - 1, target[2]) - Date.UTC(today[0], today[1] - 1, today[2])) / 86_400_000);
+  const date = `${String(target[0]).padStart(4, "0")}-${String(target[1]).padStart(2, "0")}-${String(target[2]).padStart(2, "0")}`;
+  return { date, days: difference < 0 ? null : difference, status: difference < 0 ? "overdue" : "known" };
 }
 
 function nextDateFromSources(
-  sources: DataRecord[],
+  records: DataRecord[],
   now: Date,
-): { days: number | null; amount: number | null; frequency: PayFrequency } {
-  const orderedSources = [...sources].sort((left, right) => {
-    const leftDays = daysBetweenCalendarDates(left.next_payment_date, now);
-    const rightDays = daysBetweenCalendarDates(right.next_payment_date, now);
-    return (leftDays ?? Number.MAX_SAFE_INTEGER) -
-      (rightDays ?? Number.MAX_SAFE_INTEGER);
+): { days: number | null; amount: number | null; frequency: PayFrequency; sources: RegisteredIncomeSource[]; warnings: string[] } {
+  const warnings = new Set<string>();
+  const sources = records.map((record): RegisteredIncomeSource => {
+    const date = financialDateDetails(record.next_payment_date, now);
+    const amount = numberOrNull(record.amount);
+    const frequency = normalizePayFrequency(record.frequency);
+    if (date.status !== "known") warnings.add(`income_date_${date.status}`);
+    if (amount === null) warnings.add("income_amount_unknown");
+    if (frequency === "variable" && record.frequency !== "variable") warnings.add("income_frequency_unknown");
+    return { amount, frequency, nextPaymentDate: date.date, nextPaymentDays: date.days, dateStatus: date.status };
   });
-
-  if (orderedSources.length !== 1) {
-    return { days: null, amount: null, frequency: "variable" };
+  if (!sources.length) {
+    return { days: null, amount: null, frequency: "variable", sources, warnings: ["income_sources_missing"] };
+  }
+  if (sources.length === 1) {
+    const source = sources[0];
+    return { days: source.nextPaymentDays, amount: source.amount, frequency: source.frequency, sources, warnings: [...warnings] };
   }
 
-  const source = orderedSources[0];
-  return {
-    days: daysBetweenCalendarDates(source.next_payment_date, now),
-    amount: numberOrNull(source.amount),
-    frequency: normalizePayFrequency(source.frequency),
-  };
+  // A missing or overdue date prevents identifying the actual next recorded income.
+  // Keep all amounts visible in source metadata rather than selecting an arbitrary row.
+  if (sources.some(source => source.nextPaymentDays === null)) {
+    warnings.add("multiple_income_calendars");
+    return { days: null, amount: null, frequency: "variable", sources, warnings: [...warnings] };
+  }
+  const days = Math.min(...sources.map(source => source.nextPaymentDays!));
+  const nextSources = sources.filter(source => source.nextPaymentDays === days);
+  const nextAmounts = nextSources.map(source => source.amount === null ? null : Math.round(source.amount * 100));
+  const amountCents = nextAmounts.every(amount => amount !== null && Number.isSafeInteger(amount))
+    ? nextAmounts.reduce<number>((total, amount) => total + amount!, 0)
+    : null;
+  const amount = amountCents !== null && Number.isSafeInteger(amountCents) ? amountCents / 100 : null;
+  if (amount === null) warnings.add("income_amount_unknown");
+  // Only synchronized schedules can be represented as a single repeated paycheck.
+  const synchronized = sources.every(source => source.nextPaymentDays === days && source.frequency === sources[0].frequency && source.amount !== null);
+  const frequency = synchronized ? sources[0].frequency : "variable";
+  if (!synchronized) warnings.add("multiple_income_calendars");
+  return { days, amount, frequency, sources, warnings: [...warnings] };
 }
 
 function mapGoal(record: DataRecord): FinancialGoal {
@@ -187,10 +214,12 @@ function mapCommitments(
 ): {
   commitments: Commitment[];
   debts: Debt[];
+  warnings: string[];
 } {
   const commitments: Commitment[] = [];
   const debts: Debt[] = [];
   const seenIds = new Set<string>();
+  const warnings = new Set<string>();
 
   for (const record of records) {
     const id = stringOrNull(record.id);
@@ -199,11 +228,16 @@ function mapCommitments(
 
     const title = stringOrNull(record.title) ?? "Compromiso";
     const amount = numberOrNull(record.amount);
-    const dueInDays =
-      Number.isInteger(record.dueInDays) && Number(record.dueInDays) >= 0
-        ? Number(record.dueInDays)
-        : daysBetweenCalendarDates(record.next_due_date, now);
     const frequency = normalizeFrequency(record.frequency);
+    const explicitDays = Number.isInteger(record.dueInDays) && Number(record.dueInDays) >= 0 ? Number(record.dueInDays) : null;
+    const dueDate = financialDateDetails(record.next_due_date, now);
+    const debt = isDebtRecord(record);
+    // An active overdue one-time payment remains due; recurring arrears need confirmation.
+    const dueInDays = explicitDays ?? (dueDate.status === "overdue" && frequency === "unico" ? 0 : dueDate.days);
+    if (explicitDays === null && dueDate.status !== "known") {
+      warnings.add(dueDate.status === "overdue" ? debt ? "overdue_debt" : "overdue_commitment"
+        : `${debt ? "debt" : "commitment"}_date_${dueDate.status}`);
+    }
     const category = stringOrNull(record.category) ?? "Otros";
 
     if (isDebtRecord(record)) {
@@ -233,7 +267,7 @@ function mapCommitments(
     });
   }
 
-  return { commitments, debts };
+  return { commitments, debts, warnings: [...warnings] };
 }
 
 export function mapFinancialProfile(
@@ -288,10 +322,10 @@ export function mapSupabaseRecord(
   const profile = asRecord(data.profile);
   if (!profile) return null;
 
-  const activeIncomeSources = asArray(data.incomeSources);
+  const activeIncomeSources = asArray(data.incomeSources).filter(source => source.is_active !== false);
   const income = nextDateFromSources(activeIncomeSources, now);
-  const payments = mapCommitments(asArray(data.commitments), now);
-  const goals = asArray(data.goals).map(mapGoal).sort((a, b) => a.id.localeCompare(b.id));
+  const payments = mapCommitments(asArray(data.commitments).filter(payment => payment.is_active !== false), now);
+  const goals = asArray(data.goals).filter(goal => goal.is_active !== false).map(mapGoal).sort((a, b) => a.id.localeCompare(b.id));
   const tags = Array.isArray(profile.lifestyle_tags)
     ? profile.lifestyle_tags.filter(
         (tag): tag is OnboardingProfile["lifeContext"][number] =>
@@ -309,6 +343,8 @@ export function mapSupabaseRecord(
     payFrequency: income.frequency,
     nextPaydayAmount: income.amount,
     nextPaydayDays: income.days,
+    incomeSources: income.sources,
+    dataWarnings: [...new Set([...income.warnings, ...payments.warnings])],
     dailyEssentialBurn: numberOrNull(profile.daily_essential_budget),
     commitments: payments.commitments,
     debts: payments.debts,

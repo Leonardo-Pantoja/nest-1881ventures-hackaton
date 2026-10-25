@@ -109,3 +109,13 @@ test("changing balance or account immediately hides old evaluations and discards
     assert.equal(render().response, null);
   } finally { global.fetch = originalFetch; }
 });
+
+test('a known margin summary cannot enable buying a product whose price is still missing', () => {
+  writes = 0;
+  const render = harness(() => Flow({ itemName: 'Laptop', itemPrice: 0, apiEvaluation: { ...evaluation, summary: true, purchaseReport: null } }));
+  let tree = render();
+  const card = elements(tree).find(e => e.props?.onClick && elements(e).some(child => child.type === 'h3' && child.props.children === 'Comprar hoy'));
+  card.props.onClick(); tree = render();
+  assert.equal(elements(tree).some(e => e.type === Modal), false); assert.equal(writes, 0);
+  assert.ok(elements(tree).some(e => e.type === 'button' && e.props.disabled && e.props.children === 'Verifica tus datos financieros'));
+});

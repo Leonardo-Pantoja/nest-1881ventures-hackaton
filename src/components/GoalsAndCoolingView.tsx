@@ -267,7 +267,8 @@ export default function GoalsAndCoolingView({
     let remainingPool = Math.max(0, Number(profile.goal.currentSaved) || 0);
     const weekly = Math.max(0, Number(profile.goal.weeklyContribution) || 0);
 
-    return subs.map((stage) => {
+    const computed = [];
+    for (const stage of subs) {
       const target = Math.max(1, Number(stage.targetAmount) || 0);
       const allocated =
         stage.savedAmount !== undefined
@@ -281,14 +282,9 @@ export default function GoalsAndCoolingView({
       const weeksNeeded =
         missing <= 0 ? 0 : weekly > 0 ? Math.ceil(missing / weekly) : null;
 
-      return {
-        ...stage,
-        allocated,
-        missing,
-        pct,
-        weeksNeeded,
-      };
-    });
+      computed.push({ ...stage, allocated, missing, pct, weeksNeeded });
+    }
+    return computed;
   }, [profile.goal]);
 
   const openContribution = (subGoalId = "") => {

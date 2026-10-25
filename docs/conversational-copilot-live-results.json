@@ -1,0 +1,775 @@
+{
+  "evaluatedAt": "2026-10-25T18:02:59.542Z",
+  "model": "gemini-3.5-flash-lite",
+  "syntheticDataOnly": true,
+  "supabaseRead": false,
+  "databaseWrites": false,
+  "liveProvider": "Gemini",
+  "expectedTurns": 8,
+  "executedTurns": 8,
+  "approvedTurns": 8,
+  "unexecutedCases": [],
+  "budget": {
+    "maximumTurns": 8,
+    "structuredCallsPerTurn": 2,
+    "maximumTransportAttemptsPerStructuredCall": 2
+  },
+  "syntheticProfile": {
+    "id": "synthetic-partial-profile",
+    "lifeContext": [],
+    "currentBalance": 3000,
+    "safetyBuffer": 650,
+    "dailyEssentialBurn": 210,
+    "payFrequency": "variable",
+    "nextPaydayDays": null,
+    "nextPaydayAmount": null,
+    "incomeSources": [],
+    "dataWarnings": [
+      "income_sources_missing"
+    ],
+    "goals": [],
+    "commitments": [],
+    "debts": [],
+    "isOnboarded": true
+  },
+  "results": [
+    {
+      "case": "A",
+      "question": "¿Puedo comprar Metroid Ravenous por $1,449?",
+      "expectedOperation": "purchase",
+      "intentSource": "gemini",
+      "source": "gemini",
+      "fallback": false,
+      "passed": true,
+      "intent": {
+        "operation": "purchase",
+        "productName": "Metroid Ravenous",
+        "price": 1449,
+        "alternativePrice": null,
+        "weeks": null,
+        "weeklyContribution": null,
+        "upfrontAmount": null,
+        "reserveAmount": null,
+        "goalQuery": null,
+        "incomeStatement": null
+      },
+      "reply": "No puedo determinar si la compra cabe en tu margen. No aparecen fuentes de ingreso activas y visibles ni una fecha de próximo pago confirmada.\n\nEl saldo contable hipotético tras la compra sería $1,551.00 MXN; no es dinero libre ni confirma la conveniencia de comprar.\n\n¿Tus ingresos tienen una fecha fija o son variables?",
+      "followUp": {
+        "kind": "income_type",
+        "text": "¿Tus ingresos tienen una fecha fija o son variables?"
+      },
+      "product": {
+        "name": "Metroid Ravenous",
+        "price": 1449
+      },
+      "cards": [
+        {
+          "label": "ahora: precio",
+          "value": 1449,
+          "unit": "MXN"
+        },
+        {
+          "label": "Saldo registrado",
+          "value": 3000,
+          "unit": "MXN"
+        },
+        {
+          "label": "Reserva registrada",
+          "value": 650,
+          "unit": "MXN"
+        },
+        {
+          "label": "Saldo contable hipotético",
+          "value": 1551,
+          "unit": "MXN"
+        }
+      ],
+      "mathematicalSavings": null,
+      "hypotheticalBalance": {
+        "status": "calculado",
+        "registeredBalance": 3000,
+        "purchaseAmount": 1449,
+        "hypotheticalBalance": 1551,
+        "balanceShortfall": 0
+      },
+      "waitScenario": null,
+      "incomeContext": "unknown",
+      "quality": {
+        "score": 10,
+        "verdict": "aprobada"
+      },
+      "checks": [
+        {
+          "name": "operation_matches_current_question",
+          "passed": true
+        },
+        {
+          "name": "latest_confirmed_price_is_preserved",
+          "passed": true
+        },
+        {
+          "name": "selected_product_is_preserved",
+          "passed": true
+        },
+        {
+          "name": "partial_profile_is_read_only",
+          "passed": true
+        },
+        {
+          "name": "no_income_is_fabricated",
+          "passed": true
+        },
+        {
+          "name": "at_most_one_follow_up",
+          "passed": true
+        },
+        {
+          "name": "accounting_balance_is_1551_not_safe_margin",
+          "passed": true
+        },
+        {
+          "name": "signed_context_preserves_latest_price",
+          "passed": true
+        }
+      ],
+      "errors": []
+    },
+    {
+      "case": "A-follow-up",
+      "question": "Sí, están actualizados",
+      "expectedOperation": "confirmation",
+      "intentSource": "gemini",
+      "source": "gemini",
+      "fallback": false,
+      "passed": true,
+      "intent": {
+        "operation": "confirmation",
+        "productName": null,
+        "price": null,
+        "alternativePrice": null,
+        "weeks": null,
+        "weeklyContribution": null,
+        "upfrontAmount": null,
+        "reserveAmount": null,
+        "goalQuery": null,
+        "incomeStatement": null
+      },
+      "reply": "Gracias por confirmarlo. Los datos están actualizados, aunque todavía pueden faltar campos necesarios.\n\nNo aparecen fuentes de ingreso activas y visibles ni una fecha de próximo pago confirmada.",
+      "followUp": null,
+      "product": {
+        "name": "Metroid Ravenous",
+        "price": 1449
+      },
+      "cards": [],
+      "mathematicalSavings": null,
+      "hypotheticalBalance": null,
+      "waitScenario": null,
+      "incomeContext": "unknown",
+      "quality": {
+        "score": 10,
+        "verdict": "aprobada"
+      },
+      "checks": [
+        {
+          "name": "operation_matches_current_question",
+          "passed": true
+        },
+        {
+          "name": "latest_confirmed_price_is_preserved",
+          "passed": true
+        },
+        {
+          "name": "selected_product_is_preserved",
+          "passed": true
+        },
+        {
+          "name": "partial_profile_is_read_only",
+          "passed": true
+        },
+        {
+          "name": "no_income_is_fabricated",
+          "passed": true
+        },
+        {
+          "name": "at_most_one_follow_up",
+          "passed": true
+        },
+        {
+          "name": "reply_does_not_repeat_previous_report",
+          "passed": true
+        },
+        {
+          "name": "confirmation_acknowledged_without_same_question",
+          "passed": true
+        },
+        {
+          "name": "signed_context_preserves_latest_price",
+          "passed": true
+        }
+      ],
+      "errors": []
+    },
+    {
+      "case": "wait",
+      "question": "¿Y si espero dos semanas?",
+      "expectedOperation": "wait",
+      "intentSource": "gemini",
+      "source": "gemini",
+      "fallback": false,
+      "passed": true,
+      "intent": {
+        "operation": "wait",
+        "productName": "Metroid Ravenous",
+        "price": 1449,
+        "alternativePrice": null,
+        "weeks": 2,
+        "weeklyContribution": null,
+        "upfrontAmount": null,
+        "reserveAmount": null,
+        "goalQuery": null,
+        "incomeStatement": null
+      },
+      "reply": "Los gastos esenciales registrados sumarían $2,940.00 MXN durante ese plazo. Es aritmética de gastos, no una proyección completa del saldo.\n\nNo puedo proyectar el saldo tras ese plazo sin un calendario de ingresos y pagos confirmado.",
+      "followUp": null,
+      "product": {
+        "name": "Metroid Ravenous",
+        "price": 1449
+      },
+      "cards": [
+        {
+          "label": "Semanas de espera",
+          "value": 2,
+          "unit": "semanas"
+        },
+        {
+          "label": "Gasto esencial durante la espera",
+          "value": 2940,
+          "unit": "MXN"
+        }
+      ],
+      "mathematicalSavings": null,
+      "hypotheticalBalance": null,
+      "waitScenario": {
+        "status": "datos_incompletos",
+        "purchaseAmount": 1449,
+        "requestedWeeks": 2,
+        "requestedDays": 14,
+        "withinProjectionHorizon": true,
+        "currentBalance": 3000,
+        "essentialExpensesDuringWait": 2940,
+        "projectedBalance": null,
+        "hypotheticalBalanceAfterPurchase": null,
+        "balanceShortfall": null,
+        "protectedFunds": null,
+        "belowProtectedFundsAfterPurchase": null,
+        "riskWeeksDuringWait": [],
+        "limitations": [
+          "No se puede proyectar el saldo al esperar sin ingresos, fechas y obligaciones compatibles y completos; el gasto esencial mostrado es solo aritmético."
+        ]
+      },
+      "incomeContext": "unknown",
+      "quality": {
+        "score": 10,
+        "verdict": "aprobada"
+      },
+      "checks": [
+        {
+          "name": "operation_matches_current_question",
+          "passed": true
+        },
+        {
+          "name": "latest_confirmed_price_is_preserved",
+          "passed": true
+        },
+        {
+          "name": "selected_product_is_preserved",
+          "passed": true
+        },
+        {
+          "name": "partial_profile_is_read_only",
+          "passed": true
+        },
+        {
+          "name": "no_income_is_fabricated",
+          "passed": true
+        },
+        {
+          "name": "at_most_one_follow_up",
+          "passed": true
+        },
+        {
+          "name": "reply_does_not_repeat_previous_report",
+          "passed": true
+        },
+        {
+          "name": "requested_wait_is_two_weeks_without_projected_income",
+          "passed": true
+        },
+        {
+          "name": "signed_context_preserves_latest_price",
+          "passed": true
+        }
+      ],
+      "errors": []
+    },
+    {
+      "case": "E",
+      "question": "¿Y si el juego costara $900?",
+      "expectedOperation": "purchase",
+      "intentSource": "gemini",
+      "source": "gemini",
+      "fallback": false,
+      "passed": true,
+      "intent": {
+        "operation": "purchase",
+        "productName": "Metroid Ravenous",
+        "price": 900,
+        "alternativePrice": null,
+        "weeks": null,
+        "weeklyContribution": null,
+        "upfrontAmount": null,
+        "reserveAmount": null,
+        "goalQuery": null,
+        "incomeStatement": null
+      },
+      "reply": "No puedo determinar si la compra cabe en tu margen. No aparecen fuentes de ingreso activas y visibles ni una fecha de próximo pago confirmada.\n\nEl saldo contable hipotético tras la compra sería $2,100.00 MXN; no es dinero libre ni confirma la conveniencia de comprar.",
+      "followUp": null,
+      "product": {
+        "name": "Metroid Ravenous",
+        "price": 900
+      },
+      "cards": [
+        {
+          "label": "ahora: precio",
+          "value": 900,
+          "unit": "MXN"
+        },
+        {
+          "label": "Saldo registrado",
+          "value": 3000,
+          "unit": "MXN"
+        },
+        {
+          "label": "Reserva registrada",
+          "value": 650,
+          "unit": "MXN"
+        },
+        {
+          "label": "Saldo contable hipotético",
+          "value": 2100,
+          "unit": "MXN"
+        }
+      ],
+      "mathematicalSavings": null,
+      "hypotheticalBalance": {
+        "status": "calculado",
+        "registeredBalance": 3000,
+        "purchaseAmount": 900,
+        "hypotheticalBalance": 2100,
+        "balanceShortfall": 0
+      },
+      "waitScenario": null,
+      "incomeContext": "unknown",
+      "quality": {
+        "score": 10,
+        "verdict": "aprobada"
+      },
+      "checks": [
+        {
+          "name": "operation_matches_current_question",
+          "passed": true
+        },
+        {
+          "name": "latest_confirmed_price_is_preserved",
+          "passed": true
+        },
+        {
+          "name": "selected_product_is_preserved",
+          "passed": true
+        },
+        {
+          "name": "partial_profile_is_read_only",
+          "passed": true
+        },
+        {
+          "name": "no_income_is_fabricated",
+          "passed": true
+        },
+        {
+          "name": "at_most_one_follow_up",
+          "passed": true
+        },
+        {
+          "name": "reply_does_not_repeat_previous_report",
+          "passed": true
+        },
+        {
+          "name": "signed_context_preserves_latest_price",
+          "passed": true
+        }
+      ],
+      "errors": []
+    },
+    {
+      "case": "D",
+      "question": "¿Cuánto tendría que ahorrar para comprarlo en cuatro semanas?",
+      "expectedOperation": "savings",
+      "intentSource": "gemini",
+      "source": "gemini",
+      "fallback": false,
+      "passed": true,
+      "intent": {
+        "operation": "savings",
+        "productName": "Metroid Ravenous",
+        "price": 900,
+        "alternativePrice": null,
+        "weeks": 4,
+        "weeklyContribution": null,
+        "upfrontAmount": null,
+        "reserveAmount": null,
+        "goalQuery": null,
+        "incomeStatement": null
+      },
+      "reply": "Para Metroid Ravenous en 4 semanas, necesitas un objetivo matemático de $225.00 MXN cada semana partiendo de $0.00 MXN para alcanzar $900.00 MXN.\n\nEs un objetivo matemático; todavía no se ha comprobado que puedas apartarlo sin afectar tus gastos.",
+      "followUp": null,
+      "product": {
+        "name": "Metroid Ravenous",
+        "price": 900
+      },
+      "cards": [
+        {
+          "label": "Objetivo de compra",
+          "value": 900,
+          "unit": "MXN"
+        },
+        {
+          "label": "Apartado inicial indicado",
+          "value": 0,
+          "unit": "MXN"
+        },
+        {
+          "label": "Por reunir",
+          "value": 900,
+          "unit": "MXN"
+        },
+        {
+          "label": "Objetivo semanal matemático",
+          "value": 225,
+          "unit": "MXN"
+        },
+        {
+          "label": "Aportación semanal indicada",
+          "value": 225,
+          "unit": "MXN"
+        },
+        {
+          "label": "Semanas aritméticas",
+          "value": 4,
+          "unit": "semanas"
+        }
+      ],
+      "mathematicalSavings": {
+        "basis": "objetivo_aritmetico",
+        "target": 900,
+        "upfrontAmount": 0,
+        "remainingTarget": 900,
+        "requestedWeeks": 4,
+        "requiredWeeklyContribution": 225,
+        "weeklyContribution": 225,
+        "estimatedWeeks": 4,
+        "meetsRequestedDeadline": true,
+        "sustainability": "sin_evaluar"
+      },
+      "hypotheticalBalance": null,
+      "waitScenario": null,
+      "incomeContext": "unknown",
+      "quality": {
+        "score": 10,
+        "verdict": "aprobada"
+      },
+      "checks": [
+        {
+          "name": "operation_matches_current_question",
+          "passed": true
+        },
+        {
+          "name": "latest_confirmed_price_is_preserved",
+          "passed": true
+        },
+        {
+          "name": "selected_product_is_preserved",
+          "passed": true
+        },
+        {
+          "name": "partial_profile_is_read_only",
+          "passed": true
+        },
+        {
+          "name": "no_income_is_fabricated",
+          "passed": true
+        },
+        {
+          "name": "at_most_one_follow_up",
+          "passed": true
+        },
+        {
+          "name": "reply_does_not_repeat_previous_report",
+          "passed": true
+        },
+        {
+          "name": "four_week_savings_math_uses_latest_price",
+          "passed": true
+        },
+        {
+          "name": "signed_context_preserves_latest_price",
+          "passed": true
+        }
+      ],
+      "errors": []
+    },
+    {
+      "case": "C",
+      "question": "¿Qué debería priorizar este mes?",
+      "expectedOperation": "priorities",
+      "intentSource": "gemini",
+      "source": "gemini",
+      "fallback": false,
+      "passed": true,
+      "intent": {
+        "operation": "priorities",
+        "productName": null,
+        "price": null,
+        "alternativePrice": null,
+        "weeks": null,
+        "weeklyContribution": null,
+        "upfrontAmount": null,
+        "reserveAmount": null,
+        "goalQuery": null,
+        "incomeStatement": null
+      },
+      "reply": "Para este mes, protege primero tus necesidades esenciales y cualquier obligación próxima. Como no aparecen pagos activos registrados, te sugiero mantener esta estructura antes de realizar compras discrecionales.",
+      "followUp": null,
+      "product": {
+        "name": "Metroid Ravenous",
+        "price": 900
+      },
+      "cards": [
+        {
+          "label": "Gasto esencial diario registrado",
+          "value": 210,
+          "unit": "MXN"
+        },
+        {
+          "label": "Reserva de seguridad registrada",
+          "value": 650,
+          "unit": "MXN"
+        }
+      ],
+      "mathematicalSavings": null,
+      "hypotheticalBalance": null,
+      "waitScenario": null,
+      "incomeContext": "unknown",
+      "quality": {
+        "score": 10,
+        "verdict": "aprobada"
+      },
+      "checks": [
+        {
+          "name": "operation_matches_current_question",
+          "passed": true
+        },
+        {
+          "name": "latest_confirmed_price_is_preserved",
+          "passed": true
+        },
+        {
+          "name": "selected_product_is_preserved",
+          "passed": true
+        },
+        {
+          "name": "partial_profile_is_read_only",
+          "passed": true
+        },
+        {
+          "name": "no_income_is_fabricated",
+          "passed": true
+        },
+        {
+          "name": "at_most_one_follow_up",
+          "passed": true
+        },
+        {
+          "name": "reply_does_not_repeat_previous_report",
+          "passed": true
+        },
+        {
+          "name": "priorities_do_not_execute_purchase",
+          "passed": true
+        },
+        {
+          "name": "signed_context_preserves_latest_price",
+          "passed": true
+        }
+      ],
+      "errors": []
+    },
+    {
+      "case": "F",
+      "question": "No tengo ingresos actualmente",
+      "expectedOperation": "income_update",
+      "intentSource": "gemini",
+      "source": "gemini",
+      "fallback": false,
+      "passed": true,
+      "intent": {
+        "operation": "income_update",
+        "productName": null,
+        "price": null,
+        "alternativePrice": null,
+        "weeks": null,
+        "weeklyContribution": null,
+        "upfrontAmount": null,
+        "reserveAmount": null,
+        "goalQuery": null,
+        "incomeStatement": "none"
+      },
+      "reply": "Entendido: registré que actualmente no tienes ingresos. Esta aclaración se mantiene en nuestra conversación sin modificar tus registros.",
+      "followUp": null,
+      "product": {
+        "name": "Metroid Ravenous",
+        "price": 900
+      },
+      "cards": [],
+      "mathematicalSavings": null,
+      "hypotheticalBalance": null,
+      "waitScenario": null,
+      "incomeContext": "none",
+      "quality": {
+        "score": 10,
+        "verdict": "aprobada"
+      },
+      "checks": [
+        {
+          "name": "operation_matches_current_question",
+          "passed": true
+        },
+        {
+          "name": "latest_confirmed_price_is_preserved",
+          "passed": true
+        },
+        {
+          "name": "selected_product_is_preserved",
+          "passed": true
+        },
+        {
+          "name": "partial_profile_is_read_only",
+          "passed": true
+        },
+        {
+          "name": "no_income_is_fabricated",
+          "passed": true
+        },
+        {
+          "name": "at_most_one_follow_up",
+          "passed": true
+        },
+        {
+          "name": "reply_does_not_repeat_previous_report",
+          "passed": true
+        },
+        {
+          "name": "income_statement_is_respected_without_new_payday_question",
+          "passed": true
+        },
+        {
+          "name": "signed_context_preserves_latest_price",
+          "passed": true
+        },
+        {
+          "name": "signed_context_preserves_income_statement",
+          "passed": true
+        }
+      ],
+      "errors": []
+    },
+    {
+      "case": "G",
+      "question": "Mis ingresos son variables",
+      "expectedOperation": "income_update",
+      "intentSource": "gemini",
+      "source": "gemini",
+      "fallback": false,
+      "passed": true,
+      "intent": {
+        "operation": "income_update",
+        "productName": null,
+        "price": null,
+        "alternativePrice": null,
+        "weeks": null,
+        "weeklyContribution": null,
+        "upfrontAmount": null,
+        "reserveAmount": null,
+        "goalQuery": null,
+        "incomeStatement": "variable"
+      },
+      "reply": "Entendido, tus ingresos son variables. Respetaré esta condición en nuestro análisis financiero actual. No generaré ninguna frecuencia de cobro ficticia.",
+      "followUp": null,
+      "product": {
+        "name": "Metroid Ravenous",
+        "price": 900
+      },
+      "cards": [],
+      "mathematicalSavings": null,
+      "hypotheticalBalance": null,
+      "waitScenario": null,
+      "incomeContext": "variable",
+      "quality": {
+        "score": 10,
+        "verdict": "aprobada"
+      },
+      "checks": [
+        {
+          "name": "operation_matches_current_question",
+          "passed": true
+        },
+        {
+          "name": "latest_confirmed_price_is_preserved",
+          "passed": true
+        },
+        {
+          "name": "selected_product_is_preserved",
+          "passed": true
+        },
+        {
+          "name": "partial_profile_is_read_only",
+          "passed": true
+        },
+        {
+          "name": "no_income_is_fabricated",
+          "passed": true
+        },
+        {
+          "name": "at_most_one_follow_up",
+          "passed": true
+        },
+        {
+          "name": "reply_does_not_repeat_previous_report",
+          "passed": true
+        },
+        {
+          "name": "income_statement_is_respected_without_new_payday_question",
+          "passed": true
+        },
+        {
+          "name": "signed_context_preserves_latest_price",
+          "passed": true
+        },
+        {
+          "name": "signed_context_preserves_income_statement",
+          "passed": true
+        }
+      ],
+      "errors": []
+    }
+  ]
+}

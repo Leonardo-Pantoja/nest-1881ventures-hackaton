@@ -1,5 +1,6 @@
 "use client";
 
+import { resolveInitialProfileMode } from "@/lib/finance/initialProfile";
 import React, {
   createContext,
   useContext,
@@ -752,6 +753,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profile, setProfile] = useState<FinancialProfile>(cleanProfile);
   const requestVersion = useRef(0);
+  const authenticatedAccount = useRef<string | null>(null);
   const [accountFinancialProfile, setAccountFinancialProfile] = useState<OnboardingProfile | null>(null);
   const [accountVersion, setAccountVersion] = useState("");
   const pendingPurchases = useRef(new Map<string, Promise<void>>());
@@ -785,6 +787,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      authenticatedAccount.current = user.id;
       const [
         profileRes,
         incomeRes,
@@ -850,10 +853,10 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         commitments: commitmentRes.data ?? [],
         goals: goalRes.data ?? [],
       };
-      setAccountFinancialProfile(mapSupabaseRecord(rows));
+      const canonicalProfile = mapSupabaseRecord(rows);
+      setAccountFinancialProfile(canonicalProfile);
       setAccountVersion(JSON.stringify(rows));
       const p = profileRes.data;
-      const nextIncome = incomeRes.data?.[0];
       const mappedGoalsList: FinancialGoal[] = (goalRes.data ?? []).map(
         (g: Record<string, unknown>) => {
           const gId = String(g.id ?? "");
@@ -862,9 +865,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
           const savingsLoc: "incluido" | "separado" | "desconocido" =
             loc === "incluido" || loc === "separado" || loc === "desconocido"
               ? loc
-              : Number(g.current_saved ?? 0) > 0
-                ? "separado"
-                : "desconocido";
+              : "desconocido";
           return {
             id: gId,
             title: String(g.title ?? "Meta de ahorro"),
@@ -931,9 +932,10 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         currentBalance: Number(p?.current_balance ?? 0),
         safetyBuffer: Number(p?.safety_buffer ?? 0),
         dailyEssentialBurn: Number(p?.daily_essential_budget ?? 0),
-        payFrequency: toFrequency(nextIncome?.frequency),
-        nextPaydayDays: daysUntil(nextIncome?.next_payment_date),
-        nextPaydayAmount: Number(nextIncome?.amount ?? 0),
+        // Legacy display fields are not financial inputs; nullable accountFinancialProfile remains canonical.
+        payFrequency: canonicalProfile?.payFrequency === "semanal" || canonicalProfile?.payFrequency === "mensual" ? canonicalProfile.payFrequency : "quincenal",
+        nextPaydayDays: canonicalProfile?.nextPaydayDays ?? 0,
+        nextPaydayAmount: canonicalProfile?.nextPaydayAmount ?? 0,
         commitments: (commitmentRes.data ?? []).map((item) => ({
           id: item.id,
           title: item.title,
@@ -969,7 +971,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         incomeSources: (incomeRes.data ?? []).map(
           (inc: Record<string, unknown>) => ({
             id: String(inc.id ?? "income-1"),
-            name: String(inc.name ?? inc.title ?? "Ingreso principal"),
+            name: String(inc.title ?? inc.name ?? "Ingreso principal"),
             amount: Number(Number(inc.amount ?? 0).toFixed(2)),
             frequency: (inc.frequency as CommitmentDbFrequency) || "biweekly",
             nextPaymentDate:
@@ -1058,7 +1060,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
       setMode("authenticated");
     } catch (error) {
       if (ticket !== requestVersion.current) return;
-      console.error("Financial profile loading failed:", error);
+      console.error("Financial profile loading failed.");
       setProfileError(
         error instanceof Error ? error.message : "Error al cargar el perfil",
       );
@@ -1067,43 +1069,62 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
   }, [supabase]);
 
   useEffect(() => {
-    const initialize = () => {
-    // Do not reuse the old, shared localStorage profile for different accounts.
-    localStorage.removeItem(LEGACY_STORAGE_KEY);
-    try {
-      const saved = sessionStorage.getItem(DEMO_STORAGE_KEY);
-      if (saved) {
-        const demo = JSON.parse(saved) as FinancialProfile;
-        if (demo?.id && demo?.goal && Array.isArray(demo?.commitments)) {
-          setProfile(demo);
-          setMode("demo");
-        } else {
+    let initializing = true;
+    const initialize = async () => {
+      // Never restore shared financial/demo state before checking the authenticated identity.
+      localStorage.removeItem(LEGACY_STORAGE_KEY);
+      const ticket = requestVersion.current;
+      try {
+        const initial = await resolveInitialProfileMode(() => supabase.auth.getUser(), () => {
+          const saved = sessionStorage.getItem(DEMO_STORAGE_KEY);
+          if (!saved) return null;
+          try {
+            const demo = JSON.parse(saved) as FinancialProfile;
+            return demo?.id && demo?.goal && Array.isArray(demo.commitments) ? demo : null;
+          } catch { return null; }
+        });
+        if (!initializing || ticket !== requestVersion.current) return;
+        if (initial.mode === "account") {
           sessionStorage.removeItem(DEMO_STORAGE_KEY);
-          void refreshProfile();
+          sessionStorage.removeItem(EVAL_STORAGE_KEY);
+          setPendingEvaluationState({ name: "", price: 0, imageName: null });
+          await refreshProfile();
+          return;
         }
-      } else {
-        void refreshProfile();
+        if (initial.mode === "demo") {
+          setAccountFinancialProfile(null); setAccountVersion("");
+          setProfile(initial.demo); setMode("demo");
+          const savedEval = sessionStorage.getItem(EVAL_STORAGE_KEY);
+          if (savedEval) {
+            try {
+              const value = JSON.parse(savedEval) as PendingPurchaseEvaluation;
+              if (typeof value.price === "number") setPendingEvaluationState(value);
+            } catch { sessionStorage.removeItem(EVAL_STORAGE_KEY); }
+          }
+          return;
+        }
+        sessionStorage.removeItem(DEMO_STORAGE_KEY);
+        setProfile(cleanProfile()); setAccountFinancialProfile(null); setAccountVersion(""); setMode("anonymous");
+      } catch {
+        if (initializing && ticket === requestVersion.current) {
+          setProfileError("No se pudo verificar la sesión para cargar tus datos financieros."); setMode("error");
+        }
       }
-      const savedEval = sessionStorage.getItem(EVAL_STORAGE_KEY);
-      if (savedEval) {
-        const value = JSON.parse(savedEval) as PendingPurchaseEvaluation;
-        if (typeof value.price === "number") setPendingEvaluationState(value);
-      }
-    } catch {
-      void refreshProfile();
-    }
-
     };
     const initialization = setTimeout(initialize, 0);
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_OUT") {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT" || event === "SIGNED_IN" && session?.user.id !== authenticatedAccount.current) {
+        authenticatedAccount.current = event === "SIGNED_OUT" ? null : session?.user.id ?? null;
         ++requestVersion.current;
+        setAccountFinancialProfile(null); setAccountVersion("");
+        setPendingEvaluationState({ name: "", price: 0, imageName: null });
+        sessionStorage.removeItem(EVAL_STORAGE_KEY);
         sessionStorage.removeItem(DEMO_STORAGE_KEY);
         setProfile(cleanProfile());
-        setMode("anonymous");
+        setMode(event === "SIGNED_OUT" ? "anonymous" : "loading");
         setProfileError(null);
       }
       // Defer Supabase calls outside the auth callback.
@@ -1114,6 +1135,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
       }
     });
     return () => {
+      initializing = false;
       clearTimeout(initialization);
       subscription.unsubscribe();
     };
@@ -2340,7 +2362,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
     } else {
       const { error } = await supabase.from("income_sources").insert({
         user_id: user.id,
-        name: cleanName,
+        title: cleanName,
         amount: roundedAmount,
         frequency: input.frequency,
         next_payment_date: input.nextPaymentDate,
