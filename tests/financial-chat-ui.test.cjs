@@ -151,3 +151,26 @@ test('a newly named product without a price clears the old context and keeps its
   requests[1].resolve({ ok: true, json: async () => result({ product: { name: 'laptop', price: 1800 } }) }); await flush();
   assert.equal(updates[0][0].price, 1800);
 });
+
+test('new conversation clears signed context, messages, income memory and selected product without sending anything', async t => {
+  const cleared = [];
+  const { render, requests } = setup(t, { onClearProduct: name => cleared.push(name) });
+  type(render, '¿Puedo comprarlo?'); submit(render);
+  requests[0].resolve({ ok: true, json: async () => result({ conversationToken: 'signed-server-context' }) }); await flush();
+  elements(render()).find(e => e.type === 'button' && e.props.children === 'Nueva conversación').props.onClick();
+  assert.equal(requests.length, 1); assert.equal(cleared.length, 1);
+  type(render, '¿Cuánto puedo gastar?'); submit(render);
+  const next = JSON.parse(requests[1].init.body);
+  assert.equal(next.conversationToken, undefined); assert.equal(next.product, null); assert.deepEqual(next.history, []);
+  requests[1].resolve({ ok: true, json: async () => result({ product: null }) }); await flush();
+});
+
+test('missing-income action opens the existing profile editor only after an explicit click', async t => {
+  let opened = 0;
+  const { render, requests } = setup(t, { onOpenFinancialProfile: () => opened++ });
+  type(render, '¿Cuánto puedo gastar?'); submit(render);
+  requests[0].resolve({ ok: true, json: async () => result({ actions: [{ type: 'complete_income', label: 'Completar ingresos en mi perfil' }] }) }); await flush();
+  assert.equal(opened, 0);
+  elements(render()).find(e => e.type === 'button' && e.props.children === 'Completar ingresos en mi perfil').props.onClick();
+  assert.equal(opened, 1); assert.equal(requests.length, 1);
+});

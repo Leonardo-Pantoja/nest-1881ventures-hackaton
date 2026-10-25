@@ -11,11 +11,16 @@ server.createServerSupabaseClient = async () => ({ auth: { getUser: async () => 
 account.loadAccountSnapshot = async () => { reads++; return { profile: financialProfile, userId: identity, revision: 'server-revision', raw: { financialDate: '2026-10-25', secret: 'private-raw-tables' } }; };
 const intent = { operation: 'purchase', productName: 'Producto', price: 700, alternativePrice: null, weeks: null,
   weeklyContribution: null, upfrontAmount: null, reserveAmount: null, goalQuery: null };
+const groundedReply = options => {
+  const facts = JSON.parse(options.prompt).facts;
+  return { body: facts.filter(f => f.required).map(f => `{{fact:${f.id}}}`).join('\n\n'),
+    factIds: facts.map(f => f.id), followUp: null };
+};
 gemini.generateStructured = async options => {
   calls.push(options);
   if (phase) return phase(options);
   if (options.source === 'chat-intent') return intent;
-  return { factIds: JSON.parse(options.prompt).facts.map(f => f.id), followUp: 'compare' };
+  return groundedReply(options);
 };
 const { POST } = require('../src/app/api/ai/chat/route.ts');
 const body = (more = {}) => ({ requestId: randomUUID(), message: '¿Puedo comprar algo de $700?', product: { name: 'Producto', price: 700 }, ...more });
@@ -66,8 +71,15 @@ test('a failed provider leaves server-calculated information and a visible retry
 
 test('rejects explanations that omit risk or invent facts, returning an explicitly deterministic fallback', async () => {
   for (const mode of ['omit-risk', 'invent']) {
-    reset(); phase = options => options.source === 'chat-intent' ? intent : { followUp: 'compare',
-      factIds: mode === 'invent' ? ['invented-safe-purchase'] : JSON.parse(options.prompt).facts.map(f => f.id).filter(id => id !== 'ahora.risk') };
+    reset(); phase = options => {
+      if (options.source === 'chat-intent') return intent;
+      const candidate = groundedReply(options);
+      assert.ok(candidate.factIds.includes('ahora.risk'));
+      return mode === 'invent'
+        ? { body: '{{fact:invented-safe-purchase}}', factIds: ['invented-safe-purchase'], followUp: null }
+        : { ...candidate, body: candidate.body.replace('{{fact:ahora.risk}}', '').trim(),
+          factIds: candidate.factIds.filter(id => id !== 'ahora.risk') };
+    };
     const result = await (await POST(request(body()))).json();
     assert.equal(result.source, 'deterministic'); assert.equal(result.code, 'gemini_consistency');
     assert.match(result.reply, /riesgo.*semanas 6/);
@@ -89,7 +101,7 @@ test('duplicate IDs, parallel requests and minute budget bound provider spending
   const first = await POST(request(data)); assert.equal(first.status, 200);
   assert.equal((await POST(request(data))).status, 409);
   let releaseIntent;
-  phase = options => options.source === 'chat-intent' ? new Promise(resolve => { releaseIntent = () => resolve(intent); }) : { factIds: JSON.parse(options.prompt).facts.map(f => f.id), followUp: 'compare' };
+  phase = options => options.source === 'chat-intent' ? new Promise(resolve => { releaseIntent = () => resolve(intent); }) : groundedReply(options);
   const inFlight = POST(request(body()));
   while (!releaseIntent) await new Promise(resolve => setImmediate(resolve));
   assert.equal((await POST(request(body()))).status, 409);

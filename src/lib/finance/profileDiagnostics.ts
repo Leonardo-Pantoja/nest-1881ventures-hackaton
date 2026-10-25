@@ -2,7 +2,7 @@ import type { OnboardingProfile } from "../onboarding/financialTypes";
 import { protectedSavingsCents } from "../onboarding/protectedFunds";
 
 const warningMessages: Record<string, string> = {
-  income_sources_missing: "No hay fuentes de ingreso activas registradas.",
+  income_sources_missing: "La consulta no muestra fuentes de ingreso activas y visibles. Revisa el perfil; eso no demuestra que se hayan borrado datos.",
   income_date_missing: "Falta la fecha de pago de una fuente de ingreso.",
   income_date_overdue: "Una fecha de ingreso registrada ya pasó; confirma si se recibió el pago y registra la próxima fecha.",
   income_date_invalid: "Una fuente de ingreso tiene una fecha de pago inválida.",

@@ -1,7 +1,9 @@
 import { generateStructured, ProductAIError } from "./gemini";
-import { INTENT_PROMPT, EXPLANATION_PROMPT } from "./prompts";
-import { intentSchema, explanationSchema, type ChatRequest, type FinancialIntent, type ToolResult } from "./schemas";
-import { renderExplanation, evaluateExplanation } from "./responseEvaluation";
+import { INTENT_PROMPT } from "./prompts";
+import { intentSchema, type ChatRequest, type FinancialIntent, type ToolResult } from "./schemas";
+import { generateConversationalReply, type ReplyContextInput } from "./conversationalReply";
+import type { ConversationState } from "./conversationState";
+import { isConfirmation, userIncomeStatement } from "./conversationState";
 import { explicitMonetaryAmounts, identifiedProductName, requestedProductName, sameProductName } from "./productContext";
 import { validPurchasePrice } from "../finance/money";
 
@@ -20,6 +22,17 @@ export function fallbackIntent(request: ChatRequest): FinancialIntent {
   const normalized = message.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   const monetary = explicitMonetaryAmounts(message);
   if (monetary.some(amount => !validPurchasePrice(amount))) return { ...base, operation: "clarify" };
+  const income = userIncomeStatement(message);
+  if (income) return { ...base, operation: "income_update", incomeStatement: income };
+  if (isConfirmation(message)) return { ...base, operation: "confirmation" };
+  const weekMatch = normalized.match(/(?:en|hasta|durante|espero|esperar)\s*(?:unas?\s*)?(\d+|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce)\s*semanas?/);
+  const numberWords: Record<string, number> = { una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10, once: 11, doce: 12 };
+  const weeks = weekMatch ? numberWords[weekMatch[1]] ?? Number(weekMatch[1]) : null;
+  if (/prioriz|pagar primero|renta o/.test(normalized)) return { ...base, operation: "priorities" };
+  if (/compromisos|que pagos|pagos pendientes|cuando vence/.test(normalized)) return { ...base, operation: "commitments" };
+  if (/esper|dentro de.*seman/.test(normalized) && (request.product || request.pendingProductName)) return { ...base, operation: "wait", weeks };
+  if (/ahorr|cuanto tiempo|cuando podria reunir/.test(normalized) && (request.product || request.pendingProductName)) return { ...base, operation: "savings", weeks,
+    weeklyContribution: /semanal|por semana/.test(normalized) && monetary.length === 1 ? monetary[0] : null };
   const purchase = /\b(?:comprar(?:me)?|compro|comprarlo|compra|producto|evaluar|evaluacion)\b/.test(normalized);
   const generalMargin = /(?:cuanto|dinero|margen).*(?:gastar|gasto|disponible)|cuanto puedo gastar|dinero libre/.test(normalized);
   if (generalMargin && !/\bcompr(?:ar|o)/.test(normalized)) return base;
@@ -30,7 +43,7 @@ export function fallbackIntent(request: ChatRequest): FinancialIntent {
   if (otherFinancialAction && !/evaluacion determinista/.test(normalized)) return base;
   const wantsNamedItem = /\bquiero\b/.test(normalized) && named !== null && !isReference;
   const priceReference = Boolean(request.product || request.pendingProductName) &&
-    (/\b(?:cuesta|vale|precio|uno|una|otro|otra)\b/.test(normalized) || /^\s*(?:\$\s*)?\d[\d,.]*(?:\s*(?:mxn|pesos))?[?.!]?\s*$/.test(normalized));
+    (/\b(?:cuesta|costara|costase|costaria|vale|precio|uno|una|otro|otra)\b/.test(normalized) || /^\s*(?:\$\s*)?\d[\d,.]*(?:\s*(?:mxn|pesos))?[?.!]?\s*$/.test(normalized));
   if (monetary.length === 1 && (purchase || wantsNamedItem || priceReference)) {
     return { ...base, operation: "purchase", productName: name, price: monetary[0] };
   }
@@ -45,9 +58,10 @@ export function fallbackIntent(request: ChatRequest): FinancialIntent {
 /** Reject invented tool arguments before any calculation. Values can only describe user scenarios. */
 export function validateIntentArguments(intent: FinancialIntent, request: ChatRequest) {
   const requestedName = requestedProductName(request.message);
+  const refersToSelected = request.product && /\b(?:el|ese|este)\s+(?:juego|producto|articulo)\b/i.test(request.message) && !requestedName;
   // The user's explicit article takes precedence over a stale or mislabeled model argument.
   const candidate = ["purchase", "compare", "wait", "savings"].includes(intent.operation) && requestedName
-    ? { ...intent, productName: requestedName } : intent;
+    ? { ...intent, productName: requestedName } : refersToSelected ? { ...intent, productName: request.product!.name } : intent;
   const utterances = [...request.history.map(h => h.content), request.message].join(" ");
   const numbers = new Set((utterances.replace(/,/g, "").match(/\d+(?:\.\d+)?/g) ?? []).map(Number));
   if (request.product) numbers.add(request.product.price);
@@ -78,20 +92,14 @@ export function validateIntentArguments(intent: FinancialIntent, request: ChatRe
   return candidate;
 }
 
-export async function interpretFinancialIntent(request: ChatRequest, signal?: AbortSignal) {
+export async function interpretFinancialIntent(request: ChatRequest, signal?: AbortSignal, conversation?: ConversationState) {
   const intent = await generateStructured({ source: "chat-intent", systemInstruction: INTENT_PROMPT, schema: intentSchema,
-    prompt: JSON.stringify({ message: redactConversation(request.message), history: request.history.map(h => ({ role: h.role, content: redactConversation(h.content) })),
+    prompt: JSON.stringify({ dialogue: conversation ? { lastOperation: conversation.lastOperation, awaiting: conversation.awaiting, incomeContext: conversation.incomeContext, previousQuestion: redactConversation(conversation.previousQuestion) } : null, message: redactConversation(request.message), history: request.history.map(h => ({ role: h.role, content: redactConversation(h.content) })),
       pendingProductName: request.pendingProductName ? redactConversation(request.pendingProductName) : null,
       product: request.product ? { ...request.product, name: redactConversation(request.product.name) } : null }), signal });
   return validateIntentArguments(intent, request);
 }
 
-export async function explainFinancialTool(tool: ToolResult, signal?: AbortSignal) {
-  // Only operation-specific facts leave the server. No raw profile, personal names, email, IDs or tokens.
-  const facts = tool.facts.map(f => ({ ...f, text: f.id.startsWith("priority.") ? "Pago registrado priorizado por necesidades, fecha e importe; incluir esta prioridad." : f.text }));
-  const explanation = await generateStructured({ source: "chat-explanation", systemInstruction: EXPLANATION_PROMPT,
-    schema: explanationSchema, prompt: JSON.stringify({ operation: tool.operation, facts }), signal });
-  const quality = evaluateExplanation(tool, explanation);
-  if (quality.verdict !== "aprobada") throw new ProductAIError("gemini_consistency", "La respuesta no respetó todos los resultados financieros. Puedes reintentar.", 422);
-  return { reply: renderExplanation(tool, explanation), quality: { score: quality.score, verdict: quality.verdict } };
+export async function explainFinancialTool(tool: ToolResult, signal?: AbortSignal, input: ReplyContextInput = { question: "Explica el resultado financiero relevante." }) {
+  return generateConversationalReply(tool, input, signal);
 }

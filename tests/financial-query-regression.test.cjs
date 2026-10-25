@@ -19,8 +19,11 @@ account.loadAccountSnapshot = async () => {
   if (failSnapshot) throw new account.EvaluationRequestError('Financial connection unavailable', 503, 'financial_data_unavailable');
   return { userId: identity, revision: 'server-revision', raw: { financialDate: '2026-10-25' }, profile: { ...profile, id: identity } };
 };
-gemini.generateStructured = async options => options.source === 'chat-intent' ? nextIntent : {
-  factIds: JSON.parse(options.prompt).facts.map(f => f.id), followUp: 'price',
+gemini.generateStructured = async options => {
+  if (options.source === 'chat-intent') return nextIntent;
+  const facts = JSON.parse(options.prompt).facts;
+  return { body: facts.filter(f => f.required).map(f => `{{fact:${f.id}}}`).join('\n\n'),
+    factIds: facts.map(f => f.id), followUp: null };
 };
 const evaluate = require('../src/app/api/evaluate/route.ts').POST;
 const chat = require('../src/app/api/ai/chat/route.ts').POST;
@@ -105,11 +108,13 @@ test('chat: a new unpriced product clears the old product, then an explicit pric
   let response = await chat(request('/api/ai/chat', chatBody({ product: { name: 'Audífonos', price: 2300 } })));
   let value = await response.json();
   assert.equal(response.status, 200); assert.equal(value.product, null);
+  assert.equal(value.source, 'gemini');
   assert.equal(value.clearProductContext, true); assert.equal(value.pendingProductName, 'laptop');
-  assert.deepEqual(reportPrices, []); assert.match(value.reply, /laptop.*cuánto cuesta/i);
+  assert.deepEqual(reportPrices, []); assert.match(value.reply, /Falta confirmar el precio.*laptop/i);
   identity = randomUUID(); nextIntent = intent({ price: 1800 });
   response = await chat(request('/api/ai/chat', chatBody({ message: 'Cuesta $1,800', pendingProductName: 'laptop' })));
   value = await response.json();
+  assert.equal(value.source, 'gemini');
   assert.equal(value.product.name, 'laptop'); assert.equal(value.report.purchase.purchaseAmount, 1800);
 });
 

@@ -74,7 +74,7 @@ export async function POST(request: Request) {
       };
       const intent = fallbackIntent(query);
       const tool = executeFinancialTool(profile, intent, confirmedProduct);
-      const evaluatesPurchase = ["purchase", "compare", "wait", "savings"].includes(intent.operation) && tool.product !== null;
+      const evaluatesPurchase = ["purchase", "compare"].includes(intent.operation) && tool.product !== null;
       const purchase = evaluatesPurchase ? tool.product : null;
       const needsPrice = tool.facts.some(fact => fact.id === "missing.price");
       const reply = deterministicExplanation(tool);

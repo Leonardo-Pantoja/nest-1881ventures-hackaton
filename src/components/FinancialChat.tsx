@@ -15,6 +15,7 @@ interface Props {
   selectionRevision?: number;
   suggestion?: { text: string; id: number };
   onClearProduct?: (pendingName?: string) => void;
+  onOpenFinancialProfile?: () => void;
   onProduct?: (product: ProductContext, image?: ScannedProductResult) => void;
 }
 const suggestions = ["¿Cuánto puedo gastar hoy?", "¿Qué debería priorizar este mes?", "¿Cuánto tendría que ahorrar para comprarlo en cuatro semanas?"];
@@ -25,12 +26,13 @@ export default function FinancialChat(props: Props) {
   return <ChatSession key={JSON.stringify([mode, profile.id, financialVersion, props.selectionRevision])} {...props} />;
 }
 
-export function ChatSession({ product: initialProduct = null, onProduct, suggestion, onClearProduct }: Props) {
+export function ChatSession({ product: initialProduct = null, onProduct, suggestion, onClearProduct, onOpenFinancialProfile }: Props) {
   const { mode, profile } = useFinancial();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState(suggestion?.text ?? "");
   const [lastSuggestion, setLastSuggestion] = useState(suggestion);
   if (suggestion !== lastSuggestion) { setLastSuggestion(suggestion); setInput(suggestion?.text ?? ""); }
+  const [conversationToken, setConversationToken] = useState<string | undefined>();
   const [product, setProduct] = useState(initialProduct);
   const [pendingProductName, setPendingProductName] = useState<string | undefined>();
   const [manualName, setManualName] = useState("");
@@ -58,7 +60,7 @@ export function ChatSession({ product: initialProduct = null, onProduct, suggest
     if (options.retry && !previous || !options.retry && !text) return;
     const request: Omit<ChatRequest, "requestId"> = options.retry && previous ? { ...previous, deterministicOnly: options.deterministicOnly ?? false } : {
       message: text, history: messages.filter(m => m.role === "user").slice(-10).map(m => ({ role: "user", content: m.content })),
-      product: requestedProduct, pendingProductName: options.confirmed ? undefined : pendingProductName, mode: mode === "demo" ? "demo" : "account", demoProfileId: mode === "demo" && (profile.id === "mateo" || profile.id === "carlos") ? profile.id : undefined,
+      conversationToken, product: requestedProduct, pendingProductName: options.confirmed ? undefined : pendingProductName, mode: mode === "demo" ? "demo" : "account", demoProfileId: mode === "demo" && (profile.id === "mateo" || profile.id === "carlos") ? profile.id : undefined,
       deterministicOnly: options.deterministicOnly ?? false,
     };
     lock.current = true; const id = ++epoch.current;
@@ -74,6 +76,7 @@ export function ChatSession({ product: initialProduct = null, onProduct, suggest
       if (typeof result.reply !== "string" || !Array.isArray(result.cards)) throw Error("La respuesta del copiloto no es válida.");
       setMessages(prev => [...prev, { role: "assistant", content: result.reply, result }]);
       setRetry(Boolean(result.warning));
+      setConversationToken(result.conversationToken);
       if (result.clearProductContext) {
         setProduct(null); setPendingProductName(result.pendingProductName);
         onClearProduct?.(result.pendingProductName);
@@ -93,7 +96,12 @@ export function ChatSession({ product: initialProduct = null, onProduct, suggest
     setProduct({ name: image.name, price: image.price });
     void send({ text: `¿Puedo comprar ${image.name} por $${image.price} MXN?`, confirmed: image });
   };
+  const resetConversation = () => {
+    cancelPending(); setMessages([]); setInput(""); setConversationToken(undefined);
+    setProduct(null); setPendingProductName(undefined); setManualName(""); setManualPrice(""); onClearProduct?.();
+  };
   return <div className="space-y-3" aria-label="Copiloto financiero conversacional">
+    <div className="flex justify-end"><button type="button" onClick={resetConversation} className="text-[11px] text-slate-500 underline">Nueva conversación</button></div>
     <p className="text-xs text-slate-500">Pregunta por compras, ahorros o prioridades. Las simulaciones no modifican tu cuenta.{mode === "demo" ? " Demo: usa el perfil inicial del servidor, con datos simulados." : ""}</p>
     {pendingProductName && <p className="text-xs text-amber-800">Producto por confirmar: <strong>{pendingProductName}</strong>. Falta su precio en MXN.</p>}
     {product && <p className="rounded-xl bg-emerald-50 border border-emerald-200 p-2 text-xs text-emerald-900">Producto en contexto: <strong>{product.name}</strong> · {mxn(product.price)}</p>}
@@ -101,10 +109,13 @@ export function ChatSession({ product: initialProduct = null, onProduct, suggest
       {messages.length === 0 && <div className="flex gap-2 text-sm text-slate-600 rounded-2xl bg-[#FAF8F5] p-3"><Bot className="h-5 w-5 text-emerald-600 shrink-0" />Cuéntame qué quieres comprar o qué necesitas organizar. Revisaremos tus datos registrados.</div>}
       {messages.map((message, i) => <motion.div key={i} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
         <div className={`max-w-[95%] sm:max-w-[90%] rounded-2xl p-3 text-sm leading-relaxed ${message.role === "user" ? "bg-slate-900 text-white rounded-tr-sm" : "bg-[#FAF8F5] border border-slate-200 text-slate-800 rounded-tl-sm"}`}>
-          {message.role === "assistant" && <p className="text-[11px] text-emerald-700 font-bold font-heading mb-2">{message.result?.source === "gemini" ? "Gemini · cifras del motor financiero" : "Motor financiero · sin explicación de IA"}</p>}
+          {message.role === "assistant" && <p className="text-[11px] text-emerald-700 font-bold font-heading mb-2">{message.result?.source === "gemini" ? "Gemini · respuesta con cifras del motor" : "Motor financiero · respaldo sin conversación de IA"}</p>}
           <p className="whitespace-pre-wrap break-words">{message.content}</p>
           {message.result?.cards.length ? <dl className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">{message.result.cards.map((card, n) => <div key={n} className="rounded-xl bg-white border border-slate-200 p-2"><dt className="text-[11px] text-slate-500">{card.label}</dt><dd className="font-bold font-heading">{card.unit === "MXN" ? mxn(card.value) : `${card.value} ${card.unit}`}</dd></div>)}</dl> : null}
           {message.result?.warning && <p role="alert" className="text-xs text-amber-800 mt-2">{message.result.warning}</p>}
+          {message.result?.actions?.map(action => onOpenFinancialProfile
+            ? <button key={action.type} type="button" onClick={onOpenFinancialProfile} className="block mt-2 text-xs font-bold text-emerald-800 underline">{action.label}</button>
+            : <Link key={action.type} href="/app#ingresos" className="block mt-2 text-xs font-bold text-emerald-800 underline">{action.label}</Link>)}
           {message.result?.product && <Link href={`/app/evaluate?name=${encodeURIComponent(message.result.product.name)}&price=${message.result.product.price}`} className="inline-block text-xs font-bold text-emerald-800 underline mt-3">Ver evaluación completa</Link>}
         </div>
       </motion.div>)}

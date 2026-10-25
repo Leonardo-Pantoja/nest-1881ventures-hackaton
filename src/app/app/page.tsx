@@ -727,8 +727,16 @@ function DashboardContent() {
 
   const [activeBottomTab, setActiveBottomTab] =
     useState<BottomNavTab>("simulate");
+  const [profileStartTab, setProfileStartTab] = useState<"perfil" | "ingresos">("perfil");
   const [showTourModal, setShowTourModal] = useState(false);
   const [isSavingDecision, setIsSavingDecision] = useState(false);
+
+  useEffect(() => {
+    const openIncomeEditor = () => { if (window.location.hash === "#ingresos") { setProfileStartTab("ingresos"); setActiveBottomTab("profile"); } };
+    const timer = setTimeout(openIncomeEditor, 0);
+    window.addEventListener("hashchange", openIncomeEditor);
+    return () => { clearTimeout(timer); window.removeEventListener("hashchange", openIncomeEditor); };
+  }, []);
 
   // Simulator State
   const [chatSuggestion, setChatSuggestion] = useState<{ text: string; id: number } | undefined>();
@@ -1231,6 +1239,7 @@ function DashboardContent() {
             <div id="dashboard-financial-chat">
               <FinancialChat
                 selectionRevision={scannerRevision}
+                onOpenFinancialProfile={() => { setProfileStartTab("ingresos"); setActiveBottomTab("profile"); }}
                 suggestion={chatSuggestion}
                 product={parsedItemPrice > 0 ? { name: parsedItemName, price: parsedItemPrice } : null}
                 onClearProduct={name => {
@@ -1816,6 +1825,7 @@ function DashboardContent() {
          ===================================================================== */}
       {activeBottomTab === "profile" && (
         <ProfileEditorPanel
+          key={profileStartTab} initialTab={profileStartTab}
           onShowToast={(msg) => triggerToast(msg)}
           onNavigateToSimulate={() => setActiveBottomTab("simulate")}
         />

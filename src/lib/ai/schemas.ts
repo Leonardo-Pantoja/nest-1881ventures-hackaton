@@ -8,6 +8,7 @@ export const chatRequestSchema = z.object({
   // Previous financial answers are never accepted as financial evidence.
   history: z.array(z.object({ role: z.literal("user"), content: z.string().trim().min(1).max(1500) }).strict()).max(10).default([]),
   product: productContextSchema.nullable().default(null),
+  conversationToken: z.string().max(16000).optional(),
   pendingProductName: z.string().trim().min(1).max(200).optional(),
   mode: z.enum(["account", "demo"]).default("account"),
   demoProfileId: z.enum(["mateo", "carlos"]).optional(),
@@ -18,7 +19,7 @@ export type ProductContext = z.infer<typeof productContextSchema>;
 
 /** An allowlisted tool request, never executable code or a financial profile. */
 export const intentSchema = z.object({
-  operation: z.enum(["purchase", "available", "savings", "compare", "wait", "priorities", "goal", "overview", "reserve", "withdraw_goal", "clarify"]),
+  operation: z.enum(["purchase", "available", "savings", "compare", "wait", "priorities", "goal", "overview", "reserve", "withdraw_goal", "clarify", "confirmation", "income_update", "commitments", "follow_up"]),
   productName: z.string().max(200).nullable(),
   price: money.nullable(),
   alternativePrice: money.nullable(),
@@ -27,6 +28,7 @@ export const intentSchema = z.object({
   upfrontAmount: money.nullable(),
   reserveAmount: money.nullable(),
   goalQuery: z.string().max(200).nullable(),
+  incomeStatement: z.enum(["none", "variable", "fixed"]).nullable().optional(),
 }).strict();
 export type FinancialIntent = z.infer<typeof intentSchema>;
 
@@ -39,9 +41,13 @@ export interface FinancialFact { id: string; text: string; required: boolean }
 export interface FinancialCard { label: string; value: number; unit: "MXN" | "semanas" | "días" }
 export interface ToolResult {
   operation: FinancialIntent["operation"];
+  marginStatus?: "unknown" | "calculated" | "not_applicable";
   product: ProductContext | null;
   facts: FinancialFact[];
   cards: FinancialCard[];
+  mathematicalSavings?: import("../finance/conversationalMath").ArithmeticSavingsTarget;
+  hypotheticalBalance?: import("../finance/conversationalMath").HypotheticalPurchaseBalance;
+  waitScenario?: import("../finance/conversationalMath").ExplicitWaitScenario;
   report?: import("../onboarding/purchaseReport").PurchaseReport;
   savings?: import("../finance/savingsPlan").SavingsPlan;
 }
@@ -58,4 +64,9 @@ export interface ChatResponse {
   warning?: string;
   code?: string;
   quality?: { score: number; verdict: string };
+  conversationToken?: string;
+  followUp?: { kind: string; text: string } | null;
+  actions?: Array<{ type: "complete_income"; label: string }>;
+  mathematicalSavings?: ToolResult["mathematicalSavings"];
+  hypotheticalBalance?: ToolResult["hypotheticalBalance"];
 }

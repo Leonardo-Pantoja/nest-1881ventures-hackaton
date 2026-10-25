@@ -44,14 +44,14 @@ async function main() {
   await setValue('[aria-label="Producto para evaluación sin IA"]', 'Monitor de prueba');
   await setValue('[aria-label="Precio en MXN para evaluación sin IA"]', '1200.50');
   await js(`document.querySelector('[aria-label="Producto para evaluación sin IA"]').form.requestSubmit()`);
-  await until(`document.querySelector('[role="log"]').innerText.includes('Motor financiero · sin explicación de IA')`, 60000);
+  await until(`document.querySelector('[role="log"]').innerText.includes('Motor financiero · respaldo sin conversación de IA')`, 60000);
   assert.equal(chatRequests.length, 1);
   assert.equal(JSON.parse(chatRequests[0].postData).product.price, 1200.5);
   assert.equal(JSON.parse(chatRequests[0].postData).deterministicOnly, true);
   assert.equal(await js(`Array.from(document.querySelectorAll('#dashboard-financial-chat button')).some(b => b.innerText.trim()==='Escanear')`), false);
   await setValue(textarea, '¿Y si compro uno de $900?', true);
   await js(`document.querySelector(${JSON.stringify(textarea)}).dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',shiftKey:false,bubbles:true}))`);
-  await until(`document.querySelector('[role="log"]').innerText.includes('Gemini · cifras del motor financiero')`, 60000);
+  await until(`document.querySelector('[role="log"]').innerText.includes('Gemini · respuesta con cifras del motor')`, 60000);
   assert.equal(chatRequests.length, 2);
   assert.equal(JSON.parse(chatRequests[1].postData).history[0].content, 'Evaluar Monitor de prueba por $1200.5 MXN sin IA');
   await js(`document.querySelector('#dashboard-financial-chat').scrollIntoView({block:'start'})`);
