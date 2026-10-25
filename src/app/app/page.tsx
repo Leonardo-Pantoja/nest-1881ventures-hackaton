@@ -1096,7 +1096,7 @@ export default function AppDashboardPage() {
 
     if (scanned.price === null) {
       triggerToast(
-        "La lectura de imágenes con Gemini está pendiente para Fase 2. Confirma manualmente el nombre y el precio antes de evaluar.",
+        "No se pudo leer el precio. Confirma el nombre y el precio antes de evaluar.",
       );
     } else {
       playTap();

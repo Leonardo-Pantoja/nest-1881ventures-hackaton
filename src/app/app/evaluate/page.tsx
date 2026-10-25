@@ -20,7 +20,6 @@ function EvaluateContent() {
   const {
     pendingEvaluation,
     setPendingEvaluation,
-    incrementStreak,
     streakCelebration,
   } = useFinancial();
 
@@ -29,12 +28,15 @@ function EvaluateContent() {
   const [scannedThumb, setScannedThumb] = useState<string | null>(null);
   const [scannedStore, setScannedStore] = useState<string | null>(null);
 
+  const [confirmedScan, setConfirmedScan] = useState<ScannedProductResult | null>(null);
+
   const itemName =
+    confirmedScan?.name ||
     searchParams.get("name") ||
     pendingEvaluation.name ||
     "Audífonos Inalámbricos Sony";
   const itemPrice =
-    Number(searchParams.get("price")) || pendingEvaluation.price || 0;
+    confirmedScan?.price || Number(searchParams.get("price")) || pendingEvaluation.price || 0;
   const evaluation = useFinancialEvaluation(itemName, itemPrice);
   const apiEvaluation = evaluation.response;
   const apiEvaluationError = evaluation.error !== null;
@@ -80,6 +82,7 @@ function EvaluateContent() {
         <QuickSnapScanner
           onScanComplete={(scanned: ScannedProductResult) => {
             playTap();
+            setConfirmedScan(scanned);
             setPendingEvaluation({
               name: scanned.name,
               price: scanned.price ?? 0,
@@ -87,12 +90,7 @@ function EvaluateContent() {
             });
             setScannedThumb(scanned.thumbnailDataUrl);
             setScannedStore(scanned.storeTag);
-            incrementStreak("¡Escaneaste un producto! +1 Racha 🔥");
-            if (scanned.price === null) {
-              setActionToast(
-                "La lectura de imágenes con Gemini está pendiente para Fase 2. Confirma manualmente el precio en el simulador antes de evaluar.",
-              );
-            }
+
           }}
         />
 

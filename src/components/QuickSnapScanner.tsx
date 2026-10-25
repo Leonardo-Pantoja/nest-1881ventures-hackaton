@@ -122,6 +122,13 @@ export default function QuickSnapScanner({
   );
   const [scanningLabel, setScanningLabel] = useState<string>("");
 
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [draft, setDraft] = useState<ScannedProductResult | null>(null);
+  const [draftPrice, setDraftPrice] = useState("");
+  const reviewResult = (result: ScannedProductResult) => {
+    setDraft(result);
+    setDraftPrice(result.price === null ? "" : String(result.price));
+  };
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const executeScanWithLaser = async (params: {
@@ -130,6 +137,7 @@ export default function QuickSnapScanner({
     previewUrl: string;
     storeTag: string;
   }) => {
+    setScanError(null);
     setScanningPreviewUrl(params.previewUrl);
     setScanningLabel(
       params.price === null
@@ -161,27 +169,36 @@ export default function QuickSnapScanner({
     });
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = typeof reader.result === "string" ? reader.result : "";
-      const cleanFileName = file.name.replace(/\.[^/.]+$/, "");
-      const fallbackName =
-        cleanFileName.length > 2
-          ? `Captura: ${cleanFileName.slice(0, 24)}`
-          : "Producto en captura";
-
-      void executeScanWithLaser({
-        name: fallbackName,
-        price: null,
-        previewUrl: dataUrl || PRESET_CAPTURES[0].svgDataUrl,
-        storeTag: "Captura subida · precio por confirmar",
+    setScanError(null);
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 8 * 1024 * 1024) {
+      setScanError("Usa una imagen JPG, PNG o WebP de hasta 8 MB.");
+      return;
+    }
+    setIsScanning(true);
+    setScanningLabel("Identificando el producto y su precio visible…");
+    try {
+      const previewUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error("No se pudo leer la imagen."));
+        reader.readAsDataURL(file);
       });
-    };
-    reader.readAsDataURL(file);
+      setScanningPreviewUrl(previewUrl);
+      const form = new FormData();
+      form.append("image", file);
+      const response = await fetch("/api/scan", { method: "POST", body: form });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "No se pudo reconocer el producto.");
+      reviewResult({ name: result.name, price: result.price, thumbnailDataUrl: previewUrl, storeTag: "Imagen analizada con Gemini" });
+    } catch (error) {
+      setScanError(error instanceof Error ? error.message : "No se pudo analizar la imagen.");
+    } finally {
+      setIsScanning(false);
+    }
   };
 
   return (
@@ -259,15 +276,37 @@ export default function QuickSnapScanner({
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsPickerOpen(false)}
+                  disabled={isScanning}
+                  onClick={() => { setIsPickerOpen(false); setDraft(null); }}
                   className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
                 >
                   <X className="w-4 h-4" strokeWidth={1.5} />
                 </button>
               </div>
 
+              {scanError && <p role="alert" className="text-xs text-red-600">{scanError}</p>}
               <AnimatePresence mode="wait">
-                {isScanning && scanningPreviewUrl ? (
+                {draft ? (
+                  <form className="space-y-4" onSubmit={(event) => {
+                    event.preventDefault();
+                    const price = Number(draftPrice);
+                    if (!draft.name.trim() || !draftPrice.trim() || !Number.isFinite(price) || price <= 0) return;
+                    onScanComplete({ ...draft, name: draft.name.trim(), price });
+                    setDraft(null);
+                    setIsPickerOpen(false);
+                  }}>
+                    <img src={draft.thumbnailDataUrl} alt="Producto por confirmar" className="w-full h-36 object-contain rounded-xl" />
+                    <p className="text-xs text-slate-500">Revisa y corrige los datos antes de evaluar. {draft.price === null ? "No se pudo leer el precio; ingrésalo manualmente." : "Confirma que el precio esté en MXN."}</p>
+                    <label className="block text-xs text-slate-700">Nombre del producto
+                      <input required maxLength={200} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 p-3" />
+                    </label>
+                    <label className="block text-xs text-slate-700">Precio confirmado (MXN)
+                      <input required type="number" min="0.01" step="0.01" value={draftPrice} onChange={(event) => setDraftPrice(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 p-3" />
+                    </label>
+                    <button type="submit" className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white">Confirmar datos y continuar</button>
+                    <button type="button" onClick={() => setDraft(null)} className="w-full text-xs text-slate-500">Elegir otra imagen</button>
+                  </form>
+                ) : isScanning && scanningPreviewUrl ? (
                   <motion.div
                     key="laser-scanner-active"
                     initial={{ opacity: 0, scale: 0.98 }}
@@ -299,16 +338,16 @@ export default function QuickSnapScanner({
                             className="w-3 h-3 mr-1"
                             strokeWidth={1.5}
                           />
-                          VISTA PREVIA
+                          LECTURA DE PRODUCTO
                         </Badge>
                         <span className="text-[11px] font-mono text-emerald-300">
-                          1.5s
+                          Leyendo imagen
                         </span>
                       </div>
 
                       <div className="space-y-1 text-center">
                         <p className="text-sm font-bold text-white">
-                          Preparando la vista previa. El precio debe confirmarse manualmente.
+                          Leyendo producto. Podrás revisar los datos antes de evaluar.
                         </p>
                         <p className="text-xs font-mono text-emerald-300">
                           {scanningLabel}
@@ -330,6 +369,7 @@ export default function QuickSnapScanner({
                           <motion.button
                             key={preset.id}
                             type="button"
+                            disabled={isScanning}
                             whileTap={{ scale: 0.97 }}
                             onClick={() => handleSelectPreset(preset)}
                             className="rounded-2xl border border-slate-200 bg-white hover:border-emerald-500 hover:shadow-sm p-3 text-left transition-all cursor-pointer flex flex-col justify-between gap-2"
@@ -362,12 +402,13 @@ export default function QuickSnapScanner({
                       <input
                         ref={fileInputRef}
                         type="file"
-                        accept="image/*"
+                        accept="image/jpeg,image/png,image/webp"
                         onChange={handleFileUpload}
                         className="hidden"
                       />
                       <motion.button
                         type="button"
+                        disabled={isScanning}
                         whileTap={{ scale: 0.98 }}
                         onClick={() => fileInputRef.current?.click()}
                         className="w-full py-3 px-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 hover:bg-slate-100 text-xs font-semibold text-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-colors"
