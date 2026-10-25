@@ -140,8 +140,12 @@ export default function AuthPage() {
   };
 
   const handleStartFromScratch = () => {
-    startFreshOnboarding(email.trim() || undefined, true);
-    router.push("/onboarding?demo=1");
+    setAuthMode("signup");
+    const emailInput = document.getElementById("email");
+    emailInput?.focus();
+    setStatusMessage(
+      "Crea tu cuenta o inicia sesión con tu correo abajo para configurar tu perfil desde cero.",
+    );
   };
 
   const handleLoadPreloadedProfile = () => {

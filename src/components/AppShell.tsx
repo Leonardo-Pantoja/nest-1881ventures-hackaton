@@ -1,7 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   Compass,
@@ -12,6 +13,7 @@ import {
   Flame,
   Zap,
   HelpCircle,
+  LogOut,
 } from "lucide-react";
 import BottomNav, { type BottomNavTab } from "@/components/BottomNav";
 import { useFinancial } from "@/context/FinancialContext";
@@ -41,11 +43,27 @@ export default function AppShell({
   onOpenGuide,
   children,
 }: AppShellProps) {
-  const { profile } = useFinancial();
+  const router = useRouter();
+  const { profile, mode, signOut } = useFinancial();
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   const handleNavClick = (tab: BottomNavTab) => {
     playTap();
     onSelectTab(tab);
+  };
+
+  const handleSignOut = async () => {
+    if (isSigningOut) return;
+    playTap();
+    setIsSigningOut(true);
+    try {
+      await signOut();
+      router.replace("/auth");
+    } catch (error) {
+      console.error("Logout failed:", error);
+    } finally {
+      setIsSigningOut(false);
+    }
   };
 
   const initials = (profile.name || "CM")
@@ -106,8 +124,8 @@ export default function AppShell({
           </nav>
         </div>
 
-        {/* Clean Sidebar Footer: Fixed Avatar + User Info without duplicate Streak/XP cards */}
-        <div className="pt-5 border-t border-slate-200">
+        {/* Clean Sidebar Footer: Fixed Avatar + User Info + Clear Logout Button */}
+        <div className="pt-5 border-t border-slate-200 space-y-2.5">
           <div className="flex items-center justify-between gap-2 p-2.5 rounded-2xl bg-slate-50 border border-slate-200/80">
             <button
               type="button"
@@ -122,7 +140,9 @@ export default function AppShell({
                   {profile.name}
                 </span>
                 <span className="text-[11px] text-slate-500 block truncate">
-                  Cambiar perfil
+                  {mode === "authenticated"
+                    ? profile.email || "Cuenta activa"
+                    : "Modo Demo · Cambiar perfil"}
                 </span>
               </div>
             </button>
@@ -142,6 +162,17 @@ export default function AppShell({
               </motion.button>
             )}
           </div>
+
+          <motion.button
+            type="button"
+            disabled={isSigningOut}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => void handleSignOut()}
+            className="w-full h-10 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-200 text-slate-700 hover:text-rose-700 text-xs font-bold font-heading flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
+          >
+            <LogOut className="w-4 h-4 shrink-0" strokeWidth={1.5} />
+            <span>{isSigningOut ? "Cerrando sesión..." : "Cerrar sesión"}</span>
+          </motion.button>
         </div>
       </aside>
 

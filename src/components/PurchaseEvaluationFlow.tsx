@@ -108,7 +108,7 @@ export default function PurchaseEvaluationFlow({
       setDecisionXpBonus(xp);
       setSelectedDecision(strategy);
       playCoin(); triggerConfettiBurst();
-      onActionCompleted?.("Guardado en Retos y Metas. No se descont? dinero de tu saldo.");
+      onActionCompleted?.("Guardado en Retos y Metas. No se descontó dinero de tu saldo.");
     } catch (error) { setActionError(error instanceof Error ? error.message : "No se pudo guardar la decisión."); }
     finally { actionLock.current = false; setSaving(false); }
   };
