@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { useFinancialEvaluation } from "@/hooks/useFinancialEvaluation";
 import PurchaseConfirmationModal from "@/components/PurchaseConfirmationModal";
+import ExpensePlanView from "@/components/ExpensePlanView";
 import AppShell from "@/components/AppShell";
 import QuickGuideModal from "@/components/QuickGuideModal";
 import FinancialPlantWidget, {
@@ -1876,6 +1877,13 @@ export default function AppDashboardPage() {
             </div>
           </section>
         </motion.div>
+      )}
+
+      {/* =====================================================================
+          VIEW 2.5: "PLAN DE GASTOS" (3 Bloques Interactivos + Registro Rápido + Desglose Mensual)
+         ===================================================================== */}
+      {activeBottomTab === "expenses" && (
+        <ExpensePlanView onShowToast={(msg) => triggerToast(msg)} />
       )}
 
       {/* =====================================================================

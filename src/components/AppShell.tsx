@@ -10,6 +10,7 @@ import {
   Sparkles,
   Trophy,
   UserCheck,
+  Receipt,
   Flame,
   Zap,
   HelpCircle,
@@ -33,6 +34,7 @@ const NAV_ITEMS: {
 }[] = [
   { id: "home", label: "Tu Planta", icon: Sprout },
   { id: "simulate", label: "Simular Compra", icon: Sparkles },
+  { id: "expenses", label: "Plan de Gastos", icon: Receipt },
   { id: "goals", label: "Retos y Metas", icon: Trophy },
   { id: "profile", label: "Cambiar Perfil", icon: UserCheck },
 ];
@@ -201,6 +203,8 @@ export default function AppShell({
                   ? "Vista de evolución · Tu Planta Financiera"
                   : activeTab === "simulate"
                   ? "Copiloto Pre-Compra · Simulador de Decisiones"
+                  : activeTab === "expenses"
+                  ? "Plan de Gastos · Compromisos, Imprevistos y Desglose Mensual"
                   : activeTab === "goals"
                   ? "Retos y Metas de Ahorro"
                   : "Configuración de Perfil"}

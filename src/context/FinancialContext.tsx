@@ -25,12 +25,48 @@ export type LifeContextTag =
 
 export type PayFrequency = "semanal" | "quincenal" | "mensual";
 
+export type CommitmentDbFrequency =
+  | "one_time"
+  | "weekly"
+  | "biweekly"
+  | "monthly";
+
 export interface Commitment {
   id: string;
   title: string;
   amount: number;
   dueInDays: number;
   category: string;
+  frequency?: CommitmentDbFrequency;
+  nextDueDate?: string;
+  isActive?: boolean;
+}
+
+export interface TransactionRecord {
+  id: string;
+  title: string;
+  amount: number;
+  type: "expense" | "income";
+  category: string;
+  occurredAt: string;
+  isUnforeseen?: boolean;
+}
+
+export interface PlannedExpenseItem {
+  id: string;
+  title: string;
+  amount: number;
+  dueInDays: number;
+  category: string;
+  frequency: CommitmentDbFrequency;
+}
+
+export interface IncomeSourceRecord {
+  id: string;
+  name: string;
+  amount: number;
+  frequency: CommitmentDbFrequency;
+  nextPaymentDate?: string;
 }
 
 export interface FinancialGoal {
@@ -70,6 +106,9 @@ export interface FinancialProfile {
   safetyBuffer: number;
   dailyEssentialBurn: number;
   commitments: Commitment[];
+  transactions?: TransactionRecord[];
+  plannedExpenses?: PlannedExpenseItem[];
+  incomeSources?: IncomeSourceRecord[];
   goal: FinancialGoal;
   wishlist?: WishlistItem[];
   wisdomXp?: number;
@@ -99,6 +138,9 @@ export const PRELOADED_SANDBOX_PROFILES: Record<string, FinancialProfile> = {
         amount: 2100,
         dueInDays: 2,
         category: "Vivienda",
+        frequency: "monthly",
+        nextDueDate: "2026-10-26",
+        isActive: true,
       },
       {
         id: "c2",
@@ -106,6 +148,48 @@ export const PRELOADED_SANDBOX_PROFILES: Record<string, FinancialProfile> = {
         amount: 500,
         dueInDays: 4,
         category: "Deuda",
+        frequency: "monthly",
+        nextDueDate: "2026-10-28",
+        isActive: true,
+      },
+    ],
+    transactions: [
+      {
+        id: "tx-demo-1",
+        title: "Reparación de llanta (Imprevisto)",
+        amount: 450,
+        type: "expense",
+        category: "Transporte",
+        occurredAt: "2026-10-23T14:30:00.000Z",
+        isUnforeseen: true,
+      },
+      {
+        id: "tx-demo-2",
+        title: "Farmacia de emergencia",
+        amount: 280,
+        type: "expense",
+        category: "Salud",
+        occurredAt: "2026-10-22T19:15:00.000Z",
+        isUnforeseen: true,
+      },
+    ],
+    plannedExpenses: [
+      {
+        id: "plan-demo-1",
+        title: "Despensa quincenal extra",
+        amount: 650,
+        dueInDays: 4,
+        category: "Alimentación",
+        frequency: "one_time",
+      },
+    ],
+    incomeSources: [
+      {
+        id: "inc-carlos-1",
+        name: "Nómina Quincenal",
+        amount: 9500,
+        frequency: "biweekly",
+        nextPaymentDate: "2026-10-30",
       },
     ],
     goal: {
@@ -150,6 +234,39 @@ export const PRELOADED_SANDBOX_PROFILES: Record<string, FinancialProfile> = {
         amount: 399,
         dueInDays: 3,
         category: "Servicios",
+        frequency: "monthly",
+        nextDueDate: "2026-10-27",
+        isActive: true,
+      },
+    ],
+    transactions: [
+      {
+        id: "tx-mateo-1",
+        title: "Copias y material de laboratorio",
+        amount: 180,
+        type: "expense",
+        category: "Educación",
+        occurredAt: "2026-10-23T11:00:00.000Z",
+        isUnforeseen: true,
+      },
+    ],
+    plannedExpenses: [
+      {
+        id: "plan-mateo-1",
+        title: "Boleto de autobús fin de semana",
+        amount: 320,
+        dueInDays: 5,
+        category: "Transporte",
+        frequency: "one_time",
+      },
+    ],
+    incomeSources: [
+      {
+        id: "inc-mateo-1",
+        name: "Beca + Medio Tiempo",
+        amount: 3500,
+        frequency: "biweekly",
+        nextPaymentDate: "2026-10-30",
       },
     ],
     goal: {
@@ -305,6 +422,39 @@ interface FinancialContextType {
   awardWisdomXp: (amount?: number) => void;
   incrementStreak: (reason?: string) => void;
   streakCelebration: { id: number; count: number; reason: string } | null;
+  addCommitment: (input: {
+    title: string;
+    amount: number;
+    category: string;
+    frequency: CommitmentDbFrequency;
+    nextDueDate: string;
+  }) => Promise<void>;
+  updateCommitmentItem: (
+    id: string,
+    updates: {
+      title?: string;
+      amount?: number;
+      category?: string;
+      frequency?: CommitmentDbFrequency;
+      nextDueDate?: string;
+      isActive?: boolean;
+    },
+  ) => Promise<void>;
+  deactivateCommitment: (id: string) => Promise<void>;
+  addExpenseTransaction: (input: {
+    title: string;
+    amount: number;
+    category: string;
+    occurredAt?: string;
+  }) => Promise<void>;
+  addPlannedExpense: (input: {
+    title: string;
+    amount: number;
+    category: string;
+    dueInDays: number;
+    frequency: CommitmentDbFrequency;
+  }) => void;
+  removePlannedExpense: (id: string) => void;
 }
 
 const DEMO_STORAGE_KEY = "antesdegastar_demo_profile_v2";
@@ -318,9 +468,18 @@ const cleanProfile = (): FinancialProfile => ({
   ...EMPTY_NEW_USER_PROFILE,
   lifeContext: [],
   commitments: [],
+  transactions: [],
+  plannedExpenses: [],
+  incomeSources: [],
   goal: { ...EMPTY_NEW_USER_PROFILE.goal },
   wishlist: [],
 });
+
+function dateStringFromDaysUntil(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + Math.max(0, Math.round(days)));
+  return d.toISOString().slice(0, 10);
+}
 
 function daysUntil(dateValue?: string | null): number {
   if (!dateValue) return 0;
@@ -379,7 +538,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      const [profileRes, incomeRes, commitmentRes, goalRes, wishlistRes] =
+      const [profileRes, incomeRes, commitmentRes, goalRes, wishlistRes, transactionsRes] =
         await Promise.all([
           supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
           supabase
@@ -405,6 +564,12 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
             .select("*")
             .eq("user_id", user.id)
             .order("updated_at", { ascending: false }),
+          supabase
+            .from("transactions")
+            .select("*")
+            .eq("user_id", user.id)
+            .order("created_at", { ascending: false })
+            .limit(50),
         ]);
       if (ticket !== requestVersion.current) return;
       for (const result of [
@@ -454,9 +619,28 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         commitments: (commitmentRes.data ?? []).map((item) => ({
           id: item.id,
           title: item.title,
-          amount: Number(item.amount),
+          amount: Number(Number(item.amount).toFixed(2)),
           dueInDays: daysUntil(item.next_due_date),
           category: item.category,
+          frequency: (item.frequency as CommitmentDbFrequency) || "monthly",
+          nextDueDate: item.next_due_date ?? dateStringFromDaysUntil(daysUntil(item.next_due_date)),
+          isActive: item.is_active !== false,
+        })),
+        transactions: (transactionsRes.data ?? []).map((tx: Record<string, unknown>) => ({
+          id: String(tx.id ?? `tx-${Date.now()}`),
+          title: String(tx.title ?? tx.description ?? tx.name ?? "Gasto registrado"),
+          amount: Number(Number(tx.amount ?? 0).toFixed(2)),
+          type: (tx.type === "income" ? "income" : "expense") as "expense" | "income",
+          category: String(tx.category ?? "Imprevistos"),
+          occurredAt: String(tx.occurred_at ?? tx.transaction_date ?? tx.created_at ?? new Date().toISOString()),
+          isUnforeseen: true,
+        })),
+        incomeSources: (incomeRes.data ?? []).map((inc: Record<string, unknown>) => ({
+          id: String(inc.id ?? "income-1"),
+          name: String(inc.name ?? inc.title ?? "Ingreso principal"),
+          amount: Number(Number(inc.amount ?? 0).toFixed(2)),
+          frequency: (inc.frequency as CommitmentDbFrequency) || "biweekly",
+          nextPaymentDate: typeof inc.next_payment_date === "string" ? inc.next_payment_date : undefined,
         })),
         goal: goalRow
           ? {
@@ -745,7 +929,24 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
       if (!name.trim() || !validPurchasePrice(price) || !operationId) throw new Error("Selecciona un producto con precio válido.");
       if (mode === "demo") {
         if (price > profile.currentBalance) throw new Error("Saldo insuficiente.");
-        persistDemo({ ...profile, currentBalance: (Math.round(profile.currentBalance * 100) - Math.round(price * 100)) / 100, wishlist: (profile.wishlist ?? []).filter(w => w.name !== name) });
+        const roundedPrice = Number(price.toFixed(2));
+        persistDemo({
+          ...profile,
+          currentBalance: (Math.round(profile.currentBalance * 100) - Math.round(roundedPrice * 100)) / 100,
+          wishlist: (profile.wishlist ?? []).filter((w) => w.name !== name),
+          transactions: [
+            {
+              id: `tx-${Date.now()}`,
+              title: name.trim(),
+              amount: roundedPrice,
+              type: "expense",
+              category: "Compras",
+              occurredAt: new Date().toISOString(),
+              isUnforeseen: true,
+            },
+            ...(profile.transactions ?? []),
+          ],
+        });
         return;
       }
       if (mode !== "authenticated") throw new Error("Debes iniciar sesión para registrar una compra.");
@@ -761,6 +962,266 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
     pendingPurchases.current.set(accountKey, operation);
     void operation.then(() => completedPurchases.current.add(accountKey)).catch(() => {}).finally(() => pendingPurchases.current.delete(accountKey));
     return operation;
+  };
+
+  const addCommitment = async (input: {
+    title: string;
+    amount: number;
+    category: string;
+    frequency: CommitmentDbFrequency;
+    nextDueDate: string;
+  }): Promise<void> => {
+    const cleanTitle = input.title.trim();
+    const roundedAmount = Number(Number(input.amount).toFixed(2));
+    if (!cleanTitle || !Number.isFinite(roundedAmount) || roundedAmount <= 0) {
+      throw new Error("Ingresa un nombre y un monto válido mayor a cero.");
+    }
+    const dueDays = daysUntil(input.nextDueDate);
+
+    if (mode === "demo") {
+      const nextCommitment: Commitment = {
+        id: `comm-${Date.now()}`,
+        title: cleanTitle,
+        amount: roundedAmount,
+        dueInDays: dueDays,
+        category: input.category || "Otros",
+        frequency: input.frequency,
+        nextDueDate: input.nextDueDate,
+        isActive: true,
+      };
+      persistDemo({
+        ...profile,
+        commitments: [...profile.commitments, nextCommitment],
+      });
+      return;
+    }
+
+    if (mode !== "authenticated") {
+      throw new Error("Debes iniciar sesión para guardar un compromiso.");
+    }
+
+    const {
+      data: { user },
+      error: authErr,
+    } = await supabase.auth.getUser();
+    if (authErr || !user) {
+      throw new Error("No se pudo verificar el usuario autenticado.");
+    }
+
+    const { error } = await supabase.from("commitments").insert({
+      user_id: user.id,
+      title: cleanTitle,
+      amount: roundedAmount,
+      category: input.category || "Otros",
+      frequency: input.frequency,
+      next_due_date: input.nextDueDate,
+      is_active: true,
+    });
+
+    if (error) throw new Error(error.message);
+    await refreshProfile(true);
+  };
+
+  const updateCommitmentItem = async (
+    id: string,
+    updates: {
+      title?: string;
+      amount?: number;
+      category?: string;
+      frequency?: CommitmentDbFrequency;
+      nextDueDate?: string;
+      isActive?: boolean;
+    },
+  ): Promise<void> => {
+    const roundedAmount =
+      updates.amount !== undefined
+        ? Number(Number(updates.amount).toFixed(2))
+        : undefined;
+
+    if (mode === "demo") {
+      const nextCommitments = profile.commitments
+        .map((c) => {
+          if (c.id !== id) return c;
+          const nextDate = updates.nextDueDate ?? c.nextDueDate;
+          return {
+            ...c,
+            title: updates.title !== undefined ? updates.title.trim() : c.title,
+            amount: roundedAmount !== undefined ? roundedAmount : c.amount,
+            category: updates.category ?? c.category,
+            frequency: updates.frequency ?? c.frequency,
+            nextDueDate: nextDate,
+            dueInDays: nextDate ? daysUntil(nextDate) : c.dueInDays,
+            isActive: updates.isActive ?? c.isActive,
+          };
+        })
+        .filter((c) => c.isActive !== false);
+      persistDemo({
+        ...profile,
+        commitments: nextCommitments,
+      });
+      return;
+    }
+
+    if (mode !== "authenticated") {
+      throw new Error("Debes iniciar sesión para actualizar un compromiso.");
+    }
+
+    const {
+      data: { user },
+      error: authErr,
+    } = await supabase.auth.getUser();
+    if (authErr || !user) {
+      throw new Error("No se pudo verificar el usuario autenticado.");
+    }
+
+    const dbPayload: Record<string, unknown> = {
+      user_id: user.id,
+    };
+    if (updates.title !== undefined) dbPayload.title = updates.title.trim();
+    if (roundedAmount !== undefined) dbPayload.amount = roundedAmount;
+    if (updates.category !== undefined) dbPayload.category = updates.category;
+    if (updates.frequency !== undefined) dbPayload.frequency = updates.frequency;
+    if (updates.nextDueDate !== undefined)
+      dbPayload.next_due_date = updates.nextDueDate;
+    if (updates.isActive !== undefined) dbPayload.is_active = updates.isActive;
+
+    const { error } = await supabase
+      .from("commitments")
+      .update(dbPayload)
+      .eq("id", id)
+      .eq("user_id", user.id);
+
+    if (error) throw new Error(error.message);
+    await refreshProfile(true);
+  };
+
+  const deactivateCommitment = async (id: string): Promise<void> => {
+    await updateCommitmentItem(id, { isActive: false });
+  };
+
+  const addExpenseTransaction = async (input: {
+    title: string;
+    amount: number;
+    category: string;
+    occurredAt?: string;
+  }): Promise<void> => {
+    const cleanTitle = input.title.trim();
+    const roundedAmount = Number(Number(input.amount).toFixed(2));
+    if (!cleanTitle || !Number.isFinite(roundedAmount) || roundedAmount <= 0) {
+      throw new Error("Ingresa una descripción y un monto válido mayor a cero.");
+    }
+
+    const occurredIso = input.occurredAt
+      ? new Date(input.occurredAt).toISOString()
+      : new Date().toISOString();
+
+    if (mode === "demo") {
+      const nextBalance = Math.max(
+        0,
+        Number(
+          (
+            (Math.round(profile.currentBalance * 100) -
+              Math.round(roundedAmount * 100)) /
+            100
+          ).toFixed(2),
+        ),
+      );
+      const nextTx: TransactionRecord = {
+        id: `tx-${Date.now()}`,
+        title: cleanTitle,
+        amount: roundedAmount,
+        type: "expense",
+        category: input.category || "Imprevistos",
+        occurredAt: occurredIso,
+        isUnforeseen: true,
+      };
+      persistDemo({
+        ...profile,
+        currentBalance: nextBalance,
+        transactions: [nextTx, ...(profile.transactions ?? [])],
+      });
+      return;
+    }
+
+    if (mode !== "authenticated") {
+      throw new Error("Debes iniciar sesión para registrar un gasto.");
+    }
+
+    const {
+      data: { user },
+      error: authErr,
+    } = await supabase.auth.getUser();
+    if (authErr || !user) {
+      throw new Error("No se pudo verificar el usuario autenticado.");
+    }
+
+    const { error: txError } = await supabase.from("transactions").insert({
+      user_id: user.id,
+      title: cleanTitle,
+      amount: roundedAmount,
+      type: "expense",
+      category: input.category || "Imprevistos",
+    });
+
+    if (txError) throw new Error(txError.message);
+
+    // Also update current_balance in profiles if the DB trigger didn't already deduct it
+    const nextBalance = Math.max(
+      0,
+      Number(
+        (
+          (Math.round(profile.currentBalance * 100) -
+            Math.round(roundedAmount * 100)) /
+          100
+        ).toFixed(2),
+      ),
+    );
+    await supabase
+      .from("profiles")
+      .update({ current_balance: nextBalance })
+      .eq("id", user.id);
+
+    await refreshProfile(true);
+  };
+
+  const addPlannedExpense = (input: {
+    title: string;
+    amount: number;
+    category: string;
+    dueInDays: number;
+    frequency: CommitmentDbFrequency;
+  }) => {
+    const cleanTitle = input.title.trim();
+    const roundedAmount = Number(Number(input.amount).toFixed(2));
+    if (!cleanTitle || !Number.isFinite(roundedAmount) || roundedAmount <= 0)
+      return;
+
+    const item: PlannedExpenseItem = {
+      id: `plan-${Date.now()}`,
+      title: cleanTitle,
+      amount: roundedAmount,
+      dueInDays: Math.max(0, Math.round(input.dueInDays)),
+      category: input.category || "Planeado",
+      frequency: input.frequency,
+    };
+
+    const nextPlanned = [...(profile.plannedExpenses ?? []), item];
+    if (mode === "demo") {
+      persistDemo({ ...profile, plannedExpenses: nextPlanned });
+    } else {
+      setProfile((prev) => ({ ...prev, plannedExpenses: nextPlanned }));
+    }
+  };
+
+  const removePlannedExpense = (id: string) => {
+    const nextPlanned = (profile.plannedExpenses ?? []).filter(
+      (item) => item.id !== id,
+    );
+    if (mode === "demo") {
+      persistDemo({ ...profile, plannedExpenses: nextPlanned });
+    } else {
+      setProfile((prev) => ({ ...prev, plannedExpenses: nextPlanned }));
+    }
   };
 
   const awardWisdomXp = (amount = 50) => {
@@ -794,7 +1255,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
     document.addEventListener("visibilitychange", onVisibility);
     const timer = setInterval(reload, 30_000);
     let channel = supabase.channel("financial-profile-" + profile.id);
-    for (const table of ["profiles", "income_sources", "commitments", "goals"]) {
+    for (const table of ["profiles", "income_sources", "commitments", "goals", "transactions"]) {
       channel = channel.on("postgres_changes", { event: "*", schema: "public", table, filter: (table === "profiles" ? "id" : "user_id") + "=eq." + profile.id }, reload);
     }
     channel.subscribe();
@@ -833,6 +1294,12 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         awardWisdomXp,
         incrementStreak,
         streakCelebration,
+        addCommitment,
+        updateCommitmentItem,
+        deactivateCommitment,
+        addExpenseTransaction,
+        addPlannedExpense,
+        removePlannedExpense,
       }}
     >
       {children}

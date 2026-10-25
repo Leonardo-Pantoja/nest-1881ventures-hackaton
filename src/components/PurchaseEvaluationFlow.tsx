@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
@@ -88,15 +88,14 @@ export default function PurchaseEvaluationFlow({
   const [chatImageBase64, setChatImageBase64] = useState<string | null>(null);
   const [chatImageMime, setChatImageMime] = useState<string | null>(null);
   const [latestEvaluationOverride, setLatestEvaluationOverride] =
-    useState<EvaluateApiResponse | null>(null);
+    useState<{ key: string; data: EvaluateApiResponse } | null>(null);
   const chatImageInputRef = useRef<HTMLInputElement | null>(null);
 
-  const activeEvaluation = latestEvaluationOverride ?? apiEvaluation;
-
-  // Reset override if parent props change
-  useEffect(() => {
-    setLatestEvaluationOverride(null);
-  }, [itemName, itemPrice, apiEvaluation]);
+  const overrideKey = `${itemName}:${itemPrice}:${apiEvaluation?.financialRevision ?? ""}`;
+  const activeEvaluation =
+    latestEvaluationOverride?.key === overrideKey
+      ? latestEvaluationOverride.data
+      : apiEvaluation;
 
   // Core Deterministic Financial Engine (purchaseDecision, purchaseReport, goalImpact, weeklyProjection)
   const metrics = useMemo(() => {
@@ -265,7 +264,7 @@ export default function PurchaseEvaluationFlow({
         );
       }
 
-      setLatestEvaluationOverride(data);
+      setLatestEvaluationOverride({ key: overrideKey, data });
       const replyText =
         data.chatReply ||
         data.aiExplanation ||
@@ -444,12 +443,16 @@ export default function PurchaseEvaluationFlow({
                         metrics.goalImpact.savedAfter +
                         metrics.goalImpact.remainingAfter
                       ).toLocaleString()} MXN`
-                    : `$${profile.goal.currentSaved.toLocaleString()} / $${profile.goal.targetAmount.toLocaleString()} MXN`}
+                    : `$${(profile.goal?.currentSaved ?? 0).toLocaleString()} / $${(
+                        profile.goal?.targetAmount ?? 0
+                      ).toLocaleString()} MXN`}
                 </p>
                 <p className="text-[11px] text-emerald-800 leading-snug">
                   {metrics.goalImpact?.delayedByWeeks === 0
                     ? `Intacto (0 semanas de retraso en "${metrics.goalImpact.goalTitle}")`
-                    : `Protegido · no se retira dinero de "${profile.goal.title}"`}
+                    : `Protegido · no se retira dinero de "${
+                        profile.goal?.title ?? "tu meta"
+                      }"`}
                 </p>
               </div>
 
