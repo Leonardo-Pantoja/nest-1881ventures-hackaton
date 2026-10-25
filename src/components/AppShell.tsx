@@ -127,7 +127,18 @@ export default function AppShell({
         </div>
 
         {/* Clean Sidebar Footer: Fixed Avatar + User Info + Clear Logout Button */}
-        <div className="pt-5 border-t border-slate-200 space-y-2.5">
+        <div className="pt-5 pb-16 border-t border-slate-200 space-y-2.5">
+          <motion.button
+            type="button"
+            disabled={isSigningOut}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => void handleSignOut()}
+            className="w-full h-10 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-200 text-slate-700 hover:text-rose-700 text-xs font-bold font-heading flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
+          >
+            <LogOut className="w-4 h-4 shrink-0" strokeWidth={1.5} />
+            <span>{isSigningOut ? "Cerrando sesión..." : "Cerrar sesión"}</span>
+          </motion.button>
+
           <div className="flex items-center justify-between gap-2 p-2.5 rounded-2xl bg-slate-50 border border-slate-200/80">
             <button
               type="button"
@@ -165,16 +176,6 @@ export default function AppShell({
             )}
           </div>
 
-          <motion.button
-            type="button"
-            disabled={isSigningOut}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => void handleSignOut()}
-            className="w-full h-10 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-200 text-slate-700 hover:text-rose-700 text-xs font-bold font-heading flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
-          >
-            <LogOut className="w-4 h-4 shrink-0" strokeWidth={1.5} />
-            <span>{isSigningOut ? "Cerrando sesión..." : "Cerrar sesión"}</span>
-          </motion.button>
         </div>
       </aside>
 

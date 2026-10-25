@@ -17,7 +17,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { playTap, playCoin, playLevelUp } from "@/lib/soundEffects";
+import { playTap, playCoin } from "@/lib/soundEffects";
 import { useFinancial } from "@/context/FinancialContext";
 
 const QUICK_STEPS = [
@@ -29,7 +29,7 @@ const QUICK_STEPS = [
     tag: "🪙 $1,500 · 💰 $3,000 · 💎 $5,000+",
     icon: SlidersHorizontal,
     cardStyle:
-      "border-emerald-300 border-b-emerald-600 bg-gradient-to-b from-white to-emerald-50/70",
+      "bg-gradient-to-b from-white to-slate-50",
   },
   {
     number: "02",
@@ -39,7 +39,7 @@ const QUICK_STEPS = [
     tag: "Tenis, audífonos o capturas",
     icon: SearchCheck,
     cardStyle:
-      "border-amber-300 border-b-amber-500 bg-gradient-to-b from-white to-amber-50/70",
+      "bg-gradient-to-b from-white to-slate-50",
   },
   {
     number: "03",
@@ -49,7 +49,7 @@ const QUICK_STEPS = [
     tag: "5 niveles de evolución y rachas 🔥",
     icon: CalendarCheck2,
     cardStyle:
-      "border-teal-300 border-b-teal-600 bg-gradient-to-b from-white to-teal-50/70",
+      "bg-gradient-to-b from-white to-slate-50",
   },
 ];
 
@@ -108,12 +108,8 @@ export default function LandingPage() {
             animate={{ opacity: 1, y: 0 }}
             className="flex flex-col items-center gap-2"
           >
-            <motion.button
-              type="button"
-              whileTap={{ scale: 0.94 }}
-              onClick={() => playLevelUp()}
-              className="relative w-28 h-28 rounded-3xl bg-gradient-to-b from-emerald-50 via-white to-amber-50/60 border-2 border-b-4 border-emerald-300 shadow-sm flex items-center justify-center cursor-pointer group"
-              title="¡Toca para celebrar!"
+            <div
+              className="relative w-28 h-28 rounded-3xl bg-gradient-to-b from-emerald-50 via-white to-amber-50/60 border border-slate-200 shadow-sm flex items-center justify-center cursor-default"
             >
               <svg
                 viewBox="0 0 120 110"
@@ -157,11 +153,11 @@ export default function LandingPage() {
                 <Flame className="w-3 h-3 fill-white" strokeWidth={1.5} />
                 +XP
               </span>
-            </motion.button>
+            </div>
 
             <Badge
               variant="outline"
-              className="border-emerald-300 bg-emerald-50 text-emerald-900 px-3 py-1 text-xs font-bold font-heading"
+              className="border-emerald-300 bg-emerald-50 text-emerald-900 px-3 py-1 text-xs font-bold font-heading cursor-default select-none"
             >
               <Sparkles className="w-3.5 h-3.5 text-emerald-700" strokeWidth={1.5} />
               Tu Copiloto Pre-Compra Gamificado
@@ -186,14 +182,12 @@ export default function LandingPage() {
             className="flex flex-wrap items-center justify-center gap-1.5"
           >
             {PLANT_LEVELS_STRIP.map((item) => (
-              <button
+              <span
                 key={item.lvl}
-                type="button"
-                onClick={() => playTap()}
-                className="px-3 py-1 rounded-xl bg-white border-2 border-b-4 border-[#E6E1DA] text-xs font-bold font-heading text-slate-700 active:border-b-2 active:translate-y-0.5 cursor-pointer"
+                className="px-3 py-1 rounded-xl bg-white border border-slate-200 shadow-sm text-xs font-bold font-heading text-slate-700 cursor-default select-none"
               >
                 {item.label}
-              </button>
+              </span>
             ))}
           </motion.div>
 
@@ -262,8 +256,7 @@ export default function LandingPage() {
               return (
                 <div
                   key={step.number}
-                  onClick={() => playTap()}
-                  className={`p-4 rounded-3xl border-2 border-b-4 transition-all cursor-pointer flex flex-col justify-between gap-3 ${step.cardStyle}`}
+                  className={`p-4 rounded-3xl border border-slate-200 shadow-sm cursor-default flex flex-col justify-between gap-3 ${step.cardStyle}`}
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-2xl">{step.emoji}</span>
