@@ -19,6 +19,8 @@ function EvaluateContent() {
   const searchParams = useSearchParams();
   const {
     pendingEvaluation,
+    mode,
+    profile,
     setPendingEvaluation,
     streakCelebration,
   } = useFinancial();
@@ -80,6 +82,9 @@ function EvaluateContent() {
 
       <div className="space-y-4 max-w-xl mx-auto w-full">
         <QuickSnapScanner
+          key={JSON.stringify([mode, profile.id, itemName, itemPrice])}
+          accessMode={mode === "demo" ? "demo" : "account"}
+          demoProfileId={mode === "demo" ? profile.id : undefined}
           onScanComplete={(scanned: ScannedProductResult) => {
             playTap();
             setConfirmedScan(scanned);
@@ -147,9 +152,10 @@ function EvaluateContent() {
 }
 
 export default function EvaluatePage() {
+  const { mode, profile } = useFinancial();
   return (
     <Suspense fallback={<div className="min-h-screen bg-[#FAF8F5]" />}>
-      <EvaluateContent />
+      <EvaluateContent key={JSON.stringify([mode, profile.id])} />
     </Suspense>
   );
 }

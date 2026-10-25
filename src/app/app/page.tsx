@@ -14,6 +14,7 @@ import {
   Target,
   Sprout,
   Search,
+  Camera,
   Clock,
   ArrowRight,
   Award,
@@ -716,6 +717,11 @@ function HeroWorldDiorama({
 }
 
 export default function AppDashboardPage() {
+  const { mode, profile } = useFinancial();
+  return <DashboardContent key={JSON.stringify([mode, profile.id])} />;
+}
+
+function DashboardContent() {
   const router = useRouter();
   const {
     profile,
@@ -743,6 +749,8 @@ export default function AppDashboardPage() {
     null,
   );
   const [scannedStoreTag, setScannedStoreTag] = useState<string | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scannerRevision, setScannerRevision] = useState(0);
 
   // Native Text-to-Speech (Voz Interactiva para la Planta)
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -1030,37 +1038,23 @@ export default function AppDashboardPage() {
     }
   }, [autoVoiceEnabled, rpgSpeechMessage, speakAdviceText]);
 
-  // Real-Time Input Handler (parses product name + price)
+  // Typing changes only the draft; AI analysis requires explicit form submission.
   const handleQueryInputChange = (value: string) => {
+    setScannerRevision(value => value + 1);
+    setScannedThumbnailUrl(null);
+    setScannedStoreTag(null);
+    setScannerOpen(false);
     setQueryText(value);
     setSelectedDecision("idle");
 
-    if (!value.trim()) {
-      setParsedItemName("");
-      setParsedItemPrice(0);
-      return;
-    }
-
-    const normalized = value.replace(/,/g, "");
-    const priceMatch = normalized.match(/(\d+(?:\.\d+)?)/);
-    if (priceMatch) {
-      const price = Math.max(0, Math.round(parseFloat(priceMatch[1])));
-      setParsedItemPrice(price);
-      const cleanedName = value
-        .replace(/\$?\s*\d[\d,.]*/g, "")
-        .replace(/\bde\b|\bpor\b|\bmxn\b|\bpesos\b/gi, "")
-        .trim();
-      setParsedItemName(cleanedName || "Artículo consultado");
-
-      playTap();
-    } else {
-      setParsedItemPrice(0);
-      setParsedItemName(value.trim());
-    }
+    setParsedItemName("");
+    setParsedItemPrice(0);
   };
 
   // Select RPG Shop Item Card
   const handleSelectShopItem = (item: (typeof RPG_SHOP_ITEMS)[number]) => {
+    setScannerRevision(value => value + 1);
+    setScannerOpen(false);
     setSelectedDecision("idle");
     setQueryText(`${item.name} $${item.price.toLocaleString()}`);
     setParsedItemName(item.name);
@@ -1324,6 +1318,9 @@ export default function AppDashboardPage() {
               />
               <input
                 type="text"
+                form="product-ai-search"
+                maxLength={500}
+                aria-label="Producto que estás pensando comprar"
                 value={queryText}
                 onChange={(e) => handleQueryInputChange(e.target.value)}
                 placeholder="Escribe ej. Audífonos $2,300 o escanea tu producto..."
@@ -1348,12 +1345,21 @@ export default function AppDashboardPage() {
                     <X className="w-4 h-4" strokeWidth={1.5} />
                   </button>
                 )}
-                <QuickSnapScanner
-                  inlineIconTrigger
-                  onScanComplete={handleScanComplete}
-                />
+                <motion.button type="button" whileTap={{ scale: 0.95 }} onClick={() => setScannerOpen(true)}
+                  title="Escanear producto o captura de tienda" aria-label="Escanear producto o captura de tienda"
+                  className="h-10 px-3.5 rounded-xl bg-slate-100 hover:bg-slate-200/80 text-slate-700 border border-slate-200 flex items-center gap-2 text-xs font-semibold cursor-pointer shrink-0">
+                  <Camera className="w-4 h-4" /><span className="hidden sm:inline">Escanear</span>
+                </motion.button>
               </div>
             </div>
+
+            <QuickSnapScanner
+              key={JSON.stringify([mode, profile.id, scannerRevision, queryText, parsedItemName, parsedItemPrice])}
+              embedded open={scannerOpen} onOpenChange={setScannerOpen}
+              textQuery={queryText} textFormId="product-ai-search"
+              accessMode={mode === "demo" ? "demo" : "account"} demoProfileId={mode === "demo" ? profile.id : undefined}
+              onScanComplete={handleScanComplete}
+            />
 
             {/* Real-Life Cost Psychology Pills (Píldoras de Costo de Vida Real) */}
             <AnimatePresence>
