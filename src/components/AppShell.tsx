@@ -1,7 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   Compass,
@@ -9,9 +10,11 @@ import {
   Sparkles,
   Trophy,
   UserCheck,
+  Receipt,
   Flame,
   Zap,
   HelpCircle,
+  LogOut,
 } from "lucide-react";
 import BottomNav, { type BottomNavTab } from "@/components/BottomNav";
 import { useFinancial } from "@/context/FinancialContext";
@@ -31,8 +34,9 @@ const NAV_ITEMS: {
 }[] = [
   { id: "home", label: "Tu Planta", icon: Sprout },
   { id: "simulate", label: "Simular Compra", icon: Sparkles },
+  { id: "expenses", label: "Plan de Gastos", icon: Receipt },
   { id: "goals", label: "Retos y Metas", icon: Trophy },
-  { id: "profile", label: "Cambiar Perfil", icon: UserCheck },
+  { id: "profile", label: "Editar Perfil", icon: UserCheck },
 ];
 
 export default function AppShell({
@@ -41,11 +45,27 @@ export default function AppShell({
   onOpenGuide,
   children,
 }: AppShellProps) {
-  const { profile } = useFinancial();
+  const router = useRouter();
+  const { profile, mode, signOut } = useFinancial();
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   const handleNavClick = (tab: BottomNavTab) => {
     playTap();
     onSelectTab(tab);
+  };
+
+  const handleSignOut = async () => {
+    if (isSigningOut) return;
+    playTap();
+    setIsSigningOut(true);
+    try {
+      await signOut();
+      router.replace("/auth");
+    } catch (error) {
+      console.error("Logout failed:", error);
+    } finally {
+      setIsSigningOut(false);
+    }
   };
 
   const initials = (profile.name || "CM")
@@ -56,9 +76,9 @@ export default function AppShell({
     .toUpperCase();
 
   return (
-    <div className="min-h-screen bg-[#FAF8F5] text-slate-900 flex flex-col md:flex-row font-sans">
+    <div className="min-h-screen w-full overflow-x-hidden bg-[#FAF8F5] text-slate-900 flex flex-col md:flex-row font-sans">
       {/* Desktop Clean Left Sidebar (Apple / Wise Minimalist Palette + Emerald Primary) */}
-      <aside className="hidden md:flex md:w-64 lg:w-72 md:flex-col md:fixed md:inset-y-0 md:left-0 border-r border-slate-200 bg-white px-5 py-6 justify-between z-30">
+      <aside className="hidden md:flex md:w-64 lg:w-72 md:flex-col md:fixed md:inset-y-0 md:left-0 border-r border-slate-200 bg-white px-5 pt-6 pb-8 justify-between z-30 overflow-y-auto">
         <div className="space-y-8">
           {/* Logo */}
           <Link
@@ -106,8 +126,8 @@ export default function AppShell({
           </nav>
         </div>
 
-        {/* Clean Sidebar Footer: Fixed Avatar + User Info without duplicate Streak/XP cards */}
-        <div className="pt-5 border-t border-slate-200">
+        {/* Clean Sidebar Footer: Fixed Avatar + User Info + Clear Logout Button */}
+        <div className="pt-5 border-t border-slate-200 space-y-2.5">
           <div className="flex items-center justify-between gap-2 p-2.5 rounded-2xl bg-slate-50 border border-slate-200/80">
             <button
               type="button"
@@ -122,7 +142,9 @@ export default function AppShell({
                   {profile.name}
                 </span>
                 <span className="text-[11px] text-slate-500 block truncate">
-                  Cambiar perfil
+                  {mode === "authenticated"
+                    ? profile.email || "Cuenta activa"
+                    : "Modo Demo · Cambiar perfil"}
                 </span>
               </div>
             </button>
@@ -142,11 +164,22 @@ export default function AppShell({
               </motion.button>
             )}
           </div>
+
+          <motion.button
+            type="button"
+            disabled={isSigningOut}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => void handleSignOut()}
+            className="w-full h-10 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-200 text-slate-700 hover:text-rose-700 text-xs font-bold font-heading flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
+          >
+            <LogOut className="w-4 h-4 shrink-0" strokeWidth={1.5} />
+            <span>{isSigningOut ? "Cerrando sesión..." : "Cerrar sesión"}</span>
+          </motion.button>
         </div>
       </aside>
 
       {/* Main Content Wrapper */}
-      <div className="flex-1 md:pl-64 lg:pl-72 flex flex-col min-h-screen">
+      <div className="flex-1 min-w-0 md:pl-64 lg:pl-72 flex flex-col min-h-screen">
         {/* Top Bar (Visible on Mobile & Desktop Top-Right for non-duplicated Streak & XP) */}
         <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-[#FAF8F5]/90 backdrop-blur-md">
           <div className="max-w-5xl mx-auto px-4 sm:px-8 h-16 flex items-center justify-between gap-4">
@@ -170,6 +203,8 @@ export default function AppShell({
                   ? "Vista de evolución · Tu Planta Financiera"
                   : activeTab === "simulate"
                   ? "Copiloto Pre-Compra · Simulador de Decisiones"
+                  : activeTab === "expenses"
+                  ? "Plan de Gastos · Compromisos, Imprevistos y Desglose Mensual"
                   : activeTab === "goals"
                   ? "Retos y Metas de Ahorro"
                   : "Configuración de Perfil"}
@@ -205,6 +240,19 @@ export default function AppShell({
                 <span>{profile.wisdomXp ?? 120} XP</span>
               </motion.button>
 
+              <motion.button
+                type="button"
+                disabled={isSigningOut}
+                whileTap={{ scale: 0.96 }}
+                onClick={() => void handleSignOut()}
+                className="h-9 px-2.5 sm:px-3.5 rounded-full border border-slate-200 bg-white text-slate-700 hover:text-rose-700 hover:bg-rose-50 hover:border-rose-200 text-xs font-bold font-heading flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50 transition-colors"
+                aria-label="Cerrar sesión"
+                title="Cerrar sesión"
+              >
+                <LogOut className="w-4 h-4" strokeWidth={1.5} />
+                <span className="hidden sm:inline">Salir</span>
+              </motion.button>
+
               {onOpenGuide && (
                 <motion.button
                   type="button"
@@ -224,7 +272,7 @@ export default function AppShell({
         </header>
 
         {/* Central Spacious Container with Generous Whitespace */}
-        <main className="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-28 md:py-4">
+        <main className="flex-1 w-full min-w-0 overflow-x-hidden max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-28 md:py-4">
           {children}
         </main>
 

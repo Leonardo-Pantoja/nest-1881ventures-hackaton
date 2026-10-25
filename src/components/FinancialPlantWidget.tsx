@@ -109,7 +109,7 @@ export default function FinancialPlantWidget({
   const [previewLevelOverride, setPreviewLevelOverride] =
     useState<PlantLevel | null>(null);
 
-  // Calculate user's financial level & 3-segment liquidity breakdown
+  // Calculate user's financial level & 3-segment liquidity breakdown via deterministic engine
   const computedMetrics = useMemo(() => {
     const hasAuthoritativeEvaluation = true;
     const evaluationComplete =

@@ -209,8 +209,7 @@ export default function LandingPage() {
               whileTap={{ scale: 0.96 }}
               onClick={() => {
                 playTap();
-                startFreshOnboarding();
-                router.push("/onboarding");
+                router.push("/auth");
               }}
               className="p-4 rounded-3xl bg-emerald-600 hover:bg-emerald-500 text-white border-2 border-emerald-700 border-b-4 border-b-emerald-800 active:border-b-2 active:translate-y-0.5 shadow-md flex items-center justify-between gap-3 text-left cursor-pointer"
             >

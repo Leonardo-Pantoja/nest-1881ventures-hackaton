@@ -103,7 +103,7 @@ function EvaluateContent() {
           className="w-full"
         >
           <PurchaseEvaluationFlow
-          key={evaluation.key}
+            key={evaluation.key}
             itemName={itemName}
             itemPrice={itemPrice}
             thumbnailDataUrl={scannedThumb}
@@ -115,6 +115,15 @@ function EvaluateContent() {
             isStandalonePage
             onClose={() => router.push("/app")}
             onActionCompleted={handleActionCompleted}
+            onUpdateEvaluatedItem={(nextName, nextPrice, nextThumb, nextTag) => {
+              setPendingEvaluation({
+                name: nextName,
+                price: nextPrice,
+                imageName: nextTag ?? scannedStore,
+              });
+              if (nextThumb !== undefined) setScannedThumb(nextThumb);
+              if (nextTag !== undefined) setScannedStore(nextTag);
+            }}
           />
         </motion.div>
       </div>
