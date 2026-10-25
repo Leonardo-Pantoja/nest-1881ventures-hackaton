@@ -30,6 +30,7 @@ import { playTap, playCoin, playLevelUp } from "@/lib/soundEffects";
 interface ProfileEditorPanelProps {
   onShowToast: (message: string) => void;
   onNavigateToSimulate?: () => void;
+  initialTab?: ProfileTabId;
 }
 
 type ProfileTabId = "perfil" | "liquidez" | "ingresos";
@@ -54,7 +55,7 @@ const LIFESTYLE_OPTIONS: {
 
 export default function ProfileEditorPanel({
   onShowToast,
-  onNavigateToSimulate,
+  onNavigateToSimulate, initialTab = "perfil",
 }: ProfileEditorPanelProps) {
   const router = useRouter();
   const {
@@ -70,7 +71,7 @@ export default function ProfileEditorPanel({
     saveGoalWithSubGoals,
   } = useFinancial();
 
-  const [activeTab, setActiveTab] = useState<ProfileTabId>("perfil");
+  const [activeTab, setActiveTab] = useState<ProfileTabId>(initialTab);
 
   const handleLogout = async () => {
     playTap();

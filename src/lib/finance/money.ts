@@ -4,3 +4,5 @@ export function validPurchasePrice(value: unknown): value is number {
   return Number.isSafeInteger(cents) && cents >= 1 && cents <= 99_999_999_900 &&
     Math.abs(value * 100 - cents) < 0.000001;
 }
+
+export const formatMXN = (value: number) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(value) + " MXN";

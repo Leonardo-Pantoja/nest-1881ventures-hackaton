@@ -13,29 +13,31 @@ import { type BottomNavTab } from "@/components/BottomNav";
 import { useFinancial } from "@/context/FinancialContext";
 import { playTap } from "@/lib/soundEffects";
 import { useFinancialEvaluation } from "@/hooks/useFinancialEvaluation";
+import { resolveEvaluationSelection } from "@/lib/finance/evaluationSelection";
 
 function EvaluateContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const {
     pendingEvaluation,
+    mode,
+    profile,
     setPendingEvaluation,
-    incrementStreak,
     streakCelebration,
   } = useFinancial();
 
+  const [scanRevision, setScanRevision] = useState(0);
   const [actionToast, setActionToast] = useState<string | null>(null);
 
   const [scannedThumb, setScannedThumb] = useState<string | null>(null);
   const [scannedStore, setScannedStore] = useState<string | null>(null);
 
-  const itemName =
-    searchParams.get("name") ||
-    pendingEvaluation.name ||
-    "Audífonos Inalámbricos Sony";
-  const itemPrice =
-    Number(searchParams.get("price")) || pendingEvaluation.price || 0;
-  const evaluation = useFinancialEvaluation(itemName, itemPrice);
+  const [confirmedScan, setConfirmedScan] = useState<ScannedProductResult | null>(null);
+
+  const selected = resolveEvaluationSelection(confirmedScan, searchParams.get("name"), searchParams.get("price"), pendingEvaluation);
+  const itemName = selected.name;
+  const itemPrice = selected.price ?? 0;
+  const evaluation = useFinancialEvaluation(itemName, selected.price);
   const apiEvaluation = evaluation.response;
   const apiEvaluationError = evaluation.error !== null;
   const apiErrorMessage = evaluation.error;
@@ -78,8 +80,15 @@ function EvaluateContent() {
 
       <div className="space-y-4 max-w-6xl mx-auto w-full">
         <QuickSnapScanner
+          attachmentOnly requireImageConfirmation
+          onAttachmentStart={() => setScanRevision(value => value + 1)}
+          key={JSON.stringify([mode, profile.id, itemName, itemPrice])}
+          accessMode={mode === "demo" ? "demo" : "account"}
+          demoProfileId={mode === "demo" ? profile.id : undefined}
           onScanComplete={(scanned: ScannedProductResult) => {
             playTap();
+            setScanRevision(value => value + 1);
+            setConfirmedScan(scanned);
             setPendingEvaluation({
               name: scanned.name,
               price: scanned.price ?? 0,
@@ -87,12 +96,7 @@ function EvaluateContent() {
             });
             setScannedThumb(scanned.thumbnailDataUrl);
             setScannedStore(scanned.storeTag);
-            incrementStreak("¡Escaneaste un producto! +1 Racha 🔥");
-            if (scanned.price === null) {
-              setActionToast(
-                "La lectura de imágenes con Gemini está pendiente para Fase 2. Confirma manualmente el precio en el simulador antes de evaluar.",
-              );
-            }
+
           }}
         />
 
@@ -103,7 +107,7 @@ function EvaluateContent() {
           className="w-full"
         >
           <PurchaseEvaluationFlow
-            key={evaluation.key}
+            key={JSON.stringify([mode, profile.id, scanRevision])}
             itemName={itemName}
             itemPrice={itemPrice}
             thumbnailDataUrl={scannedThumb}
@@ -116,6 +120,7 @@ function EvaluateContent() {
             onClose={() => router.push("/app")}
             onActionCompleted={handleActionCompleted}
             onUpdateEvaluatedItem={(nextName, nextPrice, nextThumb, nextTag) => {
+              setConfirmedScan({ name: nextName, price: nextPrice, thumbnailDataUrl: nextThumb ?? scannedThumb ?? "", storeTag: nextTag ?? scannedStore ?? "Consulta del copiloto" });
               setPendingEvaluation({
                 name: nextName,
                 price: nextPrice,
@@ -149,9 +154,10 @@ function EvaluateContent() {
 }
 
 export default function EvaluatePage() {
+  const { mode, profile } = useFinancial();
   return (
     <Suspense fallback={<div className="min-h-screen bg-[#FAF8F5]" />}>
-      <EvaluateContent />
+      <EvaluateContent key={JSON.stringify([mode, profile.id])} />
     </Suspense>
   );
 }

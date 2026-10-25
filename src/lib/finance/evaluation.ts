@@ -4,6 +4,7 @@ import type { PurchaseReport } from "../onboarding/purchaseReport";
 import type { PurchaseDecision } from "../onboarding/purchaseDecision";
 import type { GoalImpactResult } from "../onboarding/goalImpact";
 import type { SixWeekProjection } from "../onboarding/weeklyProjection";
+import { getFinancialMissingInformation, getFinancialProjectionLimitations, getRegisteredFinancialData } from "./profileDiagnostics";
 
 export type EvaluationStatus =
   | "dentro_del_margen"
@@ -19,7 +20,10 @@ export interface EvaluateApiResponse {
   verdict: "VIABLE" | "PRECAUCION" | "COMPROMETE" | "DATOS_INCOMPLETOS";
   badgeLabel:
     | "Compra viable hoy"
+    | "Margen calculado"
     | "Viable con precaución"
+    | "Riesgo en la proyección"
+    | "Proyección por confirmar"
     | "Compromete tu quincena"
     | "Datos financieros incompletos";
   headlineLine1: string;
@@ -46,6 +50,8 @@ export interface EvaluateApiResponse {
     protectedSavings: number | null;
   };
   missingInformation: string[];
+  registeredData?: ReturnType<typeof getRegisteredFinancialData>;
+  projectionLimitations?: string[];
   projectionStatus: "calculado" | "datos_incompletos";
   projection: SixWeekProjection | null;
   projectionAfter: SixWeekProjection | null;
@@ -57,6 +63,7 @@ export interface EvaluateApiResponse {
   chatReply?: string | null;
   source: "deterministic";
   financialRevision?: string;
+  summary?: boolean;
 }
 
 export function buildDeterministicEvaluation(
@@ -84,52 +91,19 @@ export function buildDeterministicEvaluation(
   const projectionAfter = report?.projectionAfter ?? null;
   const projectedBalanceDifference = report?.projectedBalanceDifference ?? null;
   const goalImpact = report?.goalImpact ?? null;
+  const riskWeeks = (report ? projectionAfter : projectionBefore)?.weeks.filter(week => week.belowProtectedFunds).map(week => week.week) ?? [];
+  const futureRisk = riskWeeks.length > 0;
+  const projectionIncomplete = projectionBefore.status === "datos_incompletos" || projectionAfter?.status === "datos_incompletos";
   const isComplete =
     profile.isOnboarded &&
     safe.status === "calculado" &&
     safe.safeToSpend !== null &&
     purchase.status === "evaluada" &&
     purchase.remainingSafeToSpend !== null;
-  const missingInformation: string[] = [];
-  if (!profile.isOnboarded) missingInformation.push("Onboarding financiero incompleto.");
-  if (profile.currentBalance === null) missingInformation.push("Saldo actual desconocido.");
-  if (profile.nextPaydayDays === null) missingInformation.push("Fecha del próximo ingreso desconocida.");
-  if (profile.nextPaydayAmount === null) missingInformation.push("Importe del próximo ingreso desconocido.");
-  if (profile.dailyEssentialBurn === null) missingInformation.push("Gastos esenciales diarios desconocidos.");
-  if (profile.safetyBuffer === null) missingInformation.push("Colchón de seguridad desconocido.");
-  if (
-    profile.commitments.some(
-      (item) =>
-        item.amount === null ||
-        item.dueInDays === null ||
-        item.frequency === null ||
-        item.isConfirmed === false,
-    )
-  ) {
-    missingInformation.push("Hay compromisos con importe, fecha o frecuencia sin confirmar.");
-  }
-  if (
-    profile.debts.some(
-      (debt) =>
-        debt.nextPayment === null ||
-        debt.dueInDays === null ||
-        debt.frequency === null,
-    )
-  ) {
-    missingInformation.push("Hay pagos de deuda con importe, fecha o frecuencia desconocidos.");
-  }
-  if (
-    profile.primaryGoal &&
-    (profile.primaryGoal.currentSaved === null ||
-      profile.primaryGoal.targetAmount === null ||
-      (profile.primaryGoal.currentSaved > 0 &&
-        profile.primaryGoal.savingsLocation === "desconocido"))
-  ) {
-    missingInformation.push("Falta información sobre el saldo o la ubicación de los ahorros de tu meta.");
-  }
-  if (!isComplete && missingInformation.length === 0) {
-    missingInformation.push("Faltan datos necesarios para calcular el margen disponible.");
-  }
+  const missingInformation = getFinancialMissingInformation(profile);
+  const projectionLimitations = projectionIncomplete ? getFinancialProjectionLimitations(profile) : [];
+  if (!isComplete && missingInformation.length === 0) missingInformation.push("Faltan datos necesarios para calcular el margen disponible.");
+  const registeredData = getRegisteredFinancialData(profile);
 
   let status: EvaluationStatus = "datos_incompletos";
   if (isComplete && purchase.assessment === "excede_margen") {
@@ -138,7 +112,7 @@ export function buildDeterministicEvaluation(
     isComplete &&
     purchase.remainingSafeToSpend !== null &&
     safe.safetyBuffer !== null &&
-    purchase.remainingSafeToSpend < safe.safetyBuffer * 0.5
+    (futureRisk || projectionIncomplete || purchase.remainingSafeToSpend < safe.safetyBuffer * 0.5)
   ) {
     status = "precaucion";
   } else if (isComplete) {
@@ -159,8 +133,8 @@ export function buildDeterministicEvaluation(
       : status === "excede_el_margen"
         ? "Compromete tu quincena"
         : status === "precaucion"
-          ? "Viable con precaución"
-          : "Compra viable hoy";
+          ? futureRisk ? "Riesgo en la proyección" : projectionIncomplete ? "Proyección por confirmar" : "Viable con precaución"
+          : itemPrice === null ? "Margen calculado" : "Compra viable hoy";
 
   const remaining = purchase.remainingSafeToSpend;
   const remainingAfterPurchase =
@@ -173,19 +147,31 @@ export function buildDeterministicEvaluation(
     safe.safeToSpend !== null && remaining !== null && safe.safeToSpend > 0
       ? Math.round((remaining / safe.safeToSpend) * 100)
       : null;
-  const headlineLine1 =
-    status === "datos_incompletos"
+  const headlineLine1 = itemPrice === null
+    ? safe.safeToSpend === null
+      ? "Falta información para calcular tu margen. Los importes registrados siguen disponibles."
+      : futureRisk
+        ? `Tu margen inmediato estimado es $${safe.safeToSpend.toLocaleString()} MXN, pero la simulación muestra riesgo de tocar fondos protegidos en las semanas ${riskWeeks.join(", ")}.`
+        : projectionIncomplete
+          ? `Tu margen inmediato estimado es $${safe.safeToSpend.toLocaleString()} MXN. La proyección futura está incompleta.`
+          : `Tu margen inmediato estimado es $${safe.safeToSpend.toLocaleString()} MXN según los datos registrados.`
+    : status === "datos_incompletos"
       ? "No podemos evaluar esta compra con seguridad porque faltan datos financieros."
       : status === "excede_el_margen"
         ? purchase.exceedsBy !== null
           ? `"${itemName}" supera tu margen calculado por $${purchase.exceedsBy.toLocaleString()} MXN.`
           : `"${itemName}" supera tu margen calculado.`
         : status === "precaucion"
-          ? `"${itemName}" cabe en tu margen, pero dejaría menos de la mitad de tu colchón de seguridad disponible.`
+          ? futureRisk
+            ? `"${itemName}" cabe en el margen inmediato, pero la simulación muestra riesgo de tocar fondos protegidos en las semanas ${riskWeeks.join(", ")}.`
+            : projectionIncomplete
+              ? `"${itemName}" cabe en el margen inmediato; la proyección futura está incompleta y no confirma su viabilidad.`
+              : `"${itemName}" cabe en tu margen, pero dejaría poco dinero libre adicional.`
           : `"${itemName}" está dentro de tu margen calculado.`;
 
   return {
     status,
+    summary: itemPrice === null,
     detectedItemName: itemName,
     detectedItemPrice: itemPrice ?? 0,
     verdict,
@@ -211,9 +197,11 @@ export function buildDeterministicEvaluation(
       pendingCommitments: safe.pendingCommitments,
       pendingDebtPayments: safe.pendingDebtPayments,
       safetyBuffer: safe.safetyBuffer,
-      protectedSavings: safe.protectedSavings,
+      protectedSavings: safe.protectedSavings ?? registeredData.protectedSavings,
     },
     missingInformation,
+    registeredData,
+    projectionLimitations,
     projectionStatus: projectionBefore.status,
     projection:
       projectionBefore.status === "calculado"
@@ -225,7 +213,7 @@ export function buildDeterministicEvaluation(
         : null,
     projectedBalanceDifference,
     goalImpact,
-    purchaseDecision: purchase,
+    purchaseDecision: report ? purchase : undefined,
     purchaseReport: report,
     source: "deterministic",
   };

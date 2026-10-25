@@ -119,9 +119,7 @@ export default function FinancialPlantWidget({
       financialEvaluation.status !== "error_procesamiento" &&
       financialEvaluation.safeToSpend !== null &&
       financialEvaluation.remainingAfterBuyToday !== null;
-    const consideredExpenses = evaluationComplete
-      ? financialEvaluation.consideredExpenses
-      : null;
+    const consideredExpenses = financialEvaluation?.consideredExpenses ?? null;
     const safeToSpend = evaluationComplete ? financialEvaluation.safeToSpend : null;
     const totalBalance = consideredExpenses?.currentBalance ?? null;
     const evaluatedFixedAndRentTotal =

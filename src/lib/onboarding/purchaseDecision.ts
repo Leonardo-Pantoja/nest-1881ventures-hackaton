@@ -39,7 +39,23 @@ function toCents(amount: number): number {
     );
   }
 
-  return Math.round(amount * 100);
+  const rawCents = amount * 100;
+  const cents = Math.round(rawCents);
+
+  // Rechazar cantidades menores a un centavo,
+  // con más de dos decimales o demasiado grandes
+  // para representarse con seguridad.
+  if (
+    !Number.isSafeInteger(cents) ||
+    cents < 1 ||
+    Math.abs(rawCents - cents) > 1e-7
+  ) {
+    throw new Error(
+      "El precio debe ser de al menos $0.01 y tener máximo dos decimales."
+    );
+  }
+
+  return cents;
 }
 
 // ==========================================
@@ -77,7 +93,6 @@ export function evaluatePurchase(
 
   const remaining = available - price;
 
-  // COMPRA DENTRO DEL MARGEN
   if (remaining >= 0) {
     return {
       status: "evaluada",
@@ -91,7 +106,6 @@ export function evaluatePurchase(
     };
   }
 
-  // COMPRA QUE EXCEDE EL MARGEN
   return {
     status: "evaluada",
     assessment: "excede_margen",
