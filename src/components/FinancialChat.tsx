@@ -14,6 +14,7 @@ interface Props {
   product?: ProductContext | null;
   selectionRevision?: number;
   suggestion?: { text: string; id: number };
+  onClearProduct?: (pendingName?: string) => void;
   onProduct?: (product: ProductContext, image?: ScannedProductResult) => void;
 }
 const suggestions = ["¿Cuánto puedo gastar hoy?", "¿Qué debería priorizar este mes?", "¿Cuánto tendría que ahorrar para comprarlo en cuatro semanas?"];
@@ -24,13 +25,14 @@ export default function FinancialChat(props: Props) {
   return <ChatSession key={JSON.stringify([mode, profile.id, financialVersion, props.selectionRevision])} {...props} />;
 }
 
-export function ChatSession({ product: initialProduct = null, onProduct, suggestion }: Props) {
+export function ChatSession({ product: initialProduct = null, onProduct, suggestion, onClearProduct }: Props) {
   const { mode, profile } = useFinancial();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState(suggestion?.text ?? "");
   const [lastSuggestion, setLastSuggestion] = useState(suggestion);
   if (suggestion !== lastSuggestion) { setLastSuggestion(suggestion); setInput(suggestion?.text ?? ""); }
   const [product, setProduct] = useState(initialProduct);
+  const [pendingProductName, setPendingProductName] = useState<string | undefined>();
   const [manualName, setManualName] = useState("");
   const [manualPrice, setManualPrice] = useState("");
   const [sending, setSending] = useState(false);
@@ -56,7 +58,7 @@ export function ChatSession({ product: initialProduct = null, onProduct, suggest
     if (options.retry && !previous || !options.retry && !text) return;
     const request: Omit<ChatRequest, "requestId"> = options.retry && previous ? { ...previous, deterministicOnly: options.deterministicOnly ?? false } : {
       message: text, history: messages.filter(m => m.role === "user").slice(-10).map(m => ({ role: "user", content: m.content })),
-      product: requestedProduct, mode: mode === "demo" ? "demo" : "account", demoProfileId: mode === "demo" && (profile.id === "mateo" || profile.id === "carlos") ? profile.id : undefined,
+      product: requestedProduct, pendingProductName: options.confirmed ? undefined : pendingProductName, mode: mode === "demo" ? "demo" : "account", demoProfileId: mode === "demo" && (profile.id === "mateo" || profile.id === "carlos") ? profile.id : undefined,
       deterministicOnly: options.deterministicOnly ?? false,
     };
     lock.current = true; const id = ++epoch.current;
@@ -72,7 +74,11 @@ export function ChatSession({ product: initialProduct = null, onProduct, suggest
       if (typeof result.reply !== "string" || !Array.isArray(result.cards)) throw Error("La respuesta del copiloto no es válida.");
       setMessages(prev => [...prev, { role: "assistant", content: result.reply, result }]);
       setRetry(Boolean(result.warning));
-      if (result.product) {
+      if (result.clearProductContext) {
+        setProduct(null); setPendingProductName(result.pendingProductName);
+        onClearProduct?.(result.pendingProductName);
+      } else if (result.product) {
+        setPendingProductName(undefined);
         setProduct(result.product);
         onProduct?.(result.product, options.confirmed);
       }
@@ -89,6 +95,7 @@ export function ChatSession({ product: initialProduct = null, onProduct, suggest
   };
   return <div className="space-y-3" aria-label="Copiloto financiero conversacional">
     <p className="text-xs text-slate-500">Pregunta por compras, ahorros o prioridades. Las simulaciones no modifican tu cuenta.{mode === "demo" ? " Demo: usa el perfil inicial del servidor, con datos simulados." : ""}</p>
+    {pendingProductName && <p className="text-xs text-amber-800">Producto por confirmar: <strong>{pendingProductName}</strong>. Falta su precio en MXN.</p>}
     {product && <p className="rounded-xl bg-emerald-50 border border-emerald-200 p-2 text-xs text-emerald-900">Producto en contexto: <strong>{product.name}</strong> · {mxn(product.price)}</p>}
     <div role="log" aria-live="polite" aria-relevant="additions" className="max-h-[34rem] overflow-y-auto space-y-3 pr-1">
       {messages.length === 0 && <div className="flex gap-2 text-sm text-slate-600 rounded-2xl bg-[#FAF8F5] p-3"><Bot className="h-5 w-5 text-emerald-600 shrink-0" />Cuéntame qué quieres comprar o qué necesitas organizar. Revisaremos tus datos registrados.</div>}

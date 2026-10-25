@@ -8,6 +8,7 @@ export const chatRequestSchema = z.object({
   // Previous financial answers are never accepted as financial evidence.
   history: z.array(z.object({ role: z.literal("user"), content: z.string().trim().min(1).max(1500) }).strict()).max(10).default([]),
   product: productContextSchema.nullable().default(null),
+  pendingProductName: z.string().trim().min(1).max(200).optional(),
   mode: z.enum(["account", "demo"]).default("account"),
   demoProfileId: z.enum(["mateo", "carlos"]).optional(),
   deterministicOnly: z.boolean().default(false),
@@ -52,6 +53,8 @@ export interface ChatResponse {
   report?: ToolResult["report"];
   savings?: ToolResult["savings"];
   financialRevision: string;
+  clearProductContext?: boolean;
+  pendingProductName?: string;
   warning?: string;
   code?: string;
   quality?: { score: number; verdict: string };

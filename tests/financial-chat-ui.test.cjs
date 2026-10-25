@@ -138,3 +138,16 @@ test('confirmed manual price remains evaluable without the model and no request 
   assert.equal(data.deterministicOnly, true); assert.equal(data.product.price, 150.5);
   requests[0].resolve({ ok: true, json: async () => result({ source: 'deterministic' }) }); await flush();
 });
+
+test('a newly named product without a price clears the old context and keeps its pending name for the next explicit price', async t => {
+  const cleared = [];
+  const { render, requests, updates } = setup(t, { onClearProduct: name => cleared.push(name) });
+  type(render, '¿Puedo comprar una laptop?'); submit(render);
+  requests[0].resolve({ ok: true, json: async () => result({ reply: '¿Cuánto cuesta la laptop?', product: null, clearProductContext: true, pendingProductName: 'laptop' }) });
+  await flush(); assert.deepEqual(cleared, ['laptop']); assert.equal(updates.length, 0);
+  type(render, 'Cuesta $1800'); submit(render);
+  const next = JSON.parse(requests[1].init.body);
+  assert.equal(next.product, null); assert.equal(next.pendingProductName, 'laptop');
+  requests[1].resolve({ ok: true, json: async () => result({ product: { name: 'laptop', price: 1800 } }) }); await flush();
+  assert.equal(updates[0][0].price, 1800);
+});

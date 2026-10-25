@@ -7,6 +7,7 @@ import { deterministicExplanation } from "@/lib/ai/responseEvaluation";
 import { EvaluationRequestError, loadAccountSnapshot } from "@/lib/finance/accountSnapshot";
 import { getDemoProfile } from "@/lib/finance/demoProfiles";
 import { ProductAIError } from "@/lib/ai/gemini";
+import { identifiedProductName } from "@/lib/ai/productContext";
 
 export const maxDuration = 60;
 const headers = { "Cache-Control": "no-store" };
@@ -34,6 +35,8 @@ export async function POST(request: Request) {
     const profile = snapshot?.profile ?? getDemoProfile(body.demoProfileId);
     if (!profile) throw new EvaluationRequestError("Selecciona un perfil válido.", 400, "invalid_profile");
     const tool = executeFinancialTool(profile, intent, body.product, snapshot?.raw.financialDate);
+    const awaitingPrice = tool.facts.some(fact => fact.id === "missing.price");
+    const pendingName = awaitingPrice ? identifiedProductName(intent.productName) ?? body.pendingProductName : undefined;
     let reply = deterministicExplanation(tool);
     let quality: ChatResponse["quality"];
     if (!body.deterministicOnly && !aiError) {
@@ -45,6 +48,7 @@ export async function POST(request: Request) {
     const response: ChatResponse = {
       reply, source, product: tool.product, cards: tool.cards, report: tool.report, savings: tool.savings,
       financialRevision: snapshot?.revision ?? `demo:${body.demoProfileId}`,
+      ...(awaitingPrice ? { clearProductContext: true, ...(pendingName ? { pendingProductName: pendingName } : {}) } : {}),
       ...(quality ? { quality } : {}),
       ...(aiError ? { code: aiError.code, warning: `Gemini no completó la respuesta. Mostramos ${tool.product ? "la evaluación calculada del producto confirmado" : "el resumen calculado de tu margen"}. Puedes reintentar la pregunta o consultar las cifras sin IA.` } : {}),
     };

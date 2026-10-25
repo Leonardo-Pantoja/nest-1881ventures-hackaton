@@ -6,35 +6,56 @@ import { profileAtNextIncome } from "../finance/waitScenario";
 import type { FinancialIntent, ProductContext, ToolResult } from "./schemas";
 
 import { formatMXN as mxn } from "../finance/money";
+import { identifiedProductName, resolveIntentProduct } from "./productContext";
+import { getFinancialMissingInformation, getFinancialProjectionLimitations, getRegisteredFinancialData } from "../finance/profileDiagnostics";
 const normalized = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
 /** Pure allowlisted read-only operations. No Supabase client or write capability is available here. */
 export function executeFinancialTool(profile: OnboardingProfile, intent: FinancialIntent, context: ProductContext | null, financialDate?: string): ToolResult {
-  const product = intent.price !== null ? { name: intent.productName || context?.name || "Compra consultada", price: intent.price } : context;
+  const product = ["purchase", "compare", "wait", "savings"].includes(intent.operation) ? resolveIntentProduct(intent, context) : context;
   const result: ToolResult = { operation: intent.operation, product, facts: [], cards: [] };
   const fact = (id: string, text: string, required = true) => result.facts.push({ id, text, required });
   const card = (label: string, value: number | null, unit: "MXN" | "semanas" | "días" = "MXN") => { if (value !== null) result.cards.push({ label, value, unit }); };
   const safe = calculateSafeToSpend(profile);
+  let registeredShown = false;
+  function showRegisteredData() {
+    if (registeredShown) return;
+    registeredShown = true;
+    const registered = getRegisteredFinancialData(profile);
+    card("Saldo registrado", registered.currentBalance);
+    card("Reserva de seguridad registrada", registered.safetyBuffer);
+    card("Gasto esencial diario registrado", registered.dailyEssentialBudget);
+    registered.incomeSources.forEach((income, index) => card(`Importe registrado de ingreso ${index + 1}`, income.amount));
+    const known = [registered.currentBalance !== null ? `saldo de ${mxn(registered.currentBalance)}` : null,
+      registered.safetyBuffer !== null ? `reserva de ${mxn(registered.safetyBuffer)}` : null].filter(Boolean);
+    if (known.length) fact("registered.known", `Sí conocemos tu ${known.join(" y ")}. Estos datos permanecen registrados aunque falte información para calcular un margen o una proyección.`);
+  }
+  const missing = getFinancialMissingInformation(profile);
+  const projectionLimitations = getFinancialProjectionLimitations(profile);
   function reportFacts(report: PurchaseReport, prefix: string) {
     const p = report.purchase;
     card(`${prefix}: precio`, p.purchaseAmount);
     card(`${prefix}: margen restante`, p.remainingSafeToSpend);
     if (report.status === "saldo_insuficiente") fact(`${prefix}.balance`, `El precio de ${mxn(p.purchaseAmount)} supera el saldo registrado de ${mxn(profile.currentBalance!)}. No se simuló una compra realizada.`);
-    if (p.assessment === "no_evaluable") fact(`${prefix}.assessment`, "No hay información suficiente para evaluar esta compra. Confirma la fecha del próximo ingreso, saldo, gastos, pagos y ubicación de ahorros que falten en tu perfil.");
+    if (p.assessment === "no_evaluable") {
+      showRegisteredData();
+      fact(`${prefix}.assessment`, `No puedo calcular el margen de esta compra todavía. ${missing.length ? missing.join(" ") : "Revisa la consistencia de los datos financieros registrados."}`);
+    }
     else if (p.assessment === "excede_margen") {
       fact(`${prefix}.assessment`, `La compra de ${mxn(p.purchaseAmount)} excede tu margen calculado de ${mxn(p.safeToSpend!)} por ${mxn(p.exceedsBy!)}. Podría afectar gastos, compromisos o reservas protegidas; considera esperar o reducir el precio.`);
       card(`${prefix}: exceso sobre el margen`, p.exceedsBy);
     } else fact(`${prefix}.assessment`, `La compra de ${mxn(p.purchaseAmount)} está dentro del margen inmediato calculado. Quedarían ${mxn(p.remainingSafeToSpend!)} de dinero libre estimado.`);
     const risks = report.projectionAfter?.weeks.filter(w => w.belowProtectedFunds) ?? [];
     if (risks.length) fact(`${prefix}.risk`, `Esta simulación muestra riesgo de tocar fondos protegidos en las semanas ${risks.map(w => w.week).join(", ")}. El saldo mínimo proyectado sería ${mxn(report.projectionAfter!.lowestBalance!)}. Conviene explorar esperar o un precio menor.`);
-    if (report.status === "datos_incompletos" || report.projectionBefore.status === "datos_incompletos" || report.projectionAfter?.status === "datos_incompletos") fact(`${prefix}.incomplete`, "La proyección futura está incompleta: no puedo estimar de forma confiable las próximas seis semanas. El margen inmediato conocido no confirma la viabilidad futura. Revisa fechas, frecuencias, importes y ubicación de los ahorros; no supongo calendarios mensuales ni ingresos variables.");
+    if (report.status === "datos_incompletos" || report.projectionBefore.status === "datos_incompletos" || report.projectionAfter?.status === "datos_incompletos") fact(`${prefix}.incomplete`, `La proyección futura está incompleta: no puedo estimar de forma confiable las próximas seis semanas. ${p.safeToSpend !== null ? "El margen inmediato conocido no confirma la viabilidad futura." : "El margen inmediato sigue sin confirmar."} ${projectionLimitations.join(" ")}`);
     else if (report.projectionAfter && !risks.length) fact(`${prefix}.projection`, "La simulación de seis semanas no muestra fondos por debajo de las reservas registradas. No garantiza que los ingresos lleguen ni incluye gastos no registrados.");
     fact(`${prefix}.goals`, "Esta simulación paga con saldo corriente y no retira ahorros de tus metas. La proyección base no descuenta automáticamente sus aportaciones futuras.");
   }
   if (intent.operation === "clarify") {
     fact("clarify", "Puedo ayudarte a evaluar una compra, revisar tu margen, consultar una meta o comparar un plan. ¿Qué quieres revisar y qué precio tienes en mente?");
   } else if (["purchase", "compare", "wait", "savings"].includes(intent.operation) && !product) {
-    fact("missing.price", "Necesito el precio en MXN y el producto que quieres evaluar. No voy a suponer una cantidad.");
+    const name = identifiedProductName(intent.productName);
+    fact("missing.price", name ? `Puedo ayudarte a evaluar ${name}. ¿Cuánto cuesta en MXN?` : "Puedo ayudarte a evaluar la compra. ¿Qué producto es y cuánto cuesta en MXN?");
   } else if (intent.operation === "purchase" || intent.operation === "compare") {
     result.report = buildPurchaseReport(profile, product!.price);
     reportFacts(result.report, "ahora");
@@ -106,8 +127,9 @@ export function executeFinancialTool(profile: OnboardingProfile, intent: Financi
     if (!ranked.length) fact("priorities.empty", "No aparecen compromisos activos ni pagos de deuda registrados; esto no confirma que no existan gastos pendientes.");
     fact("priorities.unknown", "No tengo tasas, penalizaciones ni prioridades personales confirmadas. Si compiten dos metas, dime cuál quieres priorizar.");
   } else {
-    card("Dinero libre estimado", safe.safeToSpend); card("Reserva de seguridad", safe.safetyBuffer);
-    fact("available", safe.safeToSpend === null ? "No puedo calcular tu margen sin confirmar saldo, próximo ingreso, gastos, pagos y ubicación de ahorros. ¿Qué dato falta en tu perfil?" : `Tu margen antes del próximo ingreso es ${mxn(safe.safeToSpend)} según lo registrado, después de gastos esenciales, compromisos, deudas y fondos protegidos. No incluye gastos que no has registrado.`);
+    showRegisteredData();
+    card("Dinero libre estimado", safe.safeToSpend);
+    fact("available", safe.safeToSpend === null ? `No puedo calcular tu margen todavía. ${missing.length ? missing.join(" ") : "Revisa la consistencia de los datos registrados."}` : `Tu margen antes del próximo ingreso es ${mxn(safe.safeToSpend)} según lo registrado, después de gastos esenciales, compromisos, deudas y fondos protegidos. No incluye gastos que no has registrado.`);
     const reserved = withGoalContributions(profile);
     const afterContributions = reserved ? calculateSafeToSpend(reserved) : null;
     if (afterContributions?.safeToSpend !== null && afterContributions?.safeToSpend !== undefined) {
@@ -116,7 +138,7 @@ export function executeFinancialTool(profile: OnboardingProfile, intent: Financi
     } else fact("available.contributions", "Falta confirmar las aportaciones futuras a metas; el margen base no las descuenta automáticamente.");
     const projection = projectSixWeeks(profile);
     const risks = projection.weeks.filter(w => w.belowProtectedFunds);
-    if (projection.status === "datos_incompletos") fact("overview.incomplete", "La proyección de seis semanas está incompleta; no puedo convertir el margen actual en una garantía futura.");
+    if (projection.status === "datos_incompletos") fact("overview.incomplete", `La proyección de seis semanas está incompleta; no puedo convertir el margen actual en una garantía futura. ${projectionLimitations.join(" ")}`);
     else if (risks.length) fact("overview.risk", `La simulación muestra riesgo de tocar fondos protegidos en las semanas ${risks.map(w => w.week).join(", ")}.`);
   }
   fact("limits", "Son estimaciones con tus datos registrados, no una garantía de solvencia ni asesoría financiera profesional. Puedes esperar, comparar o actualizar tus datos; la decisión es tuya.");

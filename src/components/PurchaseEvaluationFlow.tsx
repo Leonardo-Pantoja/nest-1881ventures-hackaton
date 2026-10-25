@@ -1,7 +1,5 @@
 "use client";
 
-import { calculateSafeToSpend } from "@/lib/onboarding/financialEngine";
-import type { OnboardingProfile } from "@/lib/onboarding/financialTypes";
 import React, { useState, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import {
@@ -30,6 +28,7 @@ import {
 import PurchaseConfirmationModal from "./PurchaseConfirmationModal";
 import type { EvaluateApiResponse } from "@/lib/finance/evaluation";
 import FinancialChat from "./FinancialChat";
+import FinancialDataStatus from "./FinancialDataStatus";
 
 interface PurchaseEvaluationFlowProps {
   itemName: string;
@@ -60,7 +59,7 @@ export default function PurchaseEvaluationFlow({
   isStandalonePage = false,
   onUpdateEvaluatedItem,
 }: PurchaseEvaluationFlowProps) {
-  const { profile, addToWishlist, financialProfile } = useFinancial();
+  const { profile, addToWishlist } = useFinancial();
 
   const [selectedDecision, setSelectedDecision] = useState<
     "idle" | "wait" | "microsave" | "bought"
@@ -78,6 +77,7 @@ export default function PurchaseEvaluationFlow({
   // Core Deterministic Financial Engine (purchaseDecision, purchaseReport, goalImpact, weeklyProjection)
   const metrics = useMemo(() => {
     const evaluationIncomplete =
+      itemPrice <= 0 ||
       isLoadingApi ||
       apiEvaluationError ||
       !activeEvaluation ||
@@ -125,7 +125,7 @@ export default function PurchaseEvaluationFlow({
       projectionAfter,
       projectedBalanceDifference,
     };
-  }, [activeEvaluation, apiEvaluationError, isLoadingApi]);
+  }, [activeEvaluation, apiEvaluationError, isLoadingApi, itemPrice]);
 
   const handleDecisionBuyToday = () => {
     if (!metrics.evaluationIncomplete && !saving && itemPrice > 0) setConfirming(true);
@@ -163,225 +163,8 @@ export default function PurchaseEvaluationFlow({
     void saveAlternative("wait");
   };
   const handleDecisionMicroSave = () => {
-    void saveAlternative("microsave");
-  };
-
-  // Respuesta contextual local (basada en financialEngine) cuando Gemini/API no responde
-  const buildLocalChatReply = (
-    question: string,
-    name: string,
-    price: number,
-  ): string => {
-    let safe: number;
-    try {
-      safe = Number(
-        calculateSafeToSpend(
-          financialProfile ?? ({
-            id: profile.id,
-            name: profile.name,
-            lifeContext: [],
-            currentBalance: profile.currentBalance,
-            payFrequency: profile.payFrequency,
-            nextPaydayAmount: profile.nextPaydayAmount,
-            nextPaydayDays: profile.nextPaydayDays,
-            dailyEssentialBurn: profile.dailyEssentialBurn,
-            safetyBuffer: profile.safetyBuffer,
-            commitments: [],
-            debts: [],
-            primaryGoal: null,
-            isOnboarded: true,
-          } as unknown as OnboardingProfile),
-        ).safeToSpend ?? 0,
-      );
-    } catch {
-      safe = Math.max(0, profile.currentBalance - profile.safetyBuffer);
-    }
-    if (activeEvaluation?.safeToSpend != null) safe = activeEvaluation.safeToSpend;
-    const money = (n: number) => `$${Math.round(n).toLocaleString("es-MX")} MXN`;
-    const remaining = safe - price;
-    const days = profile.nextPaydayDays ?? 7;
-    const goal = profile.goal;
-    const q = question.toLowerCase();
-    const verdict =
-      remaining >= 0
-        ? `"${name}" (${money(price)}) cabe en tu margen seguro de ${money(safe)} y te dejaría ${money(remaining)} libres.`
-        : `"${name}" (${money(price)}) supera tu margen seguro de ${money(safe)} por ${money(Math.abs(remaining))}.`;
-    const protectedNote = `Tu ahorro de ${money(goal.currentSaved)} en "${goal.title}" no se toca.`;
-
-    const nums = (question.replace(/,/g, "").match(/\d+(?:\.\d+)?/g) ?? [])
-      .map(Number)
-      .filter((n) => n > 0 && n !== price);
-    if ((q.includes("mitad") || nums.length > 0) && q.includes("alternativ")) {
-      const alt = nums[0] ?? Math.round(price / 2);
-      const altRemaining = safe - alt;
-      return altRemaining >= 0
-        ? `Con una alternativa de ${money(alt)} te quedarían ${money(altRemaining)} libres y ahorrarías ${money(Math.max(0, price - alt))}. ${protectedNote}`
-        : `Incluso con ${money(alt)} superarías tu margen (${money(safe)}) por ${money(Math.abs(altRemaining))}. Te conviene esperar o hacer un plan de micro-ahorro.`;
-    }
-    if (q.includes("esper") || q.includes("quincena") || q.includes("nómina") || q.includes("nomina")) {
-      return `Si esperas ${days} días hasta tu próximo ingreso (${money(profile.nextPaydayAmount ?? 0)}), no descuentas nada hoy y proteges tu colchón de ${money(profile.safetyBuffer)}. ${verdict}`;
-    }
-    if (q.includes("semana") || q.includes("proyecc") || q.includes("saldo")) {
-      const low = activeEvaluation?.projection?.lowestBalance;
-      return `${verdict} ${
-        low != null
-          ? `En la proyección a 6 semanas tu punto más bajo sería ${money(low)}.`
-          : `Tu saldo actual es ${money(profile.currentBalance)}.`
-      }`;
-    }
-    if (q.includes("micro") || q.includes("ahorro") || q.includes("meta")) {
-      const weekly = Math.max(100, Math.ceil(price / 4));
-      return `Con un plan de micro-ahorro podrías apartar ~${money(weekly)} por semana durante 4 semanas sin tocar tu liquidez. ${protectedNote}`;
-    }
-    return `${verdict} ${protectedNote} Puedes comprar hoy, guardarla para reevaluar en ${days} días (+50 XP) o crear un plan de micro-ahorro (+100 XP).`;
-  };
-
-  // Conversational Chat Handler -> calls /api/evaluate with text or image + follow-up question
-  const handleSendChatMessage = async (customPrompt?: string) => {
-    const questionText = (customPrompt ?? chatInput).trim();
-    if ((!questionText && !chatImageBase64) || isSendingChat) return;
-
-    playTap();
-    const userDisplayMessage =
-      questionText || "📸 Evaluar captura de producto subida";
-    const nextHistory: ChatTurnMessage[] = [
-      ...chatMessages,
-      { role: "user", content: userDisplayMessage },
-    ];
-    setChatMessages(nextHistory);
-    if (!customPrompt) setChatInput("");
-    setIsSendingChat(true);
-
-    // Check if the user typed a new product + price in the chat (e.g., "Tenis $1800")
-    let targetName = itemName;
-    let targetPrice = itemPrice;
-    const priceMatch = questionText.replace(/,/g, "").match(/\$\s*(\d+(?:\.\d+)?)/);
-    if (priceMatch && questionText.length < 45 && !questionText.includes("?")) {
-      const detectedPrice = Math.round(Number(priceMatch[1]));
-      const cleaned = questionText
-        .replace(/\$\s*\d[\d,.]*/g, "")
-        .replace(/\bevalua\b|\bevalúa\b|\bcomprar\b|\bpor\b|\bde\b|\bmxn\b/gi, "")
-        .trim();
-      if (detectedPrice > 0 && cleaned.length >= 2) {
-        targetName = cleaned;
-        targetPrice = detectedPrice;
-        onUpdateEvaluatedItem?.(targetName, targetPrice);
-      }
-    }
-
-    const fallbackReply = () =>
-      buildLocalChatReply(
-        questionText,
-        targetName || "este producto",
-        targetPrice > 0 ? targetPrice : itemPrice,
-      );
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-    try {
-      const res = await fetch("/api/evaluate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({
-          itemName: targetName || "Producto consultado",
-          itemPrice: targetPrice > 0 ? targetPrice : 500,
-          mode: mode === "demo" ? "demo" : "account",
-          demoProfileId:
-            mode === "demo"
-              ? profile.id === "mateo"
-                ? "mateo"
-                : "carlos"
-              : undefined,
-          imageBase64: chatImageBase64,
-          imageMimeType: chatImageMime,
-          chatMessages: nextHistory.slice(-8),
-          userQuestion: userDisplayMessage,
-          financialContext: {
-            currentBalance: profile.currentBalance,
-            safeToSpend: activeEvaluation?.safeToSpend ?? null,
-            itemName: targetName,
-            itemPrice: targetPrice,
-            safetyBuffer: profile.safetyBuffer,
-            nextPaydayDays: profile.nextPaydayDays,
-            commitments: profile.commitments.slice(0, 15).map((c) => ({
-              title: c.title,
-              amount: c.amount,
-              dueInDays: c.dueInDays,
-            })),
-            goals: [
-              {
-                title: profile.goal.title,
-                targetAmount: profile.goal.targetAmount,
-                currentSaved: profile.goal.currentSaved,
-              },
-            ],
-          },
-        }),
-      });
-
-      let data: (EvaluateApiResponse & { error?: string }) | null = null;
-      try {
-        data = (await res.json()) as EvaluateApiResponse & { error?: string };
-      } catch {
-        data = null;
-      }
-
-      let replyText = "";
-      if (res.ok && data && typeof data === "object") {
-        if (
-          typeof data.detectedItemName === "string" &&
-          typeof data.detectedItemPrice === "number" &&
-          data.detectedItemPrice > 0 &&
-          (data.detectedItemName !== itemName ||
-            data.detectedItemPrice !== itemPrice)
-        ) {
-          onUpdateEvaluatedItem?.(
-            data.detectedItemName,
-            data.detectedItemPrice,
-            chatImageBase64 || thumbnailDataUrl,
-            storeTag || "Escaneado con Gemini",
-          );
-        }
-        if (typeof data.status === "string" && data.safeToSpend !== undefined) {
-          setLatestEvaluationOverride({ key: overrideKey, data });
-        }
-        replyText = (
-          (typeof data.chatReply === "string" && data.chatReply) ||
-          (typeof data.aiExplanation === "string" && data.aiExplanation) ||
-          ""
-        ).trim();
-      }
-
-      setChatMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: replyText || fallbackReply() },
-      ]);
-    } catch {
-      // Timeout, red caída o formato inesperado: respuesta local con cálculos reales
-      setChatMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: fallbackReply() },
-      ]);
-    } finally {
-      clearTimeout(timeoutId);
-      setIsSendingChat(false);
-      setChatImageBase64(null);
-      setChatImageMime(null);
-    }
-  };
-
-  const handleChatImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setChatImageBase64(reader.result);
-        setChatImageMime(file.type || "image/png");
-      }
-    };
-    reader.readAsDataURL(file);
+    if (itemPrice <= 0) return;
+    setChatSuggestion({ text: `¿Cuánto tendría que ahorrar para comprar ${itemName} de $${itemPrice} MXN?`, id: Date.now() });
   };
 
   const plantSimulationState: PlantSimulationState =
@@ -485,6 +268,8 @@ export default function PurchaseEvaluationFlow({
             financialEvaluation={activeEvaluation}
           />
 
+          <FinancialDataStatus evaluation={activeEvaluation} loading={isLoadingApi} error={apiErrorMessage} />
+
           {/* 2. Reporte Integrado del Motor (purchaseReport, goalImpact & weeklyProjection) */}
           {!metrics.evaluationIncomplete && (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -560,171 +345,13 @@ export default function PurchaseEvaluationFlow({
         </CardContent>
       </Card>
 
-      {/* Bloque 2: Chat con Gemini (independiente, ancho completo) */}
-          <div className="w-full rounded-3xl border-2 border-b-4 border-slate-200 bg-[#FAF8F5] p-4 sm:p-5 space-y-3.5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-2xs">
-                  <MessageSquare className="w-4 h-4" strokeWidth={1.5} />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold font-heading text-slate-900">
-                    Chat con tu Copiloto Financiero
-                  </h3>
-                  <p className="text-[11px] text-slate-500">
-                    Evalúa por texto o imagen y compara escenarios antes de decidir
-                  </p>
-                </div>
-              </div>
-              <span className="text-[10px] font-bold font-heading uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-200">
-                Ahorro fijo protegido
-              </span>
-            </div>
-
-            {/* Messages Thread */}
-            <div className="max-h-60 overflow-y-auto space-y-2.5 pr-1">
-              {initialCopilotDiagnosis && (
-                <div className="flex items-start gap-2.5">
-                  <div className="w-7 h-7 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-800 flex items-center justify-center shrink-0 mt-0.5">
-                    <Bot className="w-4 h-4" strokeWidth={1.5} />
-                  </div>
-                  <div className="rounded-2xl rounded-tl-xs bg-white border border-slate-200 px-3.5 py-2.5 text-xs sm:text-sm text-slate-800 shadow-2xs leading-relaxed">
-                    <p className="font-semibold text-emerald-800 text-[11px] mb-0.5">
-                      Diagnóstico de tu Copiloto
-                    </p>
-                    <p>{initialCopilotDiagnosis}</p>
-                  </div>
-                </div>
-              )}
-
-              {chatMessages.map((msg, index) => (
-                <div
-                  key={index}
-                  className={`flex items-start gap-2.5 ${
-                    msg.role === "user" ? "justify-end" : "justify-start"
-                  }`}
-                >
-                  {msg.role === "assistant" && (
-                    <div className="w-7 h-7 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-800 flex items-center justify-center shrink-0 mt-0.5">
-                      <Bot className="w-4 h-4" strokeWidth={1.5} />
-                    </div>
-                  )}
-                  <div
-                    className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm leading-relaxed shadow-2xs ${
-                      msg.role === "user"
-                        ? "rounded-tr-xs bg-slate-900 text-white"
-                        : "rounded-tl-xs bg-white border border-slate-200 text-slate-800"
-                    }`}
-                  >
-                    {msg.content}
-                  </div>
-                  {msg.role === "user" && (
-                    <div className="w-7 h-7 rounded-xl bg-slate-200 text-slate-700 flex items-center justify-center shrink-0 mt-0.5">
-                      <User className="w-4 h-4" strokeWidth={1.5} />
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              {isSendingChat && (
-                <div
-                  className="flex items-center gap-2 text-xs text-slate-600 px-3 py-2 rounded-2xl rounded-tl-xs bg-white border border-slate-200 w-fit max-w-full"
-                  role="status"
-                  aria-live="polite"
-                >
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600 shrink-0" />
-                  <span>Tu copiloto está pensando</span>
-                  <span className="flex gap-0.5" aria-hidden="true">
-                    <span className="w-1 h-1 rounded-full bg-emerald-500 animate-bounce [animation-delay:-0.3s]" />
-                    <span className="w-1 h-1 rounded-full bg-emerald-500 animate-bounce [animation-delay:-0.15s]" />
-                    <span className="w-1 h-1 rounded-full bg-emerald-500 animate-bounce" />
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Quick Follow-Up Scenario Chips */}
-            <div className="flex flex-wrap gap-1.5">
-              {FOLLOW_UP_SUGGESTIONS.map((suggestion) => (
-                <button
-                  key={suggestion}
-                  type="button"
-                  disabled={isSendingChat}
-                  onClick={() => void handleSendChatMessage(suggestion)}
-                  className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border border-slate-200 hover:border-emerald-300 transition-colors cursor-pointer disabled:opacity-50"
-                >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
-
-            {/* Attached Image Preview in Chat */}
-            {chatImageBase64 && (
-              <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900">
-                <div className="flex items-center gap-2">
-                  <img
-                    src={chatImageBase64}
-                    alt="Adjunto"
-                    className="w-8 h-8 rounded-lg object-cover border border-emerald-300"
-                  />
-                  <span className="font-semibold">
-                    Imagen lista para evaluar con Gemini Vision
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setChatImageBase64(null);
-                    setChatImageMime(null);
-                  }}
-                  className="p-1 text-slate-500 hover:text-slate-800 cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
-
-            {/* Chat Input Form */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                void handleSendChatMessage();
-              }}
-              className="flex items-center gap-2"
-            >
-              <input
-                ref={chatImageInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleChatImageSelect}
-                className="hidden"
-              />
-              <button
-                type="button"
-                onClick={() => chatImageInputRef.current?.click()}
-                className="h-10 px-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 flex items-center gap-1.5 text-xs font-semibold shrink-0 cursor-pointer"
-                title="Subir imagen o captura para evaluar"
-              >
-                <Camera className="w-4 h-4 text-emerald-600" strokeWidth={1.5} />
-                <span className="hidden sm:inline">Imagen</span>
-              </button>
-              <input
-                type="text"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Pregunta sobre alternativas, plazos o escribe otro precio..."
-                className="flex-1 h-10 px-3.5 rounded-xl border border-slate-200 bg-white text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#10B981] focus:outline-none"
-              />
-              <button
-                type="submit"
-                disabled={isSendingChat || (!chatInput.trim() && !chatImageBase64)}
-                className="h-10 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white text-xs font-bold font-heading flex items-center gap-1.5 shrink-0 cursor-pointer transition-colors"
-              >
-                <span>Enviar</span>
-                <Send className="w-3.5 h-3.5" strokeWidth={1.5} />
-              </button>
-            </form>
-          </div>
+      {/* Shared conversation preserves the current full-width layout. */}
+      <div className="w-full rounded-3xl border-2 border-b-4 border-slate-200 bg-[#FAF8F5] p-4 sm:p-5 space-y-3.5">
+        <h3 className="text-sm font-bold font-heading text-slate-900">Chat con tu Copiloto Financiero</h3>
+        <FinancialChat product={itemPrice > 0 ? { name: itemName, price: itemPrice } : null} suggestion={chatSuggestion}
+          onClearProduct={name => onUpdateEvaluatedItem?.(name ?? "", 0, null, null)}
+          onProduct={(product, image) => { setSelectedDecision("idle"); onUpdateEvaluatedItem?.(product.name, product.price, image?.thumbnailDataUrl, image?.storeTag); }} />
+      </div>
 
       {/* Bloque 3: Las 3 tarjetas de decisión, fuera de cualquier contenedor estrecho */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full">

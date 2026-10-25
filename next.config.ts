@@ -5,8 +5,8 @@ const nextConfig: NextConfig = {
   devIndicators: false,
   cacheComponents: true,
   partialPrefetching: true,
-  // Opt-in for restricted build hosts where loader child processes cannot bind sockets.
-  ...(process.env.ADG_TURBOPACK_WORKERS === "1"
+  // Use documented loader workers so builds also work on hosts that block child-process sockets.
+  ...(process.env.ADG_TURBOPACK_WORKERS !== "0"
     ? { experimental: { turbopackPluginRuntimeStrategy: "workerThreads" as const } }
     : {}),
   turbopack: {

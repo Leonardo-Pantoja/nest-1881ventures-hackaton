@@ -1,5 +1,7 @@
 # Copiloto financiero conversacional — entrega
 
+> Registro de la integración inicial. Las correcciones posteriores del merge, el mapeo, los datos conocidos y el build normal están documentadas en [financial-data-regression.md](financial-data-regression.md).
+
 Implementado en el repositorio existente. La sección «¿Qué estás pensando comprar?» del dashboard incorpora la conversación y conserva el simulador, la planta, la evaluación completa, Wishlist y metas. El chat es de solo lectura.
 
 ## A. Archivos creados y modificados

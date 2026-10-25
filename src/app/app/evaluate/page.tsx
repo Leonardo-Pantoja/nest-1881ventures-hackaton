@@ -13,6 +13,7 @@ import { type BottomNavTab } from "@/components/BottomNav";
 import { useFinancial } from "@/context/FinancialContext";
 import { playTap } from "@/lib/soundEffects";
 import { useFinancialEvaluation } from "@/hooks/useFinancialEvaluation";
+import { resolveEvaluationSelection } from "@/lib/finance/evaluationSelection";
 
 function EvaluateContent() {
   const router = useRouter();
@@ -33,14 +34,10 @@ function EvaluateContent() {
 
   const [confirmedScan, setConfirmedScan] = useState<ScannedProductResult | null>(null);
 
-  const itemName =
-    confirmedScan?.name ||
-    searchParams.get("name") ||
-    pendingEvaluation.name ||
-    "Audífonos Inalámbricos Sony";
-  const itemPrice =
-    confirmedScan?.price || Number(searchParams.get("price")) || pendingEvaluation.price || 0;
-  const evaluation = useFinancialEvaluation(itemName, itemPrice);
+  const selected = resolveEvaluationSelection(confirmedScan, searchParams.get("name"), searchParams.get("price"), pendingEvaluation);
+  const itemName = selected.name;
+  const itemPrice = selected.price ?? 0;
+  const evaluation = useFinancialEvaluation(itemName, selected.price);
   const apiEvaluation = evaluation.response;
   const apiEvaluationError = evaluation.error !== null;
   const apiErrorMessage = evaluation.error;

@@ -116,6 +116,14 @@ export interface Debt {
 // 5. PERFIL FINANCIERO DEL USUARIO
 // ==========================================
 
+export interface RegisteredIncomeSource {
+  amount: number | null;
+  frequency: PayFrequency;
+  nextPaymentDate: string | null;
+  nextPaymentDays: number | null;
+  dateStatus: "known" | "missing" | "overdue" | "invalid";
+}
+
 export interface OnboardingProfile {
   id: string;
   name?: string;
@@ -130,6 +138,11 @@ export interface OnboardingProfile {
   // null = todavía no conocemos el dato
   nextPaydayAmount: number | null;
   nextPaydayDays: number | null;
+
+  // Read-only source details preserve known income data without flattening incompatible calendars.
+  incomeSources?: RegisteredIncomeSource[];
+  // Non-sensitive mapping warning codes; no names, account IDs or credentials.
+  dataWarnings?: string[];
 
   // Pantalla 3: Gastos y deudas
   dailyEssentialBurn: number | null;

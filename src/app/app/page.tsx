@@ -38,6 +38,7 @@ import FinancialPlantWidget, {
   type PlantLevel,
 } from "@/components/FinancialPlantWidget";
 import FinancialChat from "@/components/FinancialChat";
+import FinancialDataStatus from "@/components/FinancialDataStatus";
 import { type BottomNavTab } from "@/components/BottomNav";
 import {
   useFinancial,
@@ -800,7 +801,7 @@ function DashboardContent() {
     const evaluationPending =
       parsedItemPrice > 0 && currentEvaluation === null;
 
-    const expenses = evaluationReady ? evaluation.consideredExpenses : null;
+    const expenses = evaluation?.consideredExpenses ?? null;
     const totalBalance = expenses?.currentBalance ?? null;
     const fixedAndRentTotal =
       expenses?.essentialExpenses !== null &&
@@ -900,9 +901,7 @@ function DashboardContent() {
 
     return {
       safeToSpend,
-      nextPaydayDays: evaluationReady
-        ? evaluation.daysUntilNextIncome
-        : null,
+      nextPaydayDays: evaluation?.daysUntilNextIncome ?? null,
       evaluation,
       evaluationReady,
       evaluationIncomplete,
@@ -1234,6 +1233,11 @@ function DashboardContent() {
                 selectionRevision={scannerRevision}
                 suggestion={chatSuggestion}
                 product={parsedItemPrice > 0 ? { name: parsedItemName, price: parsedItemPrice } : null}
+                onClearProduct={name => {
+                  setParsedItemName(name ?? ""); setParsedItemPrice(0);
+                  setScannedThumbnailUrl(null); setScannedStoreTag(null); setSelectedDecision("idle");
+                  setPendingEvaluation({ name: name ?? "", price: 0, imageName: null });
+                }}
                 onProduct={(product, image) => {
                   setSelectedDecision("idle");
                   setParsedItemName(product.name);
@@ -1243,6 +1247,9 @@ function DashboardContent() {
                 }}
               />
             </div>
+
+            <FinancialDataStatus evaluation={evaluation.response} loading={evaluation.loading}
+              error={evaluation.error ?? profileError} onRetry={() => void refreshProfile()} />
 
             {/* Real-Life Cost Psychology Pills (Píldoras de Costo de Vida Real) */}
             <AnimatePresence>

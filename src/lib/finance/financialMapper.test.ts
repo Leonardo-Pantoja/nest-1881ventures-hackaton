@@ -147,11 +147,13 @@ const multipleIncomeProfile = mapSupabaseRecord(
   now,
 );
 if (!multipleIncomeProfile) throw new Error("Expected multiple-income mapping");
-verify("Multiple incomes are not collapsed into one paycheck", multipleIncomeProfile.nextPaydayDays, null);
+verify("Multiple incomes use the next confirmed date", multipleIncomeProfile.nextPaydayDays, 1);
+verify("Only amounts due on that date are included", multipleIncomeProfile.nextPaydayAmount, 1000);
+verify("Different income schedules do not become one repeated paycheck", multipleIncomeProfile.payFrequency, "variable");
 verify(
-  "Multiple incomes remain unevaluable",
+  "Multiple dated incomes preserve an immediate conservative margin",
   calculateSafeToSpend(multipleIncomeProfile).safeToSpend,
-  null,
+  4000,
 );
 
 const unknownSavings = mapSupabaseRecord(
