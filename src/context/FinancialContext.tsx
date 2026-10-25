@@ -293,7 +293,7 @@ interface FinancialContextType {
   setProfile: React.Dispatch<React.SetStateAction<FinancialProfile>>;
   updateProfile: (partial: Partial<FinancialProfile>) => void;
   loadPreloadedSandboxProfile: (presetKey?: "carlos" | "mateo") => void;
-  startFreshOnboarding: (email?: string, demo?: boolean) => void;
+  startFreshOnboarding: (email?: string, demo?: boolean, displayName?: string) => void;
   completeOnboarding: (data: OnboardingData, userId?: string) => void;
   pendingEvaluation: PendingPurchaseEvaluation;
   setPendingEvaluation: (item: PendingPurchaseEvaluation) => void;
@@ -436,7 +436,12 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
       setProfile({
         ...cleanProfile(),
         id: user.id,
-        name: p?.display_name || user.email?.split("@")[0] || "Tu Perfil",
+        name:
+          p?.display_name ||
+          user.user_metadata?.display_name ||
+          user.user_metadata?.full_name ||
+          user.email?.split("@")[0] ||
+          "Tu Perfil",
         email: user.email ?? "",
         roleTag: buildRoleTagFromContext(tags),
         lifeContext: tags,
@@ -569,9 +574,10 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
     setProfileError(null);
   };
 
-  const startFreshOnboarding = (email?: string, demo = false) => {
+  const startFreshOnboarding = (email?: string, demo = false, displayName?: string) => {
     ++requestVersion.current;
-    const fresh = { ...cleanProfile(), email: email || "" };
+    const cleanDisplayName = displayName?.trim() || email?.split("@")[0] || "Tu Perfil";
+    const fresh = { ...cleanProfile(), name: cleanDisplayName, email: email || "" };
     if (demo) {
       sessionStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(fresh));
       setMode("demo");
@@ -587,7 +593,10 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
     const completed: FinancialProfile = {
       ...cleanProfile(),
       id: userId ?? "demo-custom-user",
-      name: profile.email?.split("@")[0] || "Tu Perfil",
+      name:
+        (profile.name && profile.name !== "Tu Perfil" ? profile.name : "") ||
+        profile.email?.split("@")[0] ||
+        "Tu Perfil",
       email: profile.email,
       roleTag: buildRoleTagFromContext(data.lifeContext),
       lifeContext: data.lifeContext,

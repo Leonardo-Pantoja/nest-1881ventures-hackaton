@@ -73,6 +73,7 @@ export async function saveOnboardingToSupabase(
   );
 
   const displayName =
+    user.user_metadata?.display_name ||
     user.user_metadata?.full_name ||
     user.email?.split("@")[0] ||
     "Tu Perfil";

@@ -1,5 +1,9 @@
 import { buildPurchaseReport, calculateSafeToSpend, evaluatePurchase, projectSixWeeks } from "../onboarding";
 import type { OnboardingProfile } from "../onboarding/financialTypes";
+import type { PurchaseReport } from "../onboarding/purchaseReport";
+import type { PurchaseDecision } from "../onboarding/purchaseDecision";
+import type { GoalImpactResult } from "../onboarding/goalImpact";
+import type { SixWeekProjection } from "../onboarding/weeklyProjection";
 
 export type EvaluationStatus =
   | "dentro_del_margen"
@@ -43,8 +47,14 @@ export interface EvaluateApiResponse {
   };
   missingInformation: string[];
   projectionStatus: "calculado" | "datos_incompletos";
-  projection: ReturnType<typeof buildPurchaseReport>["projectionBefore"] | null;
-  goalImpact: null;
+  projection: SixWeekProjection | null;
+  projectionAfter: SixWeekProjection | null;
+  projectedBalanceDifference: number | null;
+  goalImpact: GoalImpactResult | null;
+  purchaseDecision?: PurchaseDecision;
+  purchaseReport?: PurchaseReport | null;
+  aiExplanation?: string | null;
+  chatReply?: string | null;
   source: "deterministic";
   financialRevision?: string;
 }
@@ -55,8 +65,25 @@ export function buildDeterministicEvaluation(
   profile: OnboardingProfile,
 ): EvaluateApiResponse {
   const safe = calculateSafeToSpend(profile);
-  const purchase = itemPrice === null ? { status: safe.status === "calculado" ? "evaluada" : "datos_incompletos", assessment: "dentro_del_margen", remainingSafeToSpend: safe.safeToSpend, exceedsBy: 0, explanation: "Resumen del margen disponible calculado." } : evaluatePurchase(profile, itemPrice);
-  const projectionBefore = itemPrice === null ? projectSixWeeks(profile) : buildPurchaseReport(profile, itemPrice).projectionBefore;
+  const report = itemPrice === null ? null : buildPurchaseReport(profile, itemPrice);
+  const purchase: PurchaseDecision =
+    itemPrice === null
+      ? {
+          status: safe.status === "calculado" ? "evaluada" : "datos_incompletos",
+          assessment: "dentro_del_margen",
+          purchaseAmount: 0,
+          safeToSpend: safe.safeToSpend,
+          remainingSafeToSpend: safe.safeToSpend,
+          exceedsBy: 0,
+          explanation: "Resumen del margen disponible calculado.",
+        }
+      : report
+        ? report.purchase
+        : evaluatePurchase(profile, itemPrice);
+  const projectionBefore = report ? report.projectionBefore : projectSixWeeks(profile);
+  const projectionAfter = report?.projectionAfter ?? null;
+  const projectedBalanceDifference = report?.projectedBalanceDifference ?? null;
+  const goalImpact = report?.goalImpact ?? null;
   const isComplete =
     profile.isOnboarded &&
     safe.status === "calculado" &&
@@ -192,7 +219,14 @@ export function buildDeterministicEvaluation(
       projectionBefore.status === "calculado"
         ? projectionBefore
         : null,
-    goalImpact: null,
+    projectionAfter:
+      projectionAfter?.status === "calculado"
+        ? projectionAfter
+        : null,
+    projectedBalanceDifference,
+    goalImpact,
+    purchaseDecision: purchase,
+    purchaseReport: report,
     source: "deterministic",
   };
 }

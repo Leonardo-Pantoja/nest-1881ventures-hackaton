@@ -27,6 +27,8 @@ import {
   VolumeX,
   Snowflake,
   ExternalLink,
+  MessageSquare,
+  TrendingUp,
 } from "lucide-react";
 import { useFinancialEvaluation } from "@/hooks/useFinancialEvaluation";
 import PurchaseConfirmationModal from "@/components/PurchaseConfirmationModal";
@@ -847,6 +849,19 @@ export default function AppDashboardPage() {
           )
         : 0;
 
+    const purchaseDecision = evaluation?.purchaseDecision ?? null;
+    const purchaseReport = evaluation?.purchaseReport ?? null;
+    const goalImpact =
+      evaluation?.goalImpact ?? purchaseReport?.goalImpact ?? null;
+    const projectionBefore =
+      evaluation?.projection ?? purchaseReport?.projectionBefore ?? null;
+    const projectionAfter =
+      evaluation?.projectionAfter ?? purchaseReport?.projectionAfter ?? null;
+    const projectedBalanceDifference =
+      evaluation?.projectedBalanceDifference ??
+      purchaseReport?.projectedBalanceDifference ??
+      null;
+
     // Total Protected Money in Impulse Freezer ("Compras en Enfriamiento 🧊")
     const totalProtectedMoney = (profile.wishlist || []).reduce(
       (sum, item) => sum + item.price,
@@ -907,6 +922,12 @@ export default function AppDashboardPage() {
       totalProtectedMoney,
       currentLevel,
       currentLevelName: levelNames[currentLevel],
+      purchaseDecision,
+      purchaseReport,
+      goalImpact,
+      projectionBefore,
+      projectionAfter,
+      projectedBalanceDifference,
     };
   }, [currentEvaluation, parsedItemPrice, profile]);
 
@@ -1342,9 +1363,61 @@ export default function AppDashboardPage() {
                       strokeWidth={1.5}
                     />
                     <span>
-                      🎯 Esta evaluación no retira dinero de tu meta
+                      {financialMetrics.goalImpact
+                        ? `🎯 Ahorro fijo protegido: $${financialMetrics.goalImpact.savedAfter.toLocaleString()} / $${(
+                            financialMetrics.goalImpact.savedAfter +
+                            financialMetrics.goalImpact.remainingAfter
+                          ).toLocaleString()} MXN`
+                        : "🎯 Esta evaluación no retira dinero de tu meta"}
                     </span>
                   </span>
+
+                  {financialMetrics.projectedBalanceDifference !== null && (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold font-heading bg-indigo-50 text-indigo-900 border border-indigo-200">
+                      <TrendingUp
+                        className="w-3.5 h-3.5 text-indigo-600 shrink-0"
+                        strokeWidth={1.5}
+                      />
+                      <span>
+                        6 semanas:{" "}
+                        {financialMetrics.projectedBalanceDifference >= 0
+                          ? "+"
+                          : ""}
+                        ${financialMetrics.projectedBalanceDifference.toLocaleString()}{" "}
+                        MXN (mín. $
+                        {(
+                          financialMetrics.projectionAfter?.lowestBalance ??
+                          financialMetrics.projectionBefore?.lowestBalance ??
+                          0
+                        ).toLocaleString()}
+                        )
+                      </span>
+                    </span>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playTap();
+                      setPendingEvaluation({
+                        name: parsedItemName || "Producto consultado",
+                        price: parsedItemPrice,
+                        imageName: scannedStoreTag,
+                      });
+                      router.push(
+                        `/app/evaluate?name=${encodeURIComponent(
+                          parsedItemName || "Producto consultado",
+                        )}&price=${parsedItemPrice}`,
+                      );
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold font-heading bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 transition-colors cursor-pointer"
+                  >
+                    <MessageSquare
+                      className="w-3.5 h-3.5 text-emerald-600 shrink-0"
+                      strokeWidth={1.5}
+                    />
+                    <span>Abrir Chat con Copiloto Gemini →</span>
+                  </button>
                 </motion.div>
               )}
             </AnimatePresence>
