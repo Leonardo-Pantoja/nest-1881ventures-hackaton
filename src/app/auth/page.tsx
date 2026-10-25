@@ -8,6 +8,7 @@ import {
   Compass,
   Mail,
   Lock,
+  User,
   ArrowRight,
   ArrowLeft,
   Sparkles,
@@ -50,6 +51,7 @@ export default function AuthPage() {
     useFinancial();
 
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -60,8 +62,10 @@ export default function AuthPage() {
     e.preventDefault();
 
     const cleanEmail = email.trim().toLowerCase();
+    const cleanName = displayName.trim();
 
     if (!cleanEmail || !password.trim()) return;
+    if (authMode === "signup" && !cleanName) return;
 
     setIsSubmitting(true);
     setStatusMessage(null);
@@ -72,13 +76,31 @@ export default function AuthPage() {
 
     try {
       if (authMode === "signup") {
-        // Create a new Supabase Auth user
+        // Create a new Supabase Auth user with display_name in metadata
         const { data, error } = await supabase.auth.signUp({
           email: cleanEmail,
           password,
+          options: {
+            data: {
+              display_name: cleanName,
+              full_name: cleanName,
+            },
+          },
         });
 
         if (error) throw error;
+
+        if (data.user && data.session) {
+          await supabase
+            .from("profiles")
+            .upsert(
+              {
+                id: data.user.id,
+                display_name: cleanName,
+              },
+              { onConflict: "id" },
+            );
+        }
 
         // Email confirmation may be required
         if (!data.session) {
@@ -88,7 +110,7 @@ export default function AuthPage() {
           return;
         }
 
-        startFreshOnboarding(cleanEmail);
+        startFreshOnboarding(cleanEmail, false, cleanName);
         router.replace("/onboarding");
         return;
       }
@@ -113,17 +135,23 @@ export default function AuthPage() {
       // Check whether onboarding is completed
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("onboarding_completed_at")
+        .select("onboarding_completed_at, display_name")
         .eq("id", user.id)
         .maybeSingle();
 
       if (profileError) throw profileError;
 
+      const userDisplayName =
+        profile?.display_name ||
+        user.user_metadata?.display_name ||
+        user.user_metadata?.full_name ||
+        undefined;
+
       if (profile?.onboarding_completed_at) {
         await refreshProfile();
         router.replace("/app");
       } else {
-        startFreshOnboarding(cleanEmail);
+        startFreshOnboarding(cleanEmail, false, userDisplayName);
         router.replace("/onboarding");
       }
 
@@ -140,8 +168,12 @@ export default function AuthPage() {
   };
 
   const handleStartFromScratch = () => {
-    startFreshOnboarding(email.trim() || undefined, true);
-    router.push("/onboarding?demo=1");
+    setAuthMode("signup");
+    const emailInput = document.getElementById("email");
+    emailInput?.focus();
+    setStatusMessage(
+      "Crea tu cuenta o inicia sesión con tu correo abajo para configurar tu perfil desde cero.",
+    );
   };
 
   const handleLoadPreloadedProfile = () => {
@@ -240,6 +272,33 @@ export default function AuthPage() {
                 </div>
 
                 <form onSubmit={handleEmailAuth} className="space-y-4">
+                  {authMode === "signup" && (
+                    <div>
+                      <label
+                        htmlFor="displayName"
+                        className="block text-xs font-medium text-slate-700 mb-1.5"
+                      >
+                        Nombre o Apodo
+                      </label>
+                      <div className="relative group">
+                        <User
+                          className="w-4 h-4 text-slate-400 group-focus-within:text-slate-800 transition-colors absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                          strokeWidth={1.5}
+                        />
+                        <input
+                          id="displayName"
+                          type="text"
+                          required
+                          autoComplete="nickname"
+                          value={displayName}
+                          onChange={(e) => setDisplayName(e.target.value)}
+                          placeholder="Ej. Carlos o Carlitos"
+                          className="w-full h-10 pl-10 pr-3.5 rounded-xl border border-[#E6E1DA] bg-[#FAF8F5]/60 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-slate-900 focus:outline-none transition-all"
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   <div>
                     <label
                       htmlFor="email"
@@ -473,7 +532,7 @@ export default function AuthPage() {
 
       {/* Footer Note */}
       <footer className="py-5 text-center text-xs text-slate-400">
-        Protegido con sesiones cifradas · Preparado para Supabase Auth &amp;
+        Protegido con sesiones cifradas · Tus datos están seguros &amp;
         Plaid Sandbox
       </footer>
     </div>

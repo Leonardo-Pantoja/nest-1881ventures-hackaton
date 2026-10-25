@@ -7,10 +7,11 @@ import {
   Sparkles,
   Trophy,
   UserCheck,
+  Receipt,
 } from "lucide-react";
 import { playTap } from "@/lib/soundEffects";
 
-export type BottomNavTab = "home" | "simulate" | "goals" | "profile";
+export type BottomNavTab = "home" | "simulate" | "expenses" | "goals" | "profile";
 
 interface BottomNavProps {
   activeTab: BottomNavTab;
@@ -32,7 +33,7 @@ export default function BottomNav({
         aria-label="Navegación principal móvil"
         className="max-w-md mx-auto bg-white/95 backdrop-blur-xl border-2 border-[#E6E1DA] rounded-3xl shadow-[0_8px_30px_rgba(15,23,42,0.12)] px-2 py-1.5 pointer-events-auto"
       >
-        <div className="grid grid-cols-4 items-center gap-1">
+        <div className="grid grid-cols-5 items-center gap-0.5">
           {/* 1. Tu Planta / Inicio */}
           <motion.button
             type="button"
@@ -51,12 +52,35 @@ export default function BottomNav({
             >
               <Sprout className="w-5 h-5" strokeWidth={1.5} />
             </div>
-            <span className="text-[11px] font-heading leading-none">
+            <span className="text-[10px] font-heading leading-none">
               Tu Planta
             </span>
           </motion.button>
 
-          {/* 2. Simular Compra */}
+          {/* 2. Plan de Gastos */}
+          <motion.button
+            type="button"
+            whileTap={{ scale: 0.96 }}
+            onClick={() => handleSelect("expenses")}
+            className={`flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-2xl transition-colors cursor-pointer ${
+              activeTab === "expenses"
+                ? "text-emerald-700 font-bold"
+                : "text-slate-500 hover:text-slate-900 font-medium"
+            }`}
+          >
+            <div
+              className={`p-1.5 rounded-xl transition-colors ${
+                activeTab === "expenses" ? "bg-emerald-100/90" : "bg-transparent"
+              }`}
+            >
+              <Receipt className="w-5 h-5" strokeWidth={1.5} />
+            </div>
+            <span className="text-[10px] font-heading leading-none">
+              Gastos
+            </span>
+          </motion.button>
+
+          {/* 3. Simular Compra */}
           <motion.button
             type="button"
             whileTap={{ scale: 0.96 }}
@@ -74,7 +98,7 @@ export default function BottomNav({
               <Sparkles className="w-5 h-5 text-white" strokeWidth={1.5} />
             </div>
             <span
-              className={`text-[11px] font-heading leading-none mt-1 font-bold ${
+              className={`text-[10px] font-heading leading-none mt-1 font-bold ${
                 activeTab === "simulate" ? "text-emerald-700" : "text-slate-700"
               }`}
             >
@@ -82,7 +106,7 @@ export default function BottomNav({
             </span>
           </motion.button>
 
-          {/* 3. Retos y Metas */}
+          {/* 4. Retos y Metas */}
           <motion.button
             type="button"
             whileTap={{ scale: 0.96 }}
@@ -100,12 +124,12 @@ export default function BottomNav({
             >
               <Trophy className="w-5 h-5" strokeWidth={1.5} />
             </div>
-            <span className="text-[11px] font-heading leading-none">
+            <span className="text-[10px] font-heading leading-none">
               Retos
             </span>
           </motion.button>
 
-          {/* 4. Cambiar Perfil */}
+          {/* 5. Cambiar Perfil */}
           <motion.button
             type="button"
             whileTap={{ scale: 0.96 }}
@@ -123,7 +147,7 @@ export default function BottomNav({
             >
               <UserCheck className="w-5 h-5" strokeWidth={1.5} />
             </div>
-            <span className="text-[11px] font-heading leading-none">
+            <span className="text-[10px] font-heading leading-none">
               Perfil
             </span>
           </motion.button>
