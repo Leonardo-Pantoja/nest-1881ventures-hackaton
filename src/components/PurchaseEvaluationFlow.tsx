@@ -428,7 +428,7 @@ export default function PurchaseEvaluationFlow({
   }, [activeEvaluation, metrics.purchaseDecision]);
 
   return (
-    <div className="w-full max-w-4xl mx-auto">
+    <div className="w-full max-w-6xl mx-auto space-y-6">
       {confirming && (
         <PurchaseConfirmationModal
           itemName={itemName}
@@ -593,8 +593,11 @@ export default function PurchaseEvaluationFlow({
             </div>
           )}
 
-          {/* 3. Conversational Gemini Copilot Window (/api/evaluate) */}
-          <div className="rounded-3xl border-2 border-b-4 border-slate-200 bg-[#FAF8F5] p-4 sm:p-5 space-y-3.5">
+        </CardContent>
+      </Card>
+
+      {/* Bloque 2: Chat con Gemini (independiente, ancho completo) */}
+          <div className="w-full rounded-3xl border-2 border-b-4 border-slate-200 bg-[#FAF8F5] p-4 sm:p-5 space-y-3.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-2xs">
@@ -759,12 +762,12 @@ export default function PurchaseEvaluationFlow({
             </form>
           </div>
 
-          {/* 4. The 3 Collectible 3D Path Cards with 56x56 Animated Medallions */}
-          <div className="w-full max-w-none grid grid-cols-1 xl:grid-cols-3 gap-6">
+      {/* Bloque 3: Las 3 tarjetas de decisión, fuera de cualquier contenedor estrecho */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full">
             {/* Carta 1: Comprar hoy */}
             <motion.div
               onClick={handleDecisionBuyToday}
-              className={`rounded-3xl bg-white border-2 border-b-4 p-6 shadow-sm flex flex-col justify-between gap-5 transition-all hover:-translate-y-1 active:translate-y-0.5 cursor-pointer ${
+              className={`rounded-3xl bg-white border-2 border-b-4 p-6 shadow-sm flex flex-col justify-between gap-5 min-w-0 transition-all hover:-translate-y-1 active:translate-y-0.5 cursor-pointer ${
                 selectedDecision === "bought"
                   ? "border-amber-400 border-b-amber-600 ring-2 ring-amber-400/20"
                   : "border-slate-200 border-b-slate-300 hover:border-amber-300"
@@ -853,7 +856,7 @@ export default function PurchaseEvaluationFlow({
             <motion.div
               onClick={handleDecisionWaitPayroll}
               aria-disabled={saving || itemPrice <= 0}
-              className={`rounded-3xl bg-white border-2 border-b-4 p-6 shadow-sm flex flex-col justify-between gap-5 transition-all hover:-translate-y-1 active:translate-y-0.5 cursor-pointer ${
+              className={`rounded-3xl bg-white border-2 border-b-4 p-6 shadow-sm flex flex-col justify-between gap-5 min-w-0 transition-all hover:-translate-y-1 active:translate-y-0.5 cursor-pointer ${
                 selectedDecision === "wait"
                   ? "border-[#10B981] border-b-emerald-700 ring-4 ring-emerald-500/15"
                   : "border-emerald-400 border-b-emerald-600"
@@ -923,7 +926,7 @@ export default function PurchaseEvaluationFlow({
             <motion.div
               onClick={handleDecisionMicroSave}
               aria-disabled={itemPrice <= 0}
-              className={`rounded-3xl bg-white border-2 border-b-4 p-6 shadow-sm flex flex-col justify-between gap-5 transition-all hover:-translate-y-1 active:translate-y-0.5 cursor-pointer ${
+              className={`rounded-3xl bg-white border-2 border-b-4 p-6 shadow-sm flex flex-col justify-between gap-5 min-w-0 transition-all hover:-translate-y-1 active:translate-y-0.5 cursor-pointer ${
                 selectedDecision === "microsave"
                   ? "border-indigo-400 border-b-indigo-600 ring-2 ring-indigo-400/20"
                   : "border-slate-200 border-b-slate-300 hover:border-indigo-300"
@@ -986,8 +989,6 @@ export default function PurchaseEvaluationFlow({
               </button>
             </motion.div>
           </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
